@@ -1,5 +1,5 @@
 use api::serve;
-use axum::Router;
+
 use clap::Parser;
 use cli::{CliArgs, CliServerCommand, shutdown_signal};
 use env_logger::Env;
@@ -14,12 +14,7 @@ use tokio::{select, spawn, time::sleep};
 use tokio_util::sync::CancellationToken;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
 
-use crate::{
-    AppConfig, IdpClient, ManagementClient, RouterState, StorageReplicationRuntime,
-    resource_router, router::openapi_router,
-};
-use iroh::EndpointId;
-use storage_service::{DatabaseRuntime, ScopedFileSystemRuntime};
+use crate::{AppConfig, IdpClient, ManagementClient, RouterState, build_runtime};
 
 pub async fn run() -> io::Result<()> {
     match dotenvy::dotenv() {
@@ -164,66 +159,35 @@ pub async fn run() -> io::Result<()> {
         None
     };
 
-    let database_runtime = Arc::new(
-        DatabaseRuntime::new(Path::new(&app_config.data_dir).join("databases"))
-            .map_err(io::Error::other)?,
-    );
-    let file_system_runtime = storage_network
+    let prefix = app_config.server.prefix();
+    let storage_server = storage_network
         .as_ref()
-        .map(|(network, _)| {
-            ScopedFileSystemRuntime::<EndpointId>::new(
-                Path::new(&app_config.data_dir).join("filesystems"),
-                network.endpoint_id(),
-            )
-            .map(Arc::new)
-        })
-        .transpose()
-        .map_err(io::Error::other)?;
-    let protocol_runtime = if let Some((network, _)) = &storage_network {
-        match (
-            router_state.management_client.clone(),
-            file_system_runtime.clone(),
-        ) {
-            (Some(management), Some(file_systems)) => {
-                let runtime = StorageReplicationRuntime::start(
-                    network.server().clone(),
-                    management,
-                    Arc::clone(&database_runtime),
-                    file_systems,
-                    cancellation_token.clone(),
-                )?;
-                let protocol_router = network.server().router(runtime.data_handler());
-                Some((runtime, protocol_router))
-            }
-            _ => {
+        .map(|(network, _)| network.server().clone());
+    let protocol_server = storage_server.clone();
+    let mut storage_runtime = build_runtime(
+        router_state,
+        Path::new(&app_config.data_dir),
+        prefix,
+        prefix,
+        storage_server,
+        cancellation_token.clone(),
+    )?;
+    let protocol_router = match (protocol_server, storage_runtime.data_handler()) {
+        (Some(server), Some(handler)) => Some(server.router(handler)),
+        _ => {
+            if storage_network.is_some() {
                 log::warn!(
                     "Storage replication is disabled without Management and filesystem runtime configuration"
                 );
-                None
             }
+            None
         }
-    } else {
-        None
     };
-    let resource_routes = resource_router(
-        router_state.clone(),
-        Some(Arc::clone(&database_runtime)),
-        file_system_runtime,
-    );
-    let prefix = app_config.server.prefix();
-    let resource_routes = if prefix.is_empty() {
-        resource_routes
-    } else {
-        Router::new().nest(prefix, resource_routes)
-    };
-    let router = openapi_router(router_state, prefix)
-        .split_for_parts()
-        .0
-        .merge(resource_routes)
+    let router = storage_runtime
+        .router()
         .layer(CorsLayer::very_permissive().allow_private_network(true))
         .layer(TraceLayer::new_for_http())
-        .layer(CompressionLayer::new().gzip(app_config.server.gzip))
-        .into();
+        .layer(CompressionLayer::new().gzip(app_config.server.gzip));
 
     let run_serve = |host: Option<IpAddr>, port: Option<u16>| {
         let addr = SocketAddr::from((
@@ -231,7 +195,9 @@ pub async fn run() -> io::Result<()> {
             port.unwrap_or(app_config.server.port),
         ));
 
-        spawn(serve(router, addr, cancellation_token.clone()))
+        let serve_task = spawn(serve(router, addr, cancellation_token.clone()));
+        storage_runtime.start_background_tasks();
+        serve_task
     };
 
     let command_handle = match args.command {
@@ -244,12 +210,10 @@ pub async fn run() -> io::Result<()> {
     };
 
     shutdown_signal(cancellation_token).await;
-    if let Some((protocol_runtime, protocol_router)) = protocol_runtime {
-        if let Err(error) = protocol_runtime.shutdown().await {
-            log::warn!("Storage replication runtime shutdown failed: {error}");
-        }
-        drop(protocol_router);
+    if let Err(error) = storage_runtime.shutdown().await {
+        log::warn!("Storage replication runtime shutdown failed: {error}");
     }
+    drop(protocol_router);
     if let Some((network, peer_refresh)) = storage_network {
         if let Err(error) = peer_refresh.await {
             log::warn!("Storage Iroh peer refresh task failed: {error}");

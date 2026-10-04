@@ -27,7 +27,10 @@ FROM chef AS planner
 
 WORKDIR /app
 
-COPY . .
+COPY of/. .
+COPY ofdb/. /ofdb/
+COPY offs/. /offs/
+COPY ofnet/. /ofnet/
 RUN cargo chef prepare --recipe-path recipe.json
 
 
@@ -36,13 +39,18 @@ FROM chef AS builder
 WORKDIR /app
 
 COPY --from=planner /app/recipe.json recipe.json
+COPY --from=planner /ofdb /ofdb
+COPY --from=planner /offs /offs
+COPY --from=planner /ofnet /ofnet
 RUN cargo chef cook --release --target $(cat /tmp/target) --recipe-path recipe.json
 
-ARG PROJECT=local
+ARG PROJECT=idp-unified
+ARG BIN=idp-unified
+ARG FEATURES=cli
 
-COPY . .
+COPY of/. .
 RUN rustup target add $(cat /tmp/target)
-RUN cargo build -p ${PROJECT} --target $(cat /tmp/target) --release --bin ${PROJECT}
+RUN cargo build -p ${PROJECT} --features ${FEATURES} --target $(cat /tmp/target) --release --bin ${BIN}
 
 
 FROM scratch
@@ -50,8 +58,8 @@ LABEL org.opencontainers.image.source=https://github.com/aicacia/rs-local
 
 WORKDIR /app
 
-ARG PROJECT=local
+ARG BIN=idp-unified
 
-COPY --from=builder /app/target/*/release/${PROJECT} /app/run
+COPY --from=builder /app/target/*/release/${BIN} /app/run
 
 CMD ["/app/run", "-c", "/app/config.yaml"]

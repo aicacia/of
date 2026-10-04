@@ -15,6 +15,8 @@ mod network;
 mod replication_runtime;
 mod router;
 #[cfg(feature = "network")]
+mod runtime;
+#[cfg(feature = "network")]
 mod storage_protocol;
 
 #[cfg(feature = "cli")]
@@ -34,3 +36,5 @@ pub use router::{
     StorageAuthorization, StorageAuthorizationError, authorize_storage_token,
     scoped_file_system_socket_router,
 };
+#[cfg(feature = "network")]
+pub use runtime::{StorageRuntime, build_runtime};

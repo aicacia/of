@@ -14,14 +14,20 @@ workspace = true
 [package.license]
 workspace = true
 
+[[bin]]
+name = "idp-unified"
+path = "src/main.rs"
+required-features = ["cli"]
+
 [features]
-default = ["completions", "swagger-ui"]
-completions = ["idp-server/completions"]
-swagger-ui = ["idp-server/swagger-ui"]
+default = ["cli", "completions", "swagger-ui"]
+cli = ["unified-server/cli"]
+completions = ["unified-server/completions"]
+swagger-ui = ["unified-server/swagger-ui"]
 
 [dependencies]
 # Internal
-idp-server = { path = "./crates/idp-server", default-features = false, features = ["cli"] }
+unified-server = { path = "./crates/unified-server", default-features = false, optional = true }
 
 # Async
 tokio = { version = "1.52", default-features = false, features = [
@@ -45,6 +51,7 @@ members = [
   "crates/storage-model",
   "crates/storage-server",
   "crates/storage-service",
+  "crates/unified-server",
   "crates/tauri-plugin-fetch-api",
   "apps/app/src-tauri",
 ]

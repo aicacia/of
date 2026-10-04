@@ -39,7 +39,7 @@
     "format:fix": "biome format --write .",
     "preCommit": "pnpm run lint:fix && pnpm run coverage",
     "postopenapi": "pnpm format:fix",
-    "openapi": "rm -rf src && pnpm openapi-generator-cli generate -i https://unified.localhost:1355/idp-management/openapi.json -g typescript-fetch -o src --type-mappings=DateTime=Date --global-property=apiDocs=false,modelDocs=false --additional-properties=supportsES6=true,typescriptThreePlus=true,withInterfaces=true,useSingleRequestParameter=true,importFileExtension=.js",
+    "openapi": "rm -rf src && pnpm openapi-generator-cli generate -i https://unified.localhost:1355/management/openapi.json -g typescript-fetch -o src --type-mappings=DateTime=Date --global-property=apiDocs=false,modelDocs=false --additional-properties=supportsES6=true,typescriptThreePlus=true,withInterfaces=true,useSingleRequestParameter=true,importFileExtension=.js",
     "prepare": "husky"
   },
   "husky": {

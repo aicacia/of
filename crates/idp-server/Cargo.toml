@@ -56,7 +56,7 @@ idp-model = { path = "../idp-model", default-features = false, features = [
   "replica",
 ] }
 idp-service = { path = "../idp-service", default-features = false, features = ["replica", "std"] }
-management-server = { path = "../management-server", default-features = false, features = [] }
+
 management-service = { path = "../management-service", default-features = false, features = ["replica", "std"] }
 
 iroh-chain = { path = "../../../ofnet/crates/iroh-chain", default-features = false, features = [] }

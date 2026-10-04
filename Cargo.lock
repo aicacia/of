@@ -2061,9 +2061,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "iroh",
- "ofdb-btree-redb",
- "ofdb-kv-store",
- "ofdb-kv-sync",
+ "ofdb-kv",
  "postcard",
  "redb",
  "serde",
@@ -3067,7 +3065,6 @@ dependencies = [
  "key",
  "keyring-core",
  "log",
- "management-server",
  "management-service",
  "model",
  "ofdb-sql",
@@ -3116,8 +3113,8 @@ dependencies = [
 name = "idp-unified"
 version = "0.1.0"
 dependencies = [
- "idp-server",
  "tokio",
+ "unified-server",
 ]
 
 [[package]]
@@ -4802,6 +4799,19 @@ dependencies = [
  "redb",
  "serde",
  "thiserror 2.0.20",
+ "uuid",
+]
+
+[[package]]
+name = "ofdb-kv"
+version = "0.1.0"
+dependencies = [
+ "ofdb-btree",
+ "ofdb-btree-redb",
+ "ofdb-kv-store",
+ "ofdb-kv-sync",
+ "redb",
+ "tokio",
  "uuid",
 ]
 
@@ -7933,6 +7943,38 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
+
+[[package]]
+name = "unified-server"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "axum",
+ "clap",
+ "cli",
+ "config",
+ "dotenvy",
+ "env_logger",
+ "http",
+ "idp-db",
+ "idp-model",
+ "idp-server",
+ "idp-service",
+ "iroh",
+ "iroh-chain",
+ "keyring-core",
+ "log",
+ "management-server",
+ "management-service",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "storage-server",
+ "tokio",
+ "tokio-util",
+ "tower",
+ "tower-http 0.7.1",
+]
 
 [[package]]
 name = "universal-hash"

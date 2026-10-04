@@ -64,7 +64,12 @@ mod protocol_tests {
     }
 
     #[tokio::test]
-    async fn data_stream_rejects_management_admission_denial() {
+    async fn data_stream_rejects_management_denial_and_outage() {
+        data_stream_rejects_admission_status("403 Forbidden").await;
+        data_stream_rejects_admission_status("503 Service Unavailable").await;
+    }
+
+    async fn data_stream_rejects_admission_status(admission_status: &str) {
         let application_id = idp_model::model::Id::now_v7().to_string();
         let filesystem_id = FileSystemId::new().as_uuid().to_string();
         let selected_application_id = application_id.clone();
@@ -72,6 +77,7 @@ mod protocol_tests {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind API stub");
         let address = listener.local_addr().expect("read API stub address");
         let (requests_tx, requests_rx) = std::sync::mpsc::channel();
+        let admission_status = admission_status.to_owned();
         let api_stub = thread::spawn(move || {
             let (mut token_stream, _) = listener.accept().expect("accept token request");
             let token_request = read_request(&mut token_stream);
@@ -94,7 +100,7 @@ mod protocol_tests {
             respond(&mut selection_stream, "200 OK", &selection_response);
             let (mut admission_stream, _) = listener.accept().expect("accept admission request");
             let admission_request = read_request(&mut admission_stream);
-            respond(&mut admission_stream, "403 Forbidden", "{}");
+            respond(&mut admission_stream, &admission_status, "{}");
             requests_tx
                 .send((token_request, selection_request, admission_request))
                 .expect("send captured requests");

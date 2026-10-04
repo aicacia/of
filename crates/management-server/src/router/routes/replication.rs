@@ -37,12 +37,19 @@ pub(crate) async fn selected_resources(
         .control_plane
         .get_storage_endpoint_identity(&endpoint_id)
         .await
-        .map_err(|_| unavailable())?;
-    let resources = state
+        .map_err(|error| {
+            log::warn!("Management endpoint identity lookup failed: {error}");
+            unavailable()
+        })?;
+    let selected = state
         .selection_policies
         .selected_resources_for_device(identity.device_id)
         .await
-        .map_err(|_| unavailable())?
+        .map_err(|error| {
+            log::warn!("failed to read selected replication resources: {error}");
+            unavailable()
+        })?;
+    let resources = selected
         .into_iter()
         .filter(|resource| resource.owner_subject == identity.owner_subject)
         .map(selected_resource_response)

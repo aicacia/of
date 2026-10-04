@@ -8,6 +8,7 @@ mod bootstrap;
 
 mod device_identity;
 mod router;
+mod runtime;
 #[cfg(feature = "cli")]
 mod unavailable_data_protocol;
 
@@ -25,3 +26,4 @@ pub use router::{
     TimedPairingAcceptanceController, authorize_bearer, openapi_router,
 };
 pub(crate) use router::{authorize_bearer_any_principal, authorize_bearer_client};
+pub use runtime::{IdpRuntime, build_runtime};

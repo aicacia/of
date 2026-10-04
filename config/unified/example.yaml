@@ -1,0 +1,30 @@
+listen_addr: 127.0.0.1:3000
+endpoint_data_dir: ./data/unified/endpoint
+
+idp:
+  data_dir: ./data/unified/idp
+  api_public_uri: https://identity.example
+  ui_public_uri: https://identity.example
+  oauth2:
+    issuer: https://identity.example/idp
+  service_audience: https://identity.example/service
+
+management:
+  data_dir: ./data/unified/management
+  api_public_uri: https://management.example
+  storage_audience: https://storage.example
+
+storage:
+  data_dir: ./data/unified/storage
+  api_public_uri: https://storage.example
+
+service_clients:
+  management_idp:
+    client_id: REPLACE_WITH_MANAGEMENT_IDP_CLIENT_ID
+    audience: https://identity.example/service
+  storage_idp:
+    client_id: REPLACE_WITH_STORAGE_IDP_CLIENT_ID
+    audience: https://identity.example/service
+  storage_management:
+    client_id: REPLACE_WITH_STORAGE_MANAGEMENT_CLIENT_ID
+    audience: https://storage.example

@@ -416,16 +416,179 @@ pub(super) async fn delete_file_system(
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        thread,
+    };
+
     use axum::{
         body::Body,
-        http::{Request, StatusCode, header::AUTHORIZATION},
+        http::{Method, Request, StatusCode, header::AUTHORIZATION},
+    };
+    use idp_model::contract::IntrospectionResponse;
+    use model::contract::{
+        AuthorizationDetail, PrincipalType, StandardClaims, StorageAuthorizationAction,
+        StorageAuthorizationDetail, TokenType, TokenUse,
     };
     use tower::ServiceExt;
 
-    use crate::{RouterState, resource_router};
+    use crate::{IdpClient, RouterState, resource_router};
 
     fn router() -> axum::Router {
         resource_router(RouterState::new("http://storage.local"), None, None)
+    }
+
+    fn live_idp_client(introspection_status: &str, claims: StandardClaims) -> IdpClient {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind IdP HTTP stub");
+        let address = listener.local_addr().expect("read IdP HTTP stub address");
+        let introspection_body = serde_json::to_string(&IntrospectionResponse {
+            claims,
+            application_id: "00000000-0000-0000-0000-000000000001".to_owned(),
+        })
+        .expect("serialize introspection response");
+        let introspection_status = introspection_status.to_owned();
+        thread::spawn(move || {
+            for (status, body) in [
+                (
+                    "200 OK".to_owned(),
+                    r#"{"access_token":"service-token","token_type":"Bearer","expires_in":3600,"scope":"idp.device.lookup idp.device.list idp.token.validate","iss":"http://127.0.0.1"}"#.to_owned(),
+                ),
+                (introspection_status, introspection_body),
+            ] {
+                let (mut stream, _) = listener.accept().expect("accept IdP request");
+                let mut request = [0; 4096];
+                stream.read(&mut request).expect("read IdP request");
+                write!(stream, "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+                    .expect("write IdP response");
+            }
+        });
+        IdpClient::new(
+            &format!("http://{address}/idp/"),
+            "storage-client",
+            "storage-secret",
+            "http://127.0.0.1",
+            "storage:filesystems",
+        )
+        .expect("create IdP client")
+    }
+
+    fn storage_claims(
+        principal_type: PrincipalType,
+        audience: &str,
+        actions: Vec<StorageAuthorizationAction>,
+    ) -> StandardClaims {
+        StandardClaims {
+            r#type: TokenType::Bearer,
+            r#use: TokenUse::Access,
+            exp: i64::MAX,
+            iat: 1,
+            nbf: 1,
+            iss: "http://127.0.0.1".to_owned(),
+            aud: audience.to_owned(),
+            client_id: "desktop".to_owned(),
+            sub: "user-1".to_owned(),
+            principal_type,
+            resource: Some("storage:filesystems".to_owned()),
+            authorization_details: Some(vec![AuthorizationDetail::Storage(
+                StorageAuthorizationDetail { actions },
+            )]),
+            scope: Vec::new(),
+        }
+    }
+
+    async fn request_status(client: IdpClient, method: Method) -> StatusCode {
+        let app = resource_router(
+            RouterState::new("http://storage.local").with_idp_client(client),
+            None,
+            None,
+        );
+        app.oneshot(
+            Request::builder()
+                .method(method)
+                .uri("/storage/filesystems")
+                .header(AUTHORIZATION, "Bearer user-token")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .expect("build storage request"),
+        )
+        .await
+        .expect("storage request must complete")
+        .status()
+    }
+
+    #[tokio::test]
+    async fn rejects_client_principal_and_wrong_resource_audience() {
+        let client_token = live_idp_client(
+            "200 OK",
+            storage_claims(
+                PrincipalType::Client,
+                "storage:filesystems",
+                vec![StorageAuthorizationAction::Read],
+            ),
+        );
+        assert_eq!(
+            request_status(client_token, Method::GET).await,
+            StatusCode::UNAUTHORIZED
+        );
+
+        let wrong_audience = live_idp_client(
+            "200 OK",
+            storage_claims(
+                PrincipalType::User,
+                "storage:databases",
+                vec![StorageAuthorizationAction::Read],
+            ),
+        );
+        assert_eq!(
+            request_status(wrong_audience, Method::GET).await,
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[tokio::test]
+    async fn denies_write_when_token_only_allows_reads() {
+        let client = live_idp_client(
+            "200 OK",
+            storage_claims(
+                PrincipalType::User,
+                "storage:filesystems",
+                vec![StorageAuthorizationAction::Read],
+            ),
+        );
+        assert_eq!(
+            request_status(client, Method::POST).await,
+            StatusCode::FORBIDDEN
+        );
+    }
+
+    #[tokio::test]
+    async fn maps_revoked_token_and_idp_outage_to_fail_closed_statuses() {
+        let revoked = live_idp_client(
+            "401 Unauthorized",
+            storage_claims(
+                PrincipalType::User,
+                "storage:filesystems",
+                vec![StorageAuthorizationAction::Read],
+            ),
+        );
+        assert_eq!(
+            request_status(revoked, Method::GET).await,
+            StatusCode::UNAUTHORIZED
+        );
+
+        let unavailable = live_idp_client(
+            "503 Service Unavailable",
+            storage_claims(
+                PrincipalType::User,
+                "storage:filesystems",
+                vec![StorageAuthorizationAction::Read],
+            ),
+        );
+        assert_eq!(
+            request_status(unavailable, Method::GET).await,
+            StatusCode::SERVICE_UNAVAILABLE
+        );
     }
 
     #[tokio::test]

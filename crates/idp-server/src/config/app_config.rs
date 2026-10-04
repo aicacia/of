@@ -22,9 +22,7 @@ pub struct AppConfig {
     /// Expected audience/resource for IdP service access tokens.
     /// Defaults to `api_public_uri` when omitted; configurable as `LIDP_SERVICE_AUDIENCE`.
     pub service_audience: Option<String>,
-    /// Expected audience/resource for Storage tokens in Management device selection.
-    /// Defaults to `api_public_uri` when omitted; configurable as `LIDP_STORAGE_AUDIENCE`.
-    pub storage_audience: Option<String>,
+
     pub env: Environment,
 }
 
@@ -41,7 +39,6 @@ impl Default for AppConfig {
             ui_public_uri: "https://lidp.localhost:1355".to_string(),
             api_public_uri: "https://idp-api.localhost:1355".to_string(),
             service_audience: None,
-            storage_audience: None,
             log_level: "DEBUG".to_string(),
             env: Environment::default(),
         }

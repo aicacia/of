@@ -15,29 +15,13 @@ use cli::Shell;
 use cli::{CliArgs, shutdown_signal};
 use db::open_native_engine;
 use env_logger::Env;
-use idp_model::contract::DeviceState;
-use idp_service::{
-    oauth2::OAuth2Service,
-    replica::{
-        DbApplicationRepo, DbClientRepo, DbKeyRepo, DbOAuth2AuthorizationCodeRepo,
-        DbOAuth2UserConsentRepo, DbUserRepo,
-    },
-    repo::{KeyService, PrivateKeyKeyringRepo},
-};
 use iroh_chain::EndpointIdStore;
-use management_server::{
-    RouterState as ManagementRouterState, openapi_router as management_router,
-};
-use management_service::{
-    DeviceRepo, HostedControlPlane, ManagementService,
-    replica::{DbDeviceRepo, DbPermissionRepo, DbRoleRepo, DbSelectionPolicyRepo},
-};
 
 use tokio::{select, spawn, time::sleep};
 use tokio_util::sync::CancellationToken;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
 
-use crate::{AppConfig, RouterState, TimedPairingAcceptanceController, router::openapi_router};
+use crate::{AppConfig, build_runtime};
 
 #[derive(clap::Parser, Debug)]
 enum IdpCommand {
@@ -110,149 +94,39 @@ pub async fn run() -> io::Result<()> {
         open_native_engine(Path::new(&app_config.data_dir).join("idp.redb"))
             .map_err(io::Error::other)?,
     );
-    idp_model::replica::up(&engine)
-        .await
-        .map_err(io::Error::other)?;
-
-    let key_service = Arc::new(KeyService::new(
-        DbKeyRepo::new(Arc::clone(&engine)),
-        PrivateKeyKeyringRepo::new(&app_config.oauth2.issuer),
-        app_config.key_namespace.clone(),
-    ));
-    let devices = Arc::new(DbDeviceRepo::new(Arc::clone(&engine)));
     let allowed_peers = EndpointIdStore::default();
-    allowed_peers.replace(
-        devices
-            .list()
-            .await
-            .map_err(io::Error::other)?
-            .into_iter()
-            .filter(|device| device.state == DeviceState::Approved)
-            .filter_map(|device| device.public_key.parse().ok()),
-    );
-    let (device_identity, manager) =
+    let (device_identity, server) =
         crate::open_device_identity_with_allowlist(allowed_peers.clone()).await?;
-    let device_identity = Arc::new(device_identity);
-    let oauth2_service = Arc::new(OAuth2Service::new(
-        DbApplicationRepo::new(Arc::clone(&engine)),
-        DbClientRepo::new(Arc::clone(&engine), Arc::clone(&key_service)),
-        DbOAuth2AuthorizationCodeRepo::new(Arc::clone(&engine)),
-        DbUserRepo::new(Arc::clone(&engine), app_config.password.clone()),
-        DbOAuth2UserConsentRepo::new(Arc::clone(&engine)),
-        key_service,
-        app_config.oauth2.clone(),
-    ));
-
-    let control_plane = app_config
-        .control_plane_uri
-        .as_deref()
-        .map(HostedControlPlane::new)
-        .transpose()
-        .map_err(io::Error::other)?
-        .map(Arc::new);
-    let management_control_plane = Arc::new(
-        HostedControlPlane::new_with_services(
-            &app_config.api_public_uri,
-            &format!(
-                "{}/storage/",
-                app_config.api_public_uri.trim_end_matches('/')
-            ),
-            &app_config.oauth2.issuer,
+    let runtime = Arc::new(
+        build_runtime(
+            &app_config,
+            engine,
+            Arc::new(device_identity),
+            server.clone(),
         )
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?,
+        .await?,
     );
-    let storage_audience = app_config
-        .storage_audience
-        .as_deref()
-        .unwrap_or(&app_config.api_public_uri);
-    if storage_audience.trim().is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "storage_audience must not be empty",
-        ));
-    }
-    let management_state = ManagementRouterState::new(
-        &app_config.api_public_uri,
-        Arc::new(ManagementService::new(
-            DbPermissionRepo::new(Arc::clone(&engine)),
-            DbRoleRepo::new(Arc::clone(&engine)),
-        )),
-        Arc::new(DbSelectionPolicyRepo::new(Arc::clone(&engine))),
-        management_control_plane,
-        storage_audience,
-    );
-
-    let service_audience = app_config
-        .service_audience
-        .as_deref()
-        .unwrap_or(&app_config.api_public_uri);
-    if service_audience.trim().is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "service_audience must not be empty",
-        ));
-    }
-    let router_state = RouterState::new(
-        &app_config.ui_public_uri,
-        &app_config.api_public_uri,
-        Arc::clone(&engine),
-        Arc::clone(&oauth2_service),
-        Arc::clone(&devices),
-        Arc::clone(&device_identity),
-    )
-    .with_service_audience(service_audience);
-    let router_state = match &control_plane {
-        Some(control_plane) => router_state.with_hosted_control_plane(Arc::clone(control_plane)),
-        None => router_state,
-    };
-
-    router_state
-        .bootstrap_grants
-        .set_admission_server(manager.clone(), crate::bootstrap::BOOTSTRAP_ALPN);
+    allowed_peers.replace(runtime.approved_peer_ids().await?);
+    let refresh_runtime = Arc::clone(&runtime);
     let refresh_store = allowed_peers;
-    let refresh_devices = Arc::clone(&devices);
     let peer_refresh = spawn(async move {
         loop {
             sleep(Duration::from_secs(2)).await;
-            match refresh_devices.list().await {
-                Ok(devices) => refresh_store.replace(
-                    devices
-                        .into_iter()
-                        .filter(|device| device.state == DeviceState::Approved)
-                        .filter_map(|device| device.public_key.parse().ok()),
-                ),
+            match refresh_runtime.approved_peer_ids().await {
+                Ok(peers) => refresh_store.replace(peers),
                 Err(error) => log::warn!("failed to refresh Iroh allowlist: {error}"),
             }
         }
     });
-    router_state
-        .pairing_acceptance
-        .bind(Arc::new(TimedPairingAcceptanceController::new(
-            manager.clone(),
-            Duration::from_secs(app_config.pairing.accepting_timeout_seconds),
-        )))
-        .map_err(io::Error::other)?;
-
-    let bootstrap_protocol = crate::bootstrap::BootstrapProtocolHandler::new(
-        Arc::clone(&engine),
-        Arc::clone(&router_state.bootstrap_grants),
-        Arc::clone(&router_state.devices),
-    );
-    let _iroh_router = manager.router_with_protocol(
+    let _iroh_router = server.router_with_protocol(
         crate::unavailable_data_protocol::UnavailableDataProtocol,
         crate::bootstrap::BOOTSTRAP_ALPN,
-        bootstrap_protocol,
+        runtime.bootstrap_protocol(),
     );
-    log::info!("Iroh endpoint: {:?}", device_identity.endpoint().addr());
+    log::info!("Iroh endpoint: {:?}", server.endpoint().addr());
 
-    let router = openapi_router(router_state, app_config.server.prefix())
-        .split_for_parts()
-        .0
-        .merge(
-            management_router(management_state, "/management")
-                .split_for_parts()
-                .0,
-        )
+    let router = runtime
+        .router()
         .layer(CorsLayer::very_permissive().allow_private_network(true))
         .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new().gzip(app_config.server.gzip));

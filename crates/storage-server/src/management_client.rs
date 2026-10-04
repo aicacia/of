@@ -376,6 +376,79 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rejects_token_endpoint_redirects() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind token endpoint");
+        let address = listener.local_addr().expect("read token endpoint address");
+        let redirect_listener = TcpListener::bind("127.0.0.1:0").expect("bind redirect target");
+        redirect_listener
+            .set_nonblocking(true)
+            .expect("make redirect target nonblocking");
+        let redirect_address = redirect_listener
+            .local_addr()
+            .expect("read redirect target address");
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept token request");
+            let mut request = [0; 4096];
+            stream.read(&mut request).expect("read token request");
+            write!(
+                stream,
+                "HTTP/1.1 302 Found\r\nLocation: http://{redirect_address}/stolen\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
+            .expect("write redirect response");
+        });
+        let client = ManagementClient::new(
+            "http://127.0.0.1:3000/management",
+            &format!("http://{address}/idp"),
+            CLIENT_ID,
+            CLIENT_SECRET,
+            ISSUER,
+            AUDIENCE,
+        )
+        .expect("create test Management client");
+
+        assert!(client.service_access_token().await.is_err());
+        server.join().expect("join test HTTP server");
+        assert!(matches!(
+            redirect_listener.accept(),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+        ));
+    }
+
+    #[tokio::test]
+    async fn rejects_oversized_token_response_without_caching() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test HTTP server");
+        let address = listener.local_addr().expect("read test HTTP address");
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept token request");
+            let mut request = [0; 4096];
+            stream.read(&mut request).expect("read token request");
+            let mut body = r#"{"access_token":"service-token","token_type":"Bearer","expires_in":3600,"scope":"management.replication.read management.replication.admit","iss":"https://idp.example"}"#.to_owned();
+            body.push_str(&" ".repeat(65_537 - body.len()));
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+                .expect("write oversized token response");
+        });
+        let client = ManagementClient::new(
+            "http://127.0.0.1:3000/management",
+            &format!("http://{address}/idp"),
+            CLIENT_ID,
+            CLIENT_SECRET,
+            ISSUER,
+            AUDIENCE,
+        )
+        .expect("create test Management client");
+
+        assert!(client.service_access_token().await.is_err());
+        assert!(
+            client
+                .cached_token
+                .lock()
+                .expect("lock token cache")
+                .is_none()
+        );
+        server.join().expect("join test HTTP server");
+    }
+
+    #[tokio::test]
     async fn rejects_service_token_acquisition_without_caching() {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind test HTTP server");
         let address = listener.local_addr().expect("read test HTTP address");

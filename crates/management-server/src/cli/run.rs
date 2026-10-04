@@ -13,15 +13,12 @@ use cli::{CliArgs, CliServerCommand, shutdown_signal};
 use db::open_native_engine;
 use env_logger::Env;
 
-use management_service::{
-    HostedControlPlane, ManagementService,
-    replica::{DbPermissionRepo, DbRoleRepo, DbSelectionPolicyRepo, up},
-};
+use management_service::HostedControlPlane;
 use tokio::{select, spawn, time::sleep};
 use tokio_util::sync::CancellationToken;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
 
-use crate::{AppConfig, RouterState, router::openapi_router};
+use crate::{AppConfig, build_router};
 
 pub async fn run() -> io::Result<()> {
     match dotenvy::dotenv() {
@@ -91,24 +88,19 @@ pub async fn run() -> io::Result<()> {
         open_native_engine(Path::new(&app_config.data_dir).join("management.redb"))
             .map_err(io::Error::other)?,
     );
-    up(&engine).await.map_err(io::Error::other)?;
-
-    let management_service = Arc::new(ManagementService::new(
-        DbPermissionRepo::new(Arc::clone(&engine)),
-        DbRoleRepo::new(Arc::clone(&engine)),
-    ));
-    let router_state = RouterState::new(
+    let router = build_router(
+        engine,
         &app_config.api_public_uri,
-        management_service,
-        Arc::new(DbSelectionPolicyRepo::new(Arc::clone(&engine))),
-        control_plane,
+        app_config.server.prefix(),
         &app_config.storage_audience,
-    );
-    let router = openapi_router(router_state, app_config.server.prefix())
-        .layer(CorsLayer::very_permissive().allow_private_network(true))
-        .layer(TraceLayer::new_for_http())
-        .layer(CompressionLayer::new().gzip(app_config.server.gzip))
-        .into();
+        control_plane,
+    )
+    .await
+    .map_err(io::Error::other)?
+    .layer(CorsLayer::very_permissive().allow_private_network(true))
+    .layer(TraceLayer::new_for_http())
+    .layer(CompressionLayer::new().gzip(app_config.server.gzip))
+    .into();
 
     let run_serve = |host: Option<IpAddr>, port: Option<u16>| {
         let addr = SocketAddr::from((

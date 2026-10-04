@@ -1,0 +1,76 @@
+[package]
+name = "unified-server"
+version = "0.1.0"
+publish = false
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Composition host for unified service deployment"
+
+[lib]
+name = "unified_server"
+
+[[bin]]
+name = "unified-server"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[features]
+default = []
+cli = ["dep:clap", "dep:cli", "dep:dotenvy", "dep:env_logger", "tokio/signal"]
+completions = ["cli", "cli/completions"]
+swagger-ui = ["idp-server/swagger-ui", "management-server/swagger-ui", "storage-server/swagger-ui"]
+
+[dependencies]
+# CLI
+clap = { version = "4.6", default-features = false, features = ["std", "derive", "help"], optional = true }
+cli = { path = "../cli", default-features = false, features = ["std"], optional = true }
+dotenvy = { version = "0.15", default-features = false, features = [], optional = true }
+
+# Configuration
+config = { version = "0.15", default-features = false, features = ["yaml"] }
+
+# Internal
+api = { path = "../api", default-features = false, features = [] }
+db = { package = "idp-db", path = "../db", default-features = false, features = ["replica"] }
+idp-server = { path = "../idp-server", default-features = false }
+iroh-chain = { path = "../../../ofnet/crates/iroh-chain", default-features = false, features = [] }
+management-server = { path = "../management-server", default-features = false }
+management-service = { path = "../management-service", default-features = false, features = ["replica", "std"] }
+storage-server = { path = "../storage-server", default-features = false, features = ["network"] }
+
+# Serialization
+serde = { version = "1.0", default-features = false, features = ["derive", "std"] }
+
+# HTTP client
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+
+# Iroh
+iroh = { version = "1.1", default-features = false, features = ["tls-ring"] }
+
+# Async
+tokio = { version = "1.52", default-features = false, features = ["macros", "rt-multi-thread", "net", "time"] }
+tokio-util = { version = "0.7", default-features = false, features = [] }
+
+# Logging
+env_logger = { version = "0.10", default-features = false, features = [], optional = true }
+log = { version = "0.4", default-features = false, features = ["std"] }
+
+# Web
+axum = { version = "0.8", default-features = false, features = ["http1", "http2", "tokio"] }
+tower-http = { version = "0.7", default-features = false, features = ["cors", "trace", "compression-gzip"] }
+
+[dev-dependencies]
+# Identity fixtures
+idp-model = { path = "../idp-model", default-features = false, features = ["std", "replica"] }
+idp-service = { path = "../idp-service", default-features = false, features = ["replica", "std"] }
+keyring-core = { version = "1.0", default-features = false, features = [] }
+
+# Serialization
+serde_json = { version = "1.0", default-features = false, features = ["std"] }
+
+# Web
+http = { version = "1.4", default-features = false }
+tower = { version = "0.5", default-features = false, features = ["util"] }

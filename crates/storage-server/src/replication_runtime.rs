@@ -13,7 +13,9 @@ use crate::{
 
 pub struct StorageReplicationRuntime {
     data_handler: DataProtocolHandler,
-    sync_task: JoinHandle<()>,
+    database: DatabaseProtocolHandler,
+    file_system: StorageProtocolHandler,
+    sync_task: Option<JoinHandle<()>>,
 }
 
 impl StorageReplicationRuntime {
@@ -22,12 +24,29 @@ impl StorageReplicationRuntime {
         management: ManagementClient,
         databases: Arc<DatabaseRuntime>,
         file_systems: Arc<ScopedFileSystemRuntime<EndpointId>>,
-        cancellation_token: CancellationToken,
-    ) -> io::Result<Self> {
+    ) -> Self {
         let database = DatabaseProtocolHandler::new(server.clone(), management.clone(), databases);
         let file_system = StorageProtocolHandler::new(server.clone(), management, file_systems);
         let data_handler = DataProtocolHandler::new(database.clone(), file_system.clone());
-        let sync_task = tokio::spawn(async move {
+        Self {
+            data_handler,
+            sync_task: None,
+            database,
+            file_system,
+        }
+    }
+
+    pub fn data_handler(&self) -> impl iroh::protocol::ProtocolHandler + Clone {
+        self.data_handler.clone()
+    }
+
+    pub fn start_sync(&mut self, cancellation_token: CancellationToken) {
+        if self.sync_task.is_some() {
+            return;
+        }
+        let database = self.database.clone();
+        let file_system = self.file_system.clone();
+        self.sync_task = Some(tokio::spawn(async move {
             let mut sync_interval = interval(Duration::from_secs(10));
             loop {
                 select! {
@@ -38,23 +57,17 @@ impl StorageReplicationRuntime {
                     }
                 }
             }
-        });
-        Ok(Self {
-            data_handler,
-            sync_task,
-        })
+        }));
     }
 
-    pub fn data_handler(&self) -> impl iroh::protocol::ProtocolHandler + Clone {
-        self.data_handler.clone()
-    }
-
-    pub async fn shutdown(self) -> io::Result<()> {
-        self.sync_task.abort();
-        match self.sync_task.await {
-            Ok(()) => {}
-            Err(error) if error.is_cancelled() => {}
-            Err(error) => return Err(io::Error::other(error)),
+    pub async fn shutdown(mut self) -> io::Result<()> {
+        if let Some(sync_task) = self.sync_task.take() {
+            sync_task.abort();
+            match sync_task.await {
+                Ok(()) => {}
+                Err(error) if error.is_cancelled() => {}
+                Err(error) => return Err(io::Error::other(error)),
+            }
         }
         Ok(())
     }
