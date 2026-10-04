@@ -39,19 +39,8 @@ pub struct LocalhostServerState {
     pub ready: bool,
 }
 
-pub fn init_setup_router(
-    app_config: Arc<AppConfig>,
-    database: Arc<NativeEngine>,
-    device_identity: Arc<DeviceIdentity>,
-) -> Router {
-    Router::new().nest(
-        "/lidp",
-        setup::router(SetupState {
-            database,
-            app_config,
-            device_identity,
-        }),
-    )
+pub fn init_setup_router(database: Arc<NativeEngine>) -> Router {
+    Router::new().nest("/lidp", setup::router(SetupState { database }))
 }
 
 pub fn init_router(

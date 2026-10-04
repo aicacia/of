@@ -25,6 +25,7 @@ pub struct HostedControlPlane {
     idp_base_url: Url,
     storage_base_url: Url,
     expected_issuer: String,
+    permission_evaluator_client_id: Option<String>,
     service_token_client: Option<Arc<ServiceTokenClient>>,
     client: Client,
 }
@@ -60,6 +61,7 @@ impl HostedControlPlane {
             idp_base_url,
             storage_base_url,
             expected_issuer: expected_issuer.to_owned(),
+            permission_evaluator_client_id: None,
             service_token_client: None,
             client: Client::builder()
                 .connect_timeout(Duration::from_secs(3))
@@ -70,29 +72,65 @@ impl HostedControlPlane {
         })
     }
 
+    pub fn with_permission_evaluator(mut self, client_id: &str) -> Result<Self, String> {
+        if client_id.trim().is_empty()
+            || self
+                .service_token_client
+                .as_ref()
+                .is_some_and(|client| client.client_id == client_id)
+        {
+            return Err("IdP permission evaluator must use a distinct client ID".to_owned());
+        }
+        self.permission_evaluator_client_id = Some(client_id.to_owned());
+        Ok(self)
+    }
+
+    pub fn permission_evaluator_client_id(&self) -> Option<&str> {
+        self.permission_evaluator_client_id.as_deref()
+    }
+
     pub fn with_idp_service_client(
-        mut self,
+        self,
         client_id: impl Into<String>,
         client_secret: impl Into<String>,
         audience: impl Into<String>,
     ) -> Result<Self, String> {
+        self.with_scoped_service_client(
+            client_id,
+            client_secret,
+            audience,
+            "idp.token.validate idp.device.lookup",
+        )
+    }
+
+    pub(crate) fn with_scoped_service_client(
+        mut self,
+        client_id: impl Into<String>,
+        client_secret: impl Into<String>,
+        audience: impl Into<String>,
+        scope: &'static str,
+    ) -> Result<Self, String> {
         let client_id = client_id.into();
         let client_secret = client_secret.into();
         let audience = audience.into();
-        if client_id.trim().is_empty() || client_secret.is_empty() || audience.trim().is_empty() {
+        if client_id.trim().is_empty()
+            || client_secret.is_empty()
+            || audience.trim().is_empty()
+            || self.permission_evaluator_client_id.as_deref() == Some(client_id.as_str())
+        {
             return Err("IdP service client ID, secret and audience are required".to_owned());
         }
         self.service_token_client = Some(Arc::new(ServiceTokenClient {
             client_id,
             client_secret,
             audience,
+            scope,
             cached: Mutex::new(None),
         }));
         Ok(self)
     }
 
-    async fn idp_service_access_token(&self) -> Result<String, String> {
-        const TOKEN_SCOPE: &str = "idp.token.validate idp.device.lookup";
+    pub(crate) async fn idp_service_access_token(&self) -> Result<String, String> {
         const RENEWAL_MARGIN: Duration = Duration::from_secs(15);
 
         let token_client = self
@@ -125,7 +163,7 @@ impl HostedControlPlane {
                 "client_secret".to_owned(),
                 token_client.client_secret.clone(),
             ),
-            ("scope".to_owned(), TOKEN_SCOPE.to_owned()),
+            ("scope".to_owned(), token_client.scope.to_owned()),
             ("audience".to_owned(), token_client.audience.clone()),
         ];
         let mut response = self
@@ -145,7 +183,8 @@ impl HostedControlPlane {
             || token.issuer.as_deref() != Some(self.expected_issuer.as_str())
             || !token.scope.as_deref().is_some_and(|scope| {
                 let granted = scope.split_ascii_whitespace().collect::<Vec<_>>();
-                TOKEN_SCOPE
+                token_client
+                    .scope
                     .split_ascii_whitespace()
                     .all(|required| granted.contains(&required))
             })
@@ -212,6 +251,23 @@ impl HostedControlPlane {
             .application_id
             .parse()
             .map_err(|_| "invalid application ID in IdP response".to_owned())?;
+        self.check_issuer(&response.claims)?;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| "invalid local clock".to_owned())?
+            .as_secs() as i64;
+        if response.claims.r#type != TokenType::Bearer
+            || response.claims.r#use != TokenUse::Access
+            || response.claims.exp <= now
+            || response.claims.nbf > now
+            || response.claims.iat > now
+            || response.claims.aud.is_empty()
+            || response.claims.client_id.is_empty()
+            || response.claims.sub.parse::<Id>().is_err()
+            || application_id == Id::nil()
+        {
+            return Err("invalid claims in IdP token validation response".to_owned());
+        }
         Ok((response.claims, application_id))
     }
 
@@ -424,7 +480,7 @@ impl HostedControlPlane {
     }
 }
 
-fn normalize_service_url(value: &str) -> Result<Url, String> {
+pub(crate) fn normalize_service_url(value: &str) -> Result<Url, String> {
     let mut url = Url::parse(value).map_err(|_| "invalid service URI".to_owned())?;
     if !matches!(url.scheme(), "http" | "https")
         || url.host().is_none()
@@ -461,6 +517,7 @@ struct ServiceTokenClient {
     client_id: String,
     client_secret: String,
     audience: String,
+    scope: &'static str,
     cached: Mutex<Option<CachedServiceToken>>,
 }
 
@@ -469,7 +526,7 @@ struct CachedServiceToken {
     valid_until: SystemTime,
 }
 
-async fn read_limited_body(
+pub(crate) async fn read_limited_body(
     response: &mut reqwest::Response,
     label: &str,
 ) -> Result<Vec<u8>, String> {

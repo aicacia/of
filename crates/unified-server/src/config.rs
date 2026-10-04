@@ -17,6 +17,7 @@ pub struct UnifiedConfig {
     pub management_idp_client: ServiceClientCredentials,
     pub storage_idp_client: ServiceClientCredentials,
     pub storage_management_client: ServiceClientCredentials,
+    pub idp_management_client: Option<ServiceClientCredentials>,
 }
 
 #[derive(Deserialize)]
@@ -49,6 +50,7 @@ struct ServiceClientConfig {
     management_idp: ClientConfig,
     storage_idp: ClientConfig,
     storage_management: ClientConfig,
+    idp_management: Option<ClientConfig>,
 }
 
 #[derive(Default, Deserialize)]
@@ -94,6 +96,10 @@ impl TryFrom<&Path> for UnifiedConfig {
                 service_clients.storage_management,
                 "UNIFIED_STORAGE_MANAGEMENT_CLIENT_SECRET",
             )?,
+            idp_management_client: service_clients
+                .idp_management
+                .map(|client| load_credentials(client, "UNIFIED_IDP_MANAGEMENT_CLIENT_SECRET"))
+                .transpose()?,
         })
     }
 }

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::{database_protocol::DatabaseProtocolHandler, storage_protocol::StorageProtocolHandler};
 use iroh::{
     endpoint::Connection,
@@ -6,6 +8,7 @@ use iroh::{
 
 pub(crate) const DATABASE_STREAM_KIND: u8 = 1;
 pub(crate) const FILESYSTEM_STREAM_KIND: u8 = file_system::FILESYSTEM_STREAM_KIND;
+const STREAM_MARKER_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone)]
 pub(crate) struct DataProtocolHandler {
@@ -30,9 +33,16 @@ impl ProtocolHandler for DataProtocolHandler {
         loop {
             let (send, mut recv) = connection.accept_bi().await?;
             let mut kind = [0; 1];
-            if let Err(error) = recv.read_exact(&mut kind).await {
-                log::debug!("rejected data stream without a protocol kind: {error}");
-                continue;
+            match tokio::time::timeout(STREAM_MARKER_TIMEOUT, recv.read_exact(&mut kind)).await {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    log::debug!("rejected data stream without a protocol kind: {error}");
+                    continue;
+                }
+                Err(_) => {
+                    log::debug!("rejected data stream with a timed-out protocol marker");
+                    continue;
+                }
             }
             match kind[0] {
                 DATABASE_STREAM_KIND => {

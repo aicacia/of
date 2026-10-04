@@ -6,6 +6,15 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use crate::RouterState;
 
 use super::openapi::{__path_openapi_json, openapi_json};
+use super::routes::administration::{
+    __path_create_application, __path_delete_application, __path_delete_user,
+    __path_get_application, __path_get_user, __path_list_applications, __path_list_client_keys,
+    __path_list_consents, __path_reset_password, __path_revoke_client_keys, __path_revoke_consent,
+    __path_rotate_client_key, __path_update_application, __path_update_user, create_application,
+    delete_application, delete_user, get_application, get_user, list_applications,
+    list_client_keys, list_consents, reset_password, revoke_client_keys, revoke_consent,
+    rotate_client_key, update_application, update_user,
+};
 use super::routes::device::{__path_device, device};
 use super::routes::device_self_revocation::{__path_revoke_self, revoke_self};
 use super::routes::devices::{
@@ -64,6 +73,20 @@ pub fn openapi_router(router_state: RouterState, prefix: &str) -> OpenApiRouter 
     let routes = || {
         OpenApiRouter::new()
             .routes(routes!(health))
+            .routes(routes!(list_applications))
+            .routes(routes!(create_application))
+            .routes(routes!(get_application))
+            .routes(routes!(update_application))
+            .routes(routes!(delete_application))
+            .routes(routes!(get_user))
+            .routes(routes!(update_user))
+            .routes(routes!(delete_user))
+            .routes(routes!(reset_password))
+            .routes(routes!(list_consents))
+            .routes(routes!(revoke_consent))
+            .routes(routes!(list_client_keys))
+            .routes(routes!(rotate_client_key))
+            .routes(routes!(revoke_client_keys))
             .routes(routes!(register_bootstrap))
             .routes(routes!(device))
             .routes(routes!(revoke_self))

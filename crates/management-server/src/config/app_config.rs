@@ -16,6 +16,7 @@ pub struct AppConfig {
     pub storage_api_base: String,
     pub expected_issuer: String,
     pub storage_audience: String,
+    pub idp_permission_evaluator_client_id: Option<String>,
 }
 
 impl Default for AppConfig {
@@ -30,6 +31,7 @@ impl Default for AppConfig {
             storage_api_base: String::new(),
             expected_issuer: String::new(),
             storage_audience: String::new(),
+            idp_permission_evaluator_client_id: None,
         }
     }
 }

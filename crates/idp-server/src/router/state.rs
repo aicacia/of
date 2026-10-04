@@ -10,11 +10,10 @@ use idp_service::{
     repo::PrivateKeyKeyringRepo,
 };
 use iroh::{Endpoint, EndpointId, SecretKey};
-use management_service::{HostedControlPlane, replica::DbDeviceRepo};
+use management_service::{HostedControlPlane, PermissionClient, replica::DbDeviceRepo};
 use ofdb_sql::{AutomergeRowCodec, RedbKernel};
 
 use super::PairingAcceptanceControllerSlot;
-use crate::bootstrap::BootstrapRegistry;
 
 pub(super) type NativeOAuth2Service = OAuth2Service<
     DbApplicationRepo<RedbKernel, AutomergeRowCodec>,
@@ -82,7 +81,7 @@ pub struct RouterState {
     pub device_identity: Arc<DeviceIdentity>,
     pub pairing_acceptance: Arc<PairingAcceptanceControllerSlot>,
     pub hosted_control_plane: Option<Arc<HostedControlPlane>>,
-    pub bootstrap_grants: Arc<BootstrapRegistry>,
+    pub permission_client: Option<Arc<PermissionClient>>,
 }
 
 impl RouterState {
@@ -105,8 +104,13 @@ impl RouterState {
             device_identity,
             pairing_acceptance: Arc::new(PairingAcceptanceControllerSlot::new()),
             hosted_control_plane: None,
-            bootstrap_grants: Arc::new(BootstrapRegistry::default()),
+            permission_client: None,
         }
+    }
+
+    pub fn with_permission_client(mut self, client: PermissionClient) -> Self {
+        self.permission_client = Some(Arc::new(client));
+        self
     }
 
     pub fn with_service_audience(mut self, audience: impl Into<String>) -> Self {

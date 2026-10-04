@@ -43,6 +43,7 @@ mod jws_algorithm;
 mod key_use;
 mod oauth2_client_auth;
 mod password_grant_request;
+mod permission_evaluation;
 mod pushed_authorization_request;
 mod refresh_token_grant_request;
 mod response_mode;
@@ -116,6 +117,11 @@ pub use jws_algorithm::JwsAlgorithm;
 pub use key_use::KeyUse;
 pub use oauth2_client_auth::OAuth2ClientAuth;
 pub use password_grant_request::PasswordGrantRequest;
+pub use permission_evaluation::{
+    INSTALLATION_POLICY_ID, IdentityAction, IdentityResource, MANAGEMENT_PERMISSION_EVALUATE_SCOPE,
+    PermissionAuditIdentity, PermissionEvaluationRequest, PermissionEvaluationResponse,
+    PermissionSubject, PermissionTarget,
+};
 pub use pushed_authorization_request::PushedAuthorizationRequest;
 pub use refresh_token_grant_request::RefreshTokenGrantRequest;
 pub use response_mode::ResponseMode;

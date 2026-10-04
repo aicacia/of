@@ -5,7 +5,7 @@ use axum::Router;
 use db::{NativeEngine, open_native_engine};
 use idp_server::{IdpRuntime, build_runtime as build_idp_runtime};
 use iroh::protocol::Router as IrohRouter;
-use management_service::HostedControlPlane;
+use management_service::{HostedControlPlane, PermissionClient};
 use storage_server::{
     IdpClient, ManagementClient, RouterState as StorageRouterState, StorageRuntime,
     build_runtime as build_storage_runtime,
@@ -53,6 +53,25 @@ impl UnifiedRuntime {
         let endpoint = Arc::new(UnifiedEndpoint::open(&config.endpoint_data_dir).await?);
         let server = endpoint.server().clone();
 
+        let idp_api_base = format!("{api_base}{IDP_PREFIX}/");
+        let management_api_base = format!("{api_base}{MANAGEMENT_PREFIX}/");
+        let permission_client = config
+            .idp_management_client
+            .as_ref()
+            .map(|credentials| {
+                if credentials.audience != management_service::MANAGEMENT_APPLICATION_URI {
+                    return Err("IdP permission audience must be idp-management".to_owned());
+                }
+                PermissionClient::new(
+                    &management_api_base,
+                    &idp_api_base,
+                    &config.idp.oauth2.issuer,
+                    &credentials.client_id,
+                    &credentials.client_secret,
+                )
+            })
+            .transpose()
+            .map_err(invalid_config)?;
         let idp_engine = open_service_engine(&config.idp.data_dir, "idp.redb")?;
         let mut idp_config = config.idp;
         idp_config.server.prefix = Some(IDP_PREFIX.to_owned());
@@ -63,6 +82,7 @@ impl UnifiedRuntime {
                 idp_engine,
                 Arc::new(endpoint.identity()?),
                 server.clone(),
+                permission_client,
             )
             .await?,
         );
@@ -70,12 +90,18 @@ impl UnifiedRuntime {
         let idp_api_base = format!("{api_base}{IDP_PREFIX}/");
         let management_api_base = format!("{api_base}{MANAGEMENT_PREFIX}/");
         let storage_api_base = format!("{api_base}{STORAGE_PREFIX}/");
-        let management_control_plane = Arc::new(build_control_plane(
+        let management_control_plane = build_control_plane(
             &config.management_idp_client,
             &idp_api_base,
             &storage_api_base,
             &idp_config.oauth2.issuer,
-        )?);
+        )?;
+        let management_control_plane = Arc::new(match config.idp_management_client.as_ref() {
+            Some(credentials) => management_control_plane
+                .with_permission_evaluator(&credentials.client_id)
+                .map_err(invalid_config)?,
+            None => management_control_plane,
+        });
 
         let management_engine =
             open_service_engine(&config.management.data_dir, "management.redb")?;
@@ -313,6 +339,25 @@ fn validate_config(config: &UnifiedConfig) -> io::Result<()> {
             "Management→IdP, Storage→IdP, and Storage→Management must use distinct OAuth clients",
         ));
     }
+    if let Some(evaluator) = &config.idp_management_client {
+        if evaluator.client_id.trim().is_empty()
+            || evaluator.client_secret.is_empty()
+            || evaluator.audience != management_service::MANAGEMENT_APPLICATION_URI
+            || client_ids.contains(&evaluator.client_id.as_str())
+            || [
+                &config.management_idp_client,
+                &config.storage_idp_client,
+                &config.storage_management_client,
+            ]
+            .iter()
+            .any(|client| client.client_secret == evaluator.client_secret)
+        {
+            return Err(invalid_config(
+                "IdP→Management requires a distinct client and secret with idp-management audience"
+                    .to_owned(),
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -435,28 +480,13 @@ fn spawn_peer_refresh(
 #[cfg(test)]
 mod tests {
     use std::{
-        any::Any,
-        collections::HashMap,
         fs,
         net::{IpAddr, Ipv4Addr, SocketAddr},
-        sync::Arc,
         time::{SystemTime, UNIX_EPOCH},
     };
 
+    use crate::permission_http_tests::{run_permission_http_checks, seed_idp, seed_permissions};
     use axum::{body::Body, http::Request};
-    use db::open_native_engine;
-    use idp_model::{
-        contract::{
-            ApplicationRegistration, ClientProfile, ClientRegistration, ClientType, GrantType,
-            TokenEndpointAuthMethod,
-        },
-        replica::up,
-    };
-    use idp_service::{
-        replica::{DbApplicationRepo, DbClientRepo, DbKeyRepo},
-        repo::{ApplicationRepo, ClientRepo, KeyService, PrivateKeyKeyringRepo},
-    };
-    use management_service::{DeviceRepo, replica::DbDeviceRepo};
     use tower::ServiceExt;
 
     use crate::{ServiceClientCredentials, UnifiedConfig};
@@ -509,6 +539,11 @@ mod tests {
             management_idp_client: credentials("management-idp", "idp-services"),
             storage_idp_client: credentials("storage-idp", "idp-services"),
             storage_management_client: credentials("storage-management", "storage-service"),
+            idp_management_client: Some(ServiceClientCredentials {
+                client_id: "idp-evaluator".into(),
+                client_secret: "idp-evaluator-secret".into(),
+                audience: management_service::MANAGEMENT_APPLICATION_URI.into(),
+            }),
         };
         config.storage_idp_client.client_id = config.management_idp_client.client_id.clone();
         assert!(validate_config(&config).is_err());
@@ -522,13 +557,14 @@ mod tests {
         let endpoint_id = endpoint.endpoint_id();
         let approved_peer_id = iroh::SecretKey::generate().public();
         let issuer = config.idp.oauth2.issuer.clone();
-        seed_idp(
+        let mut fixture = seed_idp(
             &root,
             &issuer,
             &endpoint_id.to_string(),
             &approved_peer_id.to_string(),
         )
         .await;
+        seed_permissions(&root, &mut fixture).await;
         endpoint.close().await;
 
         let runtime = UnifiedRuntime::build(config)
@@ -662,6 +698,14 @@ mod tests {
             serde_json::from_str(&selection_body).expect("parse selection response");
         assert_eq!(selected["resources"], serde_json::json!([]));
 
+        run_permission_http_checks(
+            &client,
+            &format!("http://{server_address}"),
+            &format!("http://{server_address}"),
+            &fixture,
+        )
+        .await;
+
         let idp_metadata = get_json(
             &client,
             format!("http://{server_address}/idp/.well-known/openid-configuration"),
@@ -699,162 +743,6 @@ mod tests {
         assert_eq!(restored_endpoint.endpoint_id(), endpoint_id);
         restored_endpoint.close().await;
         fs::remove_dir_all(root).expect("remove unified runtime data");
-    }
-
-    async fn seed_idp(
-        root: &std::path::Path,
-        issuer: &str,
-        endpoint_id: &str,
-        approved_peer_id: &str,
-    ) {
-        let database_path = root.join("idp/idp.redb");
-        fs::create_dir_all(database_path.parent().expect("IdP data directory"))
-            .expect("create IdP data directory");
-        let engine =
-            Arc::new(open_native_engine(database_path).expect("open IdP fixture database"));
-        up(&engine).await.expect("initialize IdP schema");
-        let applications = DbApplicationRepo::new(Arc::clone(&engine));
-        applications
-            .create_application(
-                "Unified test application".to_owned(),
-                "https://example.test/unified".to_owned(),
-                None,
-            )
-            .await
-            .expect("create canonical application");
-        let key_service = Arc::new(KeyService::new(
-            DbKeyRepo::new(Arc::clone(&engine)),
-            PrivateKeyKeyringRepo::new_with_store(issuer, test_keyring_store()),
-            "lidp".to_owned(),
-        ));
-        let clients = DbClientRepo::new(Arc::clone(&engine), Arc::clone(&key_service));
-        for (client_id, secret, audiences, scopes) in [
-            (
-                "management-idp",
-                "management-idp-secret",
-                vec!["idp-services", "storage-service"],
-                vec!["idp.token.validate", "idp.device.lookup"],
-            ),
-            (
-                "storage-idp",
-                "storage-idp-secret",
-                vec!["idp-services"],
-                vec!["idp.token.validate", "idp.device.list"],
-            ),
-            (
-                "storage-management",
-                "storage-management-secret",
-                vec!["storage-service"],
-                vec![
-                    "management.replication.read",
-                    "management.replication.admit",
-                ],
-            ),
-        ] {
-            clients
-                .create_client(ClientRegistration {
-                    application: ApplicationRegistration {
-                        name: Some("Unified test application".to_owned()),
-                        uri: "https://example.test/unified".to_owned(),
-                        description: None,
-                    },
-                    client_id: Some(client_id.to_owned()),
-                    client_secret: Some(secret.to_owned()),
-                    client_id_issued_at: None,
-                    client_secret_expires_at: None,
-                    client_name: client_id.to_owned(),
-                    client_uri: None,
-                    logo_uri: None,
-                    contacts: Vec::new(),
-                    terms_of_service_uri: None,
-                    policy_uri: None,
-                    client_type: ClientType::Confidential,
-                    profile: ClientProfile::Web,
-                    redirect_uris: Vec::new(),
-                    allowed_grant_types: vec![GrantType::ClientCredentials],
-                    response_types: Vec::new(),
-                    allowed_scopes: scopes.into_iter().map(str::to_owned).collect(),
-                    allowed_audiences: audiences.into_iter().map(str::to_owned).collect(),
-                    token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretPost,
-                    software_statement: None,
-                    software_id: None,
-                    software_version: None,
-                })
-                .await
-                .expect("provision IdP service client");
-        }
-        let devices = DbDeviceRepo::new(engine);
-        devices
-            .create(
-                "unified-test-owner".to_owned(),
-                "unified-host".to_owned(),
-                endpoint_id.to_owned(),
-                "test-address".to_owned(),
-                Vec::new(),
-                0,
-            )
-            .await
-            .expect("approve unified endpoint identity");
-        let pending_peer = devices
-            .create(
-                "unified-test-owner".to_owned(),
-                "approved-peer".to_owned(),
-                approved_peer_id.to_owned(),
-                "test-address".to_owned(),
-                vec![1],
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .expect("system time is after Unix epoch")
-                    .as_secs() as i64
-                    + 60,
-            )
-            .await
-            .expect("create pending test peer");
-        devices
-            .approve(pending_peer.id, &[1])
-            .await
-            .expect("approve test peer")
-            .expect("pending test peer exists");
-    }
-
-    struct ModifierTolerantTestStore {
-        inner: Arc<keyring_core::mock::Store>,
-    }
-
-    impl keyring_core::api::CredentialStoreApi for ModifierTolerantTestStore {
-        fn vendor(&self) -> String {
-            self.inner.vendor()
-        }
-
-        fn id(&self) -> String {
-            self.inner.id()
-        }
-
-        fn build(
-            &self,
-            service: &str,
-            user: &str,
-            _modifiers: Option<&HashMap<&str, &str>>,
-        ) -> keyring_core::Result<keyring_core::Entry> {
-            keyring_core::api::CredentialStoreApi::build(&*self.inner, service, user, None)
-        }
-
-        fn search(
-            &self,
-            spec: &HashMap<&str, &str>,
-        ) -> keyring_core::Result<Vec<keyring_core::Entry>> {
-            keyring_core::api::CredentialStoreApi::search(&*self.inner, spec)
-        }
-
-        fn as_any(&self) -> &dyn Any {
-            self
-        }
-    }
-
-    fn test_keyring_store() -> Arc<keyring_core::CredentialStore> {
-        Arc::new(ModifierTolerantTestStore {
-            inner: keyring_core::mock::Store::new().expect("create test keyring"),
-        })
     }
 
     async fn issue_client_token(

@@ -3,6 +3,7 @@ mod config;
 mod jwt;
 mod pkce;
 mod principal;
+mod readiness;
 mod scope;
 mod service;
 mod token;

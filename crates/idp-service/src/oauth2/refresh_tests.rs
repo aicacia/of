@@ -220,6 +220,69 @@ fn replica_service(engine: &Arc<TestEngine>, authority: &TestService) -> TestSer
 }
 
 #[tokio::test]
+async fn replica_readiness_blocks_before_database_work_and_restart() {
+    use idp_model::contract::ClientCredentialsGrantRequest;
+
+    let (_, authority, _, _) = setup().await;
+    // No schema: any repository access would fail instead of returning access_denied.
+    let empty = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
+    for _ in 0..2 {
+        let mut replica = replica_service(&empty, &authority);
+        replica.oauth_config.role = idp_model::contract::IdpRole::Authority;
+        for _ in 0..3 {
+            assert_eq!(
+                replica
+                    .require_security_ready()
+                    .expect_err("restart is unready")
+                    .error,
+                ErrorCode::AccessDenied
+            );
+            assert_eq!(
+                replica
+                    .find_principal(Id::from_u128(1))
+                    .await
+                    .err()
+                    .expect("deny before DB")
+                    .error,
+                ErrorCode::AccessDenied
+            );
+            assert_eq!(
+                replica
+                    .find_public_jwk(Id::from_u128(1))
+                    .await
+                    .expect_err("deny before DB")
+                    .error,
+                ErrorCode::AccessDenied
+            );
+            assert_eq!(
+                replica.list_jwks().await.expect_err("deny before DB").error,
+                ErrorCode::AccessDenied
+            );
+            assert_eq!(
+                replica
+                    .token(
+                        TokenRequest::ClientCredentials(ClientCredentialsGrantRequest {
+                            client_id: "absent".into(),
+                            client_secret: String::new(),
+                            scope: None,
+                            audience: None,
+                            resource: None,
+                        }),
+                        None
+                    )
+                    .await
+                    .expect_err("deny before client lookup or password/signature work")
+                    .error,
+                ErrorCode::AccessDenied
+            );
+        }
+    }
+    authority
+        .require_security_ready()
+        .expect("authority unaffected");
+}
+
+#[tokio::test]
 async fn replica_role_rejects_user_grants_without_consuming_state() {
     use crate::repo::OAuth2UserConsentRepo;
     use idp_model::contract::{
@@ -396,10 +459,36 @@ async fn replica_role_denies_client_credentials_until_signer_readiness() {
         .expect("authority still permits machine grant");
     assert!(tokens.refresh_token.is_none());
     let (header, _) = decode_jwt::<StandardClaims>(&tokens.access_token.0).expect("decode token");
-    let key = replica
-        .find_public_jwk(Id::parse_str(&header.kid).expect("key ID"))
+    let key_id = Id::parse_str(&header.kid).expect("key ID");
+    assert_eq!(
+        replica
+            .find_public_jwk(key_id)
+            .await
+            .expect_err("unready replica cannot verify")
+            .error,
+        ErrorCode::AccessDenied
+    );
+    assert_eq!(
+        replica
+            .find_principal(key_id)
+            .await
+            .err()
+            .expect("unready replica cannot resolve principal")
+            .error,
+        ErrorCode::AccessDenied
+    );
+    assert_eq!(
+        replica
+            .list_jwks()
+            .await
+            .expect_err("unready replica cannot publish eligible keys")
+            .error,
+        ErrorCode::AccessDenied
+    );
+    let key = authority
+        .find_public_jwk(key_id)
         .await
-        .expect("replica reads verification key");
+        .expect("authority reads verification key");
     super::verify_jwt::<StandardClaims>(&key, &tokens.access_token.0).expect("validate signature");
     assert!(states(&engine).await.is_empty());
 }

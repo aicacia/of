@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use file_system::{FileSystemId, IrohFileTransport, IrohResourceDescriptor};
 use iroh::{
@@ -13,6 +13,10 @@ use storage_model::StorageNamespace;
 use storage_service::ScopedFileSystemRuntime;
 
 use crate::ManagementClient;
+
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+const POLICY_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
+const SYNC_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Clone)]
 pub(crate) struct StorageProtocolHandler {
@@ -92,11 +96,18 @@ impl StorageProtocolHandler {
             .is_tombstoned(&namespace, filesystem_id)
             .await
             .map_err(std::io::Error::other)?;
-        let connection = self
-            .server
-            .connect_direct_with_alpn(peer, DATA_ALPN)
-            .await?;
-        if !self.authorize(&resource, &connection).await {
+        let connection = tokio::time::timeout(
+            HANDSHAKE_TIMEOUT,
+            self.server.connect_direct_with_alpn(peer, DATA_ALPN),
+        )
+        .await
+        .map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "filesystem connection timed out",
+            )
+        })??;
+        if !self.authorize_bounded(&resource, &connection).await {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
                 "filesystem resource is not authorized for sync",
@@ -105,21 +116,34 @@ impl StorageProtocolHandler {
         }
         let handler = self.clone();
         let connection_for_guard = connection.clone();
-        let transport = if deleted {
-            IrohFileTransport::open_tombstone_authorized(&connection, resource, move |resource| {
-                let handler = handler.clone();
-                let connection = connection_for_guard.clone();
-                async move { handler.authorize(&resource, &connection).await }
-            })
-            .await?
-        } else {
-            IrohFileTransport::open_authorized(&connection, resource, move |resource| {
-                let handler = handler.clone();
-                let connection = connection_for_guard.clone();
-                async move { handler.authorize(&resource, &connection).await }
-            })
-            .await?
-        };
+        let transport = tokio::time::timeout(HANDSHAKE_TIMEOUT, async {
+            if deleted {
+                IrohFileTransport::open_tombstone_authorized(
+                    &connection,
+                    resource,
+                    move |resource| {
+                        let handler = handler.clone();
+                        let connection = connection_for_guard.clone();
+                        async move { handler.authorize_bounded(&resource, &connection).await }
+                    },
+                )
+                .await
+            } else {
+                IrohFileTransport::open_authorized(&connection, resource, move |resource| {
+                    let handler = handler.clone();
+                    let connection = connection_for_guard.clone();
+                    async move { handler.authorize_bounded(&resource, &connection).await }
+                })
+                .await
+            }
+        })
+        .await
+        .map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "filesystem handshake timed out",
+            )
+        })??;
         if deleted {
             transport.close();
             return Ok(());
@@ -129,7 +153,14 @@ impl StorageProtocolHandler {
             .open_resource(&namespace, filesystem_id)
             .await
             .map_err(std::io::Error::other)?;
-        file_system.sync_peer(transport).await?;
+        tokio::time::timeout(SYNC_OPERATION_TIMEOUT, file_system.sync_peer(transport))
+            .await
+            .map_err(|_| {
+                std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "filesystem sync operation timed out",
+                )
+            })??;
         Ok(())
     }
 }
@@ -151,25 +182,31 @@ impl StorageProtocolHandler {
     ) {
         let handler = self.clone();
         let connection_for_authorization = connection.clone();
-        let (transport, resource, deleted) =
-            match IrohFileTransport::accept_authorized_after_marker(
+        let (transport, resource, deleted) = match tokio::time::timeout(
+            HANDSHAKE_TIMEOUT,
+            IrohFileTransport::accept_authorized_after_marker(
                 &connection,
                 send,
                 recv,
                 move |resource| {
                     let handler = handler.clone();
                     let connection = connection_for_authorization.clone();
-                    async move { handler.authorize(&resource, &connection).await }
+                    async move { handler.authorize_bounded(&resource, &connection).await }
                 },
-            )
-            .await
-            {
-                Ok(accepted) => accepted,
-                Err(error) => {
-                    log::warn!("rejected filesystem sync stream: {error}");
-                    return;
-                }
-            };
+            ),
+        )
+        .await
+        {
+            Ok(Ok(accepted)) => accepted,
+            Ok(Err(error)) => {
+                log::warn!("rejected filesystem sync stream: {error}");
+                return;
+            }
+            Err(_) => {
+                log::warn!("rejected filesystem sync stream: handshake timed out");
+                return;
+            }
+        };
 
         let Ok(application_id) = resource.application_id.parse() else {
             return;
@@ -212,8 +249,12 @@ impl StorageProtocolHandler {
             }
         };
         tokio::spawn(async move {
-            if let Err(error) = file_system.sync_peer(transport).await {
-                log::warn!("filesystem sync session ended: {error}");
+            match tokio::time::timeout(SYNC_OPERATION_TIMEOUT, file_system.sync_peer(transport))
+                .await
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => log::warn!("filesystem sync session ended: {error}"),
+                Err(_) => log::warn!("filesystem sync operation timed out"),
             }
         });
     }
@@ -224,8 +265,10 @@ impl ProtocolHandler for StorageProtocolHandler {
         loop {
             let (send, mut recv) = connection.accept_bi().await?;
             let mut kind = [0; 1];
-            if recv.read_exact(&mut kind).await.is_err()
-                || kind[0] != file_system::FILESYSTEM_STREAM_KIND
+            if !matches!(
+                tokio::time::timeout(HANDSHAKE_TIMEOUT, recv.read_exact(&mut kind)).await,
+                Ok(Ok(()))
+            ) || kind[0] != file_system::FILESYSTEM_STREAM_KIND
             {
                 continue;
             }
@@ -243,6 +286,16 @@ fn descriptor(resource: &SelectedResource) -> IrohResourceDescriptor {
 }
 
 impl StorageProtocolHandler {
+    async fn authorize_bounded(
+        &self,
+        resource: &IrohResourceDescriptor,
+        connection: &Connection,
+    ) -> bool {
+        tokio::time::timeout(POLICY_CHECK_TIMEOUT, self.authorize(resource, connection))
+            .await
+            .unwrap_or(false)
+    }
+
     async fn authorize(&self, resource: &IrohResourceDescriptor, connection: &Connection) -> bool {
         let Ok(_application_id) = resource.application_id.parse::<idp_model::model::Id>() else {
             return false;

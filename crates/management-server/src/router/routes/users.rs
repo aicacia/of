@@ -42,7 +42,7 @@ impl From<idp_model::model::Role> for UserApplicationRoleResponse {
     params(
         ("user_id" = String, Path, description = "User ID")
     ),
-    responses((status = 200, description = "List user roles across applications", body = [UserApplicationRoleResponse])),
+    responses((status = 200, description = "List user roles within the authorized application", body = [UserApplicationRoleResponse])),
     security(
         ("authorization" = [])
     )
@@ -55,13 +55,14 @@ pub(crate) async fn list_user_roles_across_applications(
     require_application_permission(
         state.management_service.as_ref(),
         &authorization,
+        authorization.application_id,
         USERS_READ_PERMISSION,
     )
     .await?;
 
     let roles = state
         .management_service
-        .list_user_roles_across_applications(user_id)
+        .list_user_roles(authorization.application_id, user_id)
         .await
         .map_err(ErrorResponse::from)?;
 

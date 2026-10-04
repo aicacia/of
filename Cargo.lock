@@ -443,9 +443,9 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "automerge"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "629a51c7c6f21ab08059e237b3dfc87d16b2846605ee5b3e4ddcd397bbce264b"
+checksum = "09b78abcbba93428b9465b26cb2816a5b4654cce507f099a84a8c1b311cb3633"
 dependencies = [
  "cfg-if",
  "flate2",
@@ -463,6 +463,31 @@ dependencies = [
  "tinyvec",
  "tracing",
  "unicode-segmentation",
+]
+
+[[package]]
+name = "autosurgeon"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b3e9830fb43a71ecbcce339e6ccb0bde5456a3f18d5b810a744870e4a50d832"
+dependencies = [
+ "automerge",
+ "autosurgeon-derive",
+ "similar",
+ "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
+name = "autosurgeon-derive"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "963860d91f829d5c4b3f8581989cdcfcfcc4c4af92182a7b03075180d8973795"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -780,6 +805,17 @@ checksum = "bf88ba1141d185c399bee5288d850d63b8369520c1eafc32a0430b5b6c287bf4"
 dependencies = [
  "sha2 0.10.9",
  "tinyvec",
+]
+
+[[package]]
+name = "bstr"
+version = "1.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6bb31b46c14244e20ee9984b11bf5c992b91fb6939fea616e3512c8baecdbe5f"
+dependencies = [
+ "memchr",
+ "regex-automata",
+ "serde_core",
 ]
 
 [[package]]
@@ -2065,6 +2101,7 @@ dependencies = [
  "postcard",
  "redb",
  "serde",
+ "serde_json",
  "tokio",
  "uuid",
 ]
@@ -4795,7 +4832,7 @@ dependencies = [
  "dashmap",
  "futures",
  "ofdb-btree",
- "ofdb-sql-value",
+ "ofdb-value",
  "redb",
  "serde",
  "thiserror 2.0.20",
@@ -4806,11 +4843,14 @@ dependencies = [
 name = "ofdb-kv"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "ofdb-btree",
  "ofdb-btree-redb",
  "ofdb-kv-store",
  "ofdb-kv-sync",
+ "ofdb-value",
  "redb",
+ "serde_json",
  "tokio",
  "uuid",
 ]
@@ -4820,9 +4860,11 @@ name = "ofdb-kv-store"
 version = "0.1.0"
 dependencies = [
  "automerge",
+ "autosurgeon",
  "futures",
  "ofdb-btree",
  "ofdb-btree-automerge",
+ "ofdb-value",
  "uuid",
 ]
 
@@ -4849,7 +4891,7 @@ dependencies = [
  "ofdb-sql-schema",
  "ofdb-sql-sync",
  "ofdb-sql-translator",
- "ofdb-sql-value",
+ "ofdb-value",
  "tokio",
  "uuid",
 ]
@@ -4864,7 +4906,7 @@ dependencies = [
  "ofdb-btree",
  "ofdb-sql-query",
  "ofdb-sql-schema",
- "ofdb-sql-value",
+ "ofdb-value",
  "postcard",
  "serde",
  "serde_json",
@@ -4884,7 +4926,7 @@ dependencies = [
  "ofdb-btree-automerge",
  "ofdb-sql-engine",
  "ofdb-sql-sync",
- "ofdb-sql-value",
+ "ofdb-value",
  "postcard",
  "serde",
  "uuid",
@@ -4899,7 +4941,7 @@ dependencies = [
  "ofdb-btree",
  "ofdb-btree-redb",
  "ofdb-sql-engine",
- "ofdb-sql-value",
+ "ofdb-value",
  "redb",
  "uuid",
 ]
@@ -4918,7 +4960,7 @@ name = "ofdb-sql-query"
 version = "0.1.0"
 dependencies = [
  "ofdb-sql-schema",
- "ofdb-sql-value",
+ "ofdb-value",
  "serde",
  "thiserror 2.0.20",
  "uuid",
@@ -4928,7 +4970,7 @@ dependencies = [
 name = "ofdb-sql-schema"
 version = "0.1.0"
 dependencies = [
- "ofdb-sql-value",
+ "ofdb-value",
  "serde",
 ]
 
@@ -4938,7 +4980,7 @@ version = "0.1.0"
 dependencies = [
  "iroh",
  "ofdb-sql-engine",
- "ofdb-sql-value",
+ "ofdb-value",
  "postcard",
  "serde",
  "sha2 0.10.9",
@@ -4952,7 +4994,7 @@ version = "0.1.0"
 dependencies = [
  "ofdb-sql-query",
  "ofdb-sql-schema",
- "ofdb-sql-value",
+ "ofdb-value",
  "serde_json",
  "sqlparser",
  "thiserror 2.0.20",
@@ -4960,9 +5002,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "ofdb-sql-value"
+name = "ofdb-value"
 version = "0.1.0"
 dependencies = [
+ "automerge",
+ "autosurgeon",
  "postcard",
  "redb",
  "serde",
@@ -6526,6 +6570,16 @@ name = "simdutf8"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
+
+[[package]]
+name = "similar"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
+dependencies = [
+ "bstr",
+ "unicode-segmentation",
+]
 
 [[package]]
 name = "simple-dns"

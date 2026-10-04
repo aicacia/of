@@ -74,6 +74,7 @@ pub(crate) async fn list_permissions(
     require_application_permission(
         state.management_service.as_ref(),
         &authorization,
+        application_id,
         PERMISSIONS_READ_PERMISSION,
     )
     .await?;
@@ -108,6 +109,7 @@ pub(crate) async fn create_permission(
     require_application_permission(
         state.management_service.as_ref(),
         &authorization,
+        application_id,
         PERMISSIONS_WRITE_PERMISSION,
     )
     .await?;
@@ -141,6 +143,7 @@ pub(crate) async fn delete_permission(
     require_application_permission(
         state.management_service.as_ref(),
         &authorization,
+        application_id,
         PERMISSIONS_WRITE_PERMISSION,
     )
     .await?;
@@ -184,6 +187,7 @@ pub(crate) async fn list_role_permissions(
     require_application_permission(
         state.management_service.as_ref(),
         &authorization,
+        application_id,
         PERMISSIONS_READ_PERMISSION,
     )
     .await?;
@@ -222,6 +226,7 @@ pub(crate) async fn assign_permission_to_role(
     require_application_permission(
         state.management_service.as_ref(),
         &authorization,
+        application_id,
         PERMISSIONS_WRITE_PERMISSION,
     )
     .await?;
@@ -280,6 +285,7 @@ pub(crate) async fn revoke_permission_from_role(
     require_application_permission(
         state.management_service.as_ref(),
         &authorization,
+        application_id,
         PERMISSIONS_WRITE_PERMISSION,
     )
     .await?;

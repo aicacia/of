@@ -640,7 +640,7 @@ mod tests {
                     "redirect_uris": ["https://example.test/callback"],
                     "allowed_grant_types": ["authorization_code", "refresh_token"],
                     "response_types": ["code"],
-                    "allowed_scopes": ["openid"],
+                    "allowed_scopes": ["openid", "setup"],
                     "token_endpoint_auth_method": "client_secret_basic"
                 }))
                 .expect("build refresh client registration"),
@@ -674,7 +674,7 @@ mod tests {
                 refresh_client.client_id.clone(),
                 refresh_key.id,
                 "https://example.test/callback".into(),
-                vec!["openid".into()],
+                vec!["openid".into(), "setup".into()],
                 None,
                 None,
                 None,
@@ -725,7 +725,9 @@ mod tests {
             Arc::clone(&devices),
             Arc::new(crate::DeviceIdentity::new(endpoint.clone(), secret_key)),
         );
-        let app = crate::openapi_router(state, "/").split_for_parts().0;
+        let app = crate::openapi_router(state.clone(), "/")
+            .split_for_parts()
+            .0;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind IdP HTTP listener");
@@ -783,6 +785,76 @@ mod tests {
         assert!(issued.starts_with("HTTP/1.1 200"), "{issued}");
         let issued: model::contract::TokenResponse =
             serde_json::from_str(http_response_body(&issued)).expect("parse user token response");
+        let user_access_token = issued.access_token.0;
+        let registration = serde_json::to_string(&idp_model::contract::ClientRegistration::from(
+            refresh_client.clone(),
+        ))
+        .expect("serialize valid registration body");
+        for (method, path, body) in [
+            ("GET", "/oauth2/register/live-refresh-client", ""),
+            ("POST", "/oauth2/register", registration.as_str()),
+            (
+                "PUT",
+                "/oauth2/register/live-refresh-client",
+                registration.as_str(),
+            ),
+            ("DELETE", "/oauth2/register/live-refresh-client", ""),
+        ] {
+            let denied = loopback_http_request(
+                address,
+                method,
+                path,
+                "application/json",
+                body,
+                Some(&user_access_token),
+            );
+            assert!(
+                denied.starts_with("HTTP/1.1 403"),
+                "{method} {path}: {denied}"
+            );
+        }
+        let bootstrap_request =
+            serde_json::to_string(&idp_model::contract::SetupBootstrapRequest {
+                device_name: "unauthorized-replica".into(),
+                endpoint_id: secondary_endpoint_id.clone(),
+                endpoint_addr: serde_json::to_string(&iroh::EndpointAddr::new(
+                    secondary_endpoint_id
+                        .parse()
+                        .expect("valid joining endpoint ID"),
+                ))
+                .expect("encode joining endpoint address"),
+            })
+            .expect("encode bootstrap request");
+        let devices_before = devices
+            .list()
+            .await
+            .expect("read device state before denied enrollment");
+        let bootstrap_denied = loopback_http_request(
+            address,
+            "POST",
+            "/setup/bootstrap",
+            "application/json",
+            &bootstrap_request,
+            Some(&user_access_token),
+        );
+        assert!(
+            bootstrap_denied.starts_with("HTTP/1.1 403"),
+            "{bootstrap_denied}"
+        );
+        assert_eq!(
+            devices_before,
+            devices
+                .list()
+                .await
+                .expect("read device state after denied enrollment"),
+        );
+        assert!(
+            clients
+                .find_client_by_client_id("live-refresh-client")
+                .await
+                .expect("read unchanged client")
+                .is_some()
+        );
         let refresh = issued.refresh_token.expect("issued refresh token").0;
         let refresh_form = format!(
             "grant_type=refresh_token&refresh_token={}",
@@ -956,6 +1028,18 @@ mod tests {
         let access_token = token["access_token"]
             .as_str()
             .expect("access token is a string");
+        let admin_response = loopback_http_request(
+            address,
+            "GET",
+            "/applications",
+            "application/json",
+            "",
+            Some(access_token),
+        );
+        assert!(
+            admin_response.starts_with("HTTP/1.1 401"),
+            "service token must not access user administration: {admin_response}"
+        );
 
         let introspection_body = serde_json::to_string(&IntrospectionRequest {
             token: access_token.to_owned(),
@@ -1059,8 +1143,118 @@ mod tests {
         assert_eq!(endpoint_identity.owner_subject, "test-owner");
         assert_eq!(endpoint_identity.endpoint_id, endpoint_id);
 
+        let replica_engine = Arc::new(
+            open_native_engine(root.join("replica.redb"))
+                .expect("open independent empty replica database"),
+        );
+        let replica_keys = Arc::new(KeyService::new(
+            DbKeyRepo::new(Arc::clone(&replica_engine)),
+            PrivateKeyKeyringRepo::new_with_store("replica-live-test", test_keyring_store()),
+            "replica-live-namespace",
+        ));
+        let replica_oauth = Arc::new(OAuth2Service::new(
+            DbApplicationRepo::new(Arc::clone(&replica_engine)),
+            DbClientRepo::new(Arc::clone(&replica_engine), Arc::clone(&replica_keys)),
+            DbOAuth2AuthorizationCodeRepo::new(Arc::clone(&replica_engine)),
+            DbOAuth2RefreshTokenRepo::new(Arc::clone(&replica_engine)),
+            DbUserRepo::new(Arc::clone(&replica_engine), PasswordConfig::default()),
+            DbOAuth2UserConsentRepo::new(Arc::clone(&replica_engine)),
+            replica_keys,
+            OAuth2Config {
+                issuer: issuer.to_owned(),
+                role: idp_model::contract::IdpRole::Replica,
+                ..OAuth2Config::default()
+            },
+        ));
+        for _ in 0..2 {
+            let replica_state = crate::RouterState::new(
+                issuer,
+                issuer,
+                Arc::clone(&replica_engine),
+                Arc::clone(&replica_oauth),
+                Arc::new(DbDeviceRepo::new(Arc::clone(&replica_engine))),
+                Arc::clone(&state.device_identity),
+            );
+            let replica_app = crate::openapi_router(replica_state, "/idp")
+                .split_for_parts()
+                .0;
+            let replica_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind replica listener");
+            let replica_address = replica_listener.local_addr().expect("read replica address");
+            let replica_server = tokio::spawn(async move {
+                axum::serve(replica_listener, replica_app)
+                    .await
+                    .expect("serve replica router");
+            });
+            for (method, path, content_type, body, bearer) in [
+                (
+                    "POST",
+                    "/idp/oauth2/token",
+                    "application/x-www-form-urlencoded",
+                    form.as_str(),
+                    None,
+                ),
+                (
+                    "POST",
+                    "/idp/oauth2/token",
+                    "application/x-www-form-urlencoded",
+                    refresh_form.as_str(),
+                    None,
+                ),
+                (
+                    "GET",
+                    "/idp/.well-known/jwks.json",
+                    "application/json",
+                    "",
+                    None,
+                ),
+                (
+                    "POST",
+                    "/idp/oauth2/introspect",
+                    "application/json",
+                    introspection_body.as_str(),
+                    Some(access_token),
+                ),
+                (
+                    "GET",
+                    "/idp/userinfo",
+                    "application/json",
+                    "",
+                    Some(user_access_token.as_str()),
+                ),
+                (
+                    "GET",
+                    "/idp/devices/endpoints",
+                    "application/json",
+                    "",
+                    Some(device_list_access_token),
+                ),
+            ] {
+                let denied = loopback_http_request(
+                    replica_address,
+                    method,
+                    path,
+                    content_type,
+                    body,
+                    bearer,
+                );
+                let error: serde_json::Value = serde_json::from_str(http_response_body(&denied))
+                    .expect("replica denial is a structured OAuth error");
+                assert_eq!(error["error"], "access_denied", "{method} {path}: {denied}");
+                assert!(
+                    denied.starts_with("HTTP/1.1 403"),
+                    "{method} {path}: {denied}"
+                );
+            }
+            replica_server.abort();
+            let _ = replica_server.await;
+        }
+        drop(replica_oauth);
+        drop(replica_engine);
         server.abort();
         let _ = server.await;
+        drop(state);
         endpoint.close().await;
         drop(clients);
         drop(applications);

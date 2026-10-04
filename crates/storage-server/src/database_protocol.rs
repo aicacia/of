@@ -1,4 +1,4 @@
-use std::{future::Future, io, pin::Pin, sync::Arc};
+use std::{future::Future, io, pin::Pin, sync::Arc, time::Duration};
 
 use iroh::{
     EndpointId,
@@ -17,6 +17,10 @@ use crate::{ManagementClient, data_protocol::DATABASE_STREAM_KIND};
 type FrameAuthorizer = Arc<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;
 
 const MAX_HANDSHAKE_BYTES: usize = 4096;
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+const POLICY_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
+const SYNC_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_SYNC_FRAME_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct DatabaseResourceDescriptor {
@@ -82,12 +86,19 @@ impl DatabaseProtocolHandler {
         peer: EndpointId,
         resource: DatabaseResourceDescriptor,
     ) -> io::Result<()> {
-        let connection = self
-            .server
-            .connect_direct_with_alpn(peer, DATA_ALPN)
-            .await
-            .map_err(io::Error::other)?;
-        if !self.authorize(&resource, &connection).await {
+        let connection = tokio::time::timeout(
+            HANDSHAKE_TIMEOUT,
+            self.server.connect_direct_with_alpn(peer, DATA_ALPN),
+        )
+        .await
+        .map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::TimedOut,
+                "database sync connection timed out",
+            )
+        })?
+        .map_err(io::Error::other)?;
+        if !self.authorize_bounded(&resource, &connection).await {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 "database resource is not authorized for sync",
@@ -103,25 +114,33 @@ impl DatabaseProtocolHandler {
             application_id,
         };
         let deleted = self.databases.is_tombstoned(&namespace, database_id)?;
-        let (mut send, mut recv) = connection.open_bi().await.map_err(io::Error::other)?;
-        send.write_all(&[DATABASE_STREAM_KIND])
-            .await
-            .map_err(io::Error::other)?;
-        write_frame(
-            &mut send,
-            &serde_json::to_vec(&DatabaseSyncHandshake {
-                resource: resource.clone(),
-                deleted,
-            })
-            .map_err(io::Error::other)?,
-        )
-        .await?;
-        if read_frame(&mut recv, MAX_HANDSHAKE_BYTES).await? != b"OK" {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "invalid database sync acknowledgement",
-            ));
-        }
+        let (send, recv) = tokio::time::timeout(HANDSHAKE_TIMEOUT, async {
+            let (mut send, mut recv) = connection.open_bi().await.map_err(io::Error::other)?;
+            send.write_all(&[DATABASE_STREAM_KIND])
+                .await
+                .map_err(io::Error::other)?;
+            write_frame(
+                &mut send,
+                &serde_json::to_vec(&DatabaseSyncHandshake {
+                    resource: resource.clone(),
+                    deleted,
+                })
+                .map_err(io::Error::other)?,
+            )
+            .await?;
+            if read_frame(&mut recv, MAX_HANDSHAKE_BYTES).await? != b"OK" {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "invalid database sync acknowledgement",
+                ));
+            }
+            Ok::<_, io::Error>((send, recv))
+        })
+        .await
+        .map_err(|_| {
+            io::Error::new(io::ErrorKind::TimedOut, "database sync handshake timed out")
+        })??;
+
         if deleted {
             return Ok(());
         }
@@ -145,31 +164,50 @@ impl DatabaseProtocolHandler {
             let handler = handler.clone();
             let resource = resource_for_guard.clone();
             let connection = connection.clone();
-            Box::pin(async move { handler.authorize(&resource, &connection).await })
+            Box::pin(async move { handler.authorize_bounded(&resource, &connection).await })
         });
         let mut transport = AuthorizedTransport {
             transport: IrohTransport::new(send, recv),
             authorize,
         };
-        database
-            .synchronize(
-                &mut transport,
-                &SessionConfig::default(),
-                SyncRole::Initiator,
+        tokio::time::timeout(SYNC_OPERATION_TIMEOUT, async {
+            database
+                .synchronize(
+                    &mut transport,
+                    &SessionConfig::default(),
+                    SyncRole::Initiator,
+                )
+                .await
+                .map_err(io::Error::other)?;
+            ofdb_kv_sync::synchronize(
+                &kv_store,
+                &mut KvAuthorizedTransport {
+                    transport: &mut transport,
+                },
+                ofdb_kv_sync::SyncRole::Initiator,
+                ofdb_kv_sync::Config {
+                    max_frame_bytes: MAX_SYNC_FRAME_BYTES,
+                    ..ofdb_kv_sync::Config::default()
+                },
             )
             .await
-            .map_err(io::Error::other)?;
-        ofdb_kv_sync::synchronize(
-            &kv_store,
-            &mut KvAuthorizedTransport {
-                transport: &mut transport,
-            },
-            ofdb_kv_sync::SyncRole::Initiator,
-            ofdb_kv_sync::Config::default(),
-        )
+            .map_err(|error| io::Error::other(format!("database KV sync failed: {error:?}")))
+        })
         .await
-        .map_err(|error| io::Error::other(format!("database KV sync failed: {error:?}")))?;
+        .map_err(|_| {
+            io::Error::new(io::ErrorKind::TimedOut, "database sync operation timed out")
+        })??;
         Ok(())
+    }
+
+    async fn authorize_bounded(
+        &self,
+        resource: &DatabaseResourceDescriptor,
+        connection: &Connection,
+    ) -> bool {
+        tokio::time::timeout(POLICY_CHECK_TIMEOUT, self.authorize(resource, connection))
+            .await
+            .unwrap_or(false)
     }
 
     async fn authorize(
@@ -237,14 +275,22 @@ impl DatabaseProtocolHandler {
         mut send: iroh::endpoint::SendStream,
         mut recv: iroh::endpoint::RecvStream,
     ) {
-        let handshake = match read_handshake(&mut recv).await {
-            Ok(handshake) => handshake,
-            Err(error) => {
-                log::warn!("rejected database sync handshake: {error}");
-                return;
-            }
-        };
-        if !self.authorize(&handshake.resource, &connection).await {
+        let handshake =
+            match tokio::time::timeout(HANDSHAKE_TIMEOUT, read_handshake(&mut recv)).await {
+                Ok(Ok(handshake)) => handshake,
+                Ok(Err(error)) => {
+                    log::warn!("rejected database sync handshake: {error}");
+                    return;
+                }
+                Err(_) => {
+                    log::warn!("rejected database sync handshake: timed out");
+                    return;
+                }
+            };
+        if !self
+            .authorize_bounded(&handshake.resource, &connection)
+            .await
+        {
             log::warn!("rejected unauthorized database sync stream");
             return;
         }
@@ -295,34 +341,40 @@ impl DatabaseProtocolHandler {
                 let handler = handler.clone();
                 let resource = resource_for_guard.clone();
                 let connection = connection.clone();
-                Box::pin(async move { handler.authorize(&resource, &connection).await })
+                Box::pin(async move { handler.authorize_bounded(&resource, &connection).await })
             });
             let mut transport = AuthorizedTransport {
                 transport: IrohTransport::new(send, recv),
                 authorize,
             };
-            if let Err(error) = database
-                .synchronize(
-                    &mut transport,
-                    &SessionConfig::default(),
-                    SyncRole::Responder,
+            let result = tokio::time::timeout(SYNC_OPERATION_TIMEOUT, async {
+                database
+                    .synchronize(
+                        &mut transport,
+                        &SessionConfig::default(),
+                        SyncRole::Responder,
+                    )
+                    .await
+                    .map_err(io::Error::other)?;
+                ofdb_kv_sync::synchronize(
+                    &kv_store,
+                    &mut KvAuthorizedTransport {
+                        transport: &mut transport,
+                    },
+                    ofdb_kv_sync::SyncRole::Responder,
+                    ofdb_kv_sync::Config {
+                        max_frame_bytes: MAX_SYNC_FRAME_BYTES,
+                        ..ofdb_kv_sync::Config::default()
+                    },
                 )
                 .await
-            {
-                log::warn!("database sync session ended: {error}");
-                return;
-            }
-            if let Err(error) = ofdb_kv_sync::synchronize(
-                &kv_store,
-                &mut KvAuthorizedTransport {
-                    transport: &mut transport,
-                },
-                ofdb_kv_sync::SyncRole::Responder,
-                ofdb_kv_sync::Config::default(),
-            )
-            .await
-            {
-                log::warn!("database KV sync session ended: {error:?}");
+                .map_err(|error| io::Error::other(format!("database KV sync failed: {error:?}")))
+            })
+            .await;
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => log::warn!("database sync session ended: {error}"),
+                Err(_) => log::warn!("database sync operation timed out"),
             }
         });
     }
@@ -333,7 +385,10 @@ impl ProtocolHandler for DatabaseProtocolHandler {
         loop {
             let (send, mut recv) = connection.accept_bi().await?;
             let mut kind = [0; 1];
-            if recv.read_exact(&mut kind).await.is_err() {
+            if !matches!(
+                tokio::time::timeout(HANDSHAKE_TIMEOUT, recv.read_exact(&mut kind)).await,
+                Ok(Ok(()))
+            ) {
                 continue;
             }
             if kind[0] != DATABASE_STREAM_KIND {

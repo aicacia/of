@@ -827,7 +827,7 @@ mod tests {
 
     use db::{NativeEngine, Value, open_native_engine};
     use idp_model::contract::DeviceState;
-    use sync::{apply_sync_state_batch_for, export_sync_state_for};
+    use ofdb_sql_sync::{apply_sync_state_batch_for, export_sync_state_for};
 
     use crate::{DeviceRepo, replica::DbDeviceRepo};
 

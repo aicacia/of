@@ -62,9 +62,11 @@ pub struct OAuth2Service<A, C, AC, RT, U, G, K, P> {
     pub key_service: Arc<KeyService<K, P>>,
     pub oauth_config: OAuth2Config,
     role: IdpRole,
+    replica_readiness: super::readiness::ReplicaReadiness,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateUserInfoRequest {
     pub name: Option<String>,
     pub given_name: Option<String>,
@@ -114,8 +116,18 @@ where
             oauth2_user_consent_repo,
             key_service,
             role: oauth_config.role,
+            replica_readiness: super::readiness::ReplicaReadiness::default(),
             oauth_config,
         }
+    }
+
+    /// Deny replica security operations until trusted authority synchronization exists.
+    pub fn require_security_ready(&self) -> ErrorResponseResult<()> {
+        if self.role == IdpRole::Replica && !self.replica_readiness.is_fresh() {
+            return Err(ErrorResponse::new(ErrorCode::AccessDenied)
+                .with_description("replica requires fresh approved authority state"));
+        }
+        Ok(())
     }
 
     fn require_authority(&self) -> ErrorResponseResult<()> {
@@ -132,6 +144,26 @@ where
     ) -> ErrorResponseResult<ClientRegistration> {
         self.require_authority()?;
         validate_dynamic_client_grants(&request.allowed_grant_types)?;
+        self.register_owned_client(request).await
+    }
+
+    pub async fn register_infrastructure_client(
+        &self,
+        request: ClientRegistration,
+    ) -> ErrorResponseResult<ClientRegistration> {
+        self.require_authority()?;
+        if request.client_type != ClientType::Confidential
+            || request.allowed_grant_types != [GrantType::ClientCredentials]
+        {
+            return Err(ErrorResponse::new(ErrorCode::InvalidRequest));
+        }
+        self.register_owned_client(request).await
+    }
+
+    async fn register_owned_client(
+        &self,
+        request: ClientRegistration,
+    ) -> ErrorResponseResult<ClientRegistration> {
         let client = ClientRegistration {
             client_id: Some(
                 request
@@ -225,6 +257,40 @@ where
             .map_err(ErrorResponse::from)
     }
 
+    pub async fn application_id_for_uri(&self, uri: &str) -> ErrorResponseResult<Id> {
+        self.application_repo
+            .find_by_uri(uri)
+            .await
+            .map_err(ErrorResponse::from)?
+            .map(|application| application.id)
+            .ok_or_else(|| ErrorResponse::new(ErrorCode::NotFound))
+    }
+
+    /// Checks live client registration for already verified access-token claims.
+    pub async fn validate_bearer_client(&self, claims: &StandardClaims) -> ErrorResponseResult<()> {
+        self.require_security_ready()?;
+        let client = self
+            .client_repo
+            .find_client_by_client_id(&claims.client_id)
+            .await
+            .map_err(ErrorResponse::from)?
+            .ok_or_else(|| ErrorResponse::new(ErrorCode::NotAuthorized))?;
+        if claims
+            .scope
+            .iter()
+            .any(|scope| !client.allowed_scopes.contains(scope))
+            || (claims.principal_type == PrincipalType::Client
+                && (claims.sub != client.id.to_string()
+                    || !client
+                        .allowed_grant_types
+                        .contains(&GrantType::ClientCredentials)
+                    || !client.allowed_audiences.contains(&claims.aud)))
+        {
+            return Err(ErrorResponse::new(ErrorCode::NotAuthorized));
+        }
+        Ok(())
+    }
+
     pub async fn application_id_for_client(&self, client_id: &str) -> ErrorResponseResult<Id> {
         self.client_repo
             .find_client_by_client_id(client_id)
@@ -255,6 +321,28 @@ where
     ) -> ErrorResponseResult<ClientRegistration> {
         self.require_authority()?;
         validate_dynamic_client_grants(&request.allowed_grant_types)?;
+        self.update_owned_client(client_id, request).await
+    }
+
+    pub async fn update_infrastructure_client(
+        &self,
+        client_id: &str,
+        request: ClientRegistration,
+    ) -> ErrorResponseResult<ClientRegistration> {
+        self.require_authority()?;
+        if request.client_type != ClientType::Confidential
+            || request.allowed_grant_types != [GrantType::ClientCredentials]
+        {
+            return Err(ErrorResponse::new(ErrorCode::InvalidRequest));
+        }
+        self.update_owned_client(client_id, request).await
+    }
+
+    async fn update_owned_client(
+        &self,
+        client_id: &str,
+        request: ClientRegistration,
+    ) -> ErrorResponseResult<ClientRegistration> {
         let existing = self
             .client_repo
             .find_client_by_client_id(client_id)
@@ -498,6 +586,7 @@ where
         request: TokenRequest,
         client_auth: Option<OAuth2ClientAuth>,
     ) -> ErrorResponseResult<TokenResponse> {
+        self.require_security_ready()?;
         if !matches!(&request, TokenRequest::ClientCredentials(_)) {
             self.require_authority()?;
         }
@@ -948,8 +1037,7 @@ where
         client: &Client,
         grant_type: GrantType,
     ) -> ErrorResponseResult<()> {
-        if client.allowed_grant_types.is_empty() || client.allowed_grant_types.contains(&grant_type)
-        {
+        if client.allowed_grant_types.contains(&grant_type) {
             return Ok(());
         }
 
@@ -1066,6 +1154,7 @@ where
     }
 
     pub async fn list_jwks(&self) -> ErrorResponseResult<Jwks> {
+        self.require_security_ready()?;
         let keys = self
             .key_service
             .key_repo()
@@ -1081,6 +1170,41 @@ where
         }
 
         Ok(Jwks { keys: jwks })
+    }
+
+    pub async fn rotate_client_key(&self, client_id: &str) -> ErrorResponseResult<Key> {
+        self.require_authority()?;
+        let client = self
+            .client_repo
+            .find_client_by_client_id(client_id)
+            .await
+            .map_err(ErrorResponse::from)?
+            .ok_or_else(|| ErrorResponse::new(ErrorCode::NotFound))?;
+        let (key, _) = self
+            .key_service
+            .rotate_active_entity_root_key(
+                EntityType::Client,
+                client.id,
+                "client signing key".into(),
+                None,
+            )
+            .await
+            .map_err(ErrorResponse::from)?;
+        Ok(key)
+    }
+
+    pub async fn revoke_client_keys(&self, client_id: &str) -> ErrorResponseResult<()> {
+        self.require_authority()?;
+        let client = self
+            .client_repo
+            .find_client_by_client_id(client_id)
+            .await
+            .map_err(ErrorResponse::from)?
+            .ok_or_else(|| ErrorResponse::new(ErrorCode::NotFound))?;
+        self.key_service
+            .delete_entity_key_material(EntityType::Client, client.id)
+            .await
+            .map_err(ErrorResponse::from)
     }
 
     pub async fn list_client_keys(&self, client_id: &str) -> ErrorResponseResult<Vec<Key>> {
@@ -1108,6 +1232,7 @@ where
     }
 
     pub async fn find_public_jwk(&self, key_id: Id) -> ErrorResponseResult<JwkPublic> {
+        self.require_security_ready()?;
         let principal = self.find_principal(key_id).await?.ok_or_else(|| {
             ErrorResponse::new(ErrorCode::InvalidGrant)
                 .with_description("active signing principal not found")
@@ -1617,6 +1742,7 @@ where
         &self,
         key_id: Id,
     ) -> ErrorResponseResult<Option<Box<dyn Principal>>> {
+        self.require_security_ready()?;
         let key = if let Some(key) = self.key_service.key_repo().find_by_id(key_id).await? {
             key
         } else {

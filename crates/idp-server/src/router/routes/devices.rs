@@ -6,8 +6,8 @@ use axum::{
 use idp_model::{
     contract::{
         ApprovedDeviceEndpoints, DeviceEndpointIdentity, DeviceEnrollment, DeviceEnrollmentRequest,
-        DeviceInfo, DeviceState, ErrorCode, ErrorResponse, PairingAcceptance, TrustedDevice,
-        UpdateDeviceRequest,
+        DeviceInfo, DeviceState, ErrorCode, ErrorResponse, IdentityAction, IdentityResource,
+        PairingAcceptance, PermissionTarget, TrustedDevice, UpdateDeviceRequest,
     },
     model::Id,
 };
@@ -17,7 +17,7 @@ use model::contract::PrincipalType;
 
 use crate::router::{
     PairingAcceptanceController, RouterState,
-    middleware::{StandardAuthorization, authorize_bearer_client},
+    middleware::{StandardAuthorization, authorize_bearer_client, require_identity_permission},
 };
 
 const DEVICE_LOOKUP_SCOPE: &str = "idp.device.lookup";
@@ -245,8 +245,17 @@ pub(crate) async fn enroll_device(
 )]
 pub(crate) async fn pairing_acceptance(
     State(state): State<RouterState>,
-    StandardAuthorization { .. }: StandardAuthorization,
+    actor: StandardAuthorization,
 ) -> Result<Json<PairingAcceptance>, ErrorResponse> {
+    require_identity_permission(
+        &state,
+        &actor,
+        IdentityAction::DevicePairingRead,
+        PermissionTarget::Installation {
+            resource: IdentityResource::DevicePairing,
+        },
+    )
+    .await?;
     state
         .pairing_acceptance
         .pairing_accepting()
@@ -263,9 +272,18 @@ pub(crate) async fn pairing_acceptance(
 )]
 pub(crate) async fn set_pairing_acceptance(
     State(state): State<RouterState>,
-    StandardAuthorization { .. }: StandardAuthorization,
+    actor: StandardAuthorization,
     Json(PairingAcceptance { accepting }): Json<PairingAcceptance>,
 ) -> Result<Json<PairingAcceptance>, ErrorResponse> {
+    require_identity_permission(
+        &state,
+        &actor,
+        IdentityAction::DevicePairingUpdate,
+        PermissionTarget::Installation {
+            resource: IdentityResource::DevicePairing,
+        },
+    )
+    .await?;
     state
         .pairing_acceptance
         .set_pairing_accepting(accepting)

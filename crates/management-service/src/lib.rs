@@ -12,6 +12,8 @@ mod device_repo;
 mod error;
 #[cfg(feature = "std")]
 mod hosted_control_plane;
+#[cfg(feature = "std")]
+mod permission_client;
 mod permission_repo;
 
 mod role_repo;
@@ -23,6 +25,8 @@ pub use device_repo::DeviceRepo;
 pub use error::{ManagementError, ManagementResult};
 #[cfg(feature = "std")]
 pub use hosted_control_plane::HostedControlPlane;
+#[cfg(feature = "std")]
+pub use permission_client::PermissionClient;
 pub use permission_repo::PermissionRepo;
 
 pub use role_repo::RoleRepo;

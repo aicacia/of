@@ -1,6 +1,9 @@
 use alloc::vec::Vec;
 
-use idp_model::model::{Permission, Role};
+use idp_model::{
+    contract::{PermissionEvaluationRequest, PermissionSubject},
+    model::{Permission, Role},
+};
 
 use crate::{ManagementError, PermissionRepo, RoleRepo};
 
@@ -29,8 +32,27 @@ where
         application_id: idp_model::model::Id,
         permission_name: &str,
     ) -> Result<bool, ManagementError> {
+        if application_id.is_nil() || user_id.is_nil() {
+            return Ok(false);
+        }
         self.role_repo
             .has_user_application_permission(user_id, application_id, permission_name)
+            .await
+    }
+
+    pub async fn evaluate_permission(
+        &self,
+        request: &PermissionEvaluationRequest,
+    ) -> Result<bool, ManagementError> {
+        let Some(namespace) = request.policy_namespace() else {
+            return Ok(false);
+        };
+        let PermissionSubject::User { id } = request.subject;
+        if id.is_nil() {
+            return Ok(false);
+        }
+        self.role_repo
+            .has_user_application_permission(id, namespace, request.action.permission())
             .await
     }
 

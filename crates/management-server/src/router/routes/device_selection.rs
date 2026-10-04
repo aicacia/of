@@ -70,6 +70,7 @@ pub(crate) async fn put_device_selection(
     require_application_permission(
         state.management_service.as_ref(),
         &authorization,
+        body.application_id,
         SELECTION_PERMISSION,
     )
     .await?;
@@ -140,26 +141,11 @@ pub(crate) async fn put_device_selection(
     security(("authorization" = []))
 )]
 pub(crate) async fn delete_device_selection(
-    State(state): State<RouterState>,
-    Path(device_id): Path<Id>,
-    authorization: ManagementAuthorization,
+    Path(_device_id): Path<Id>,
+    _authorization: ManagementAuthorization,
 ) -> Result<StatusCode, ErrorResponse> {
-    require_application_permission(
-        state.management_service.as_ref(),
-        &authorization,
-        SELECTION_PERMISSION,
-    )
-    .await?;
-    let owner = authorization.subject.to_string();
-    if !state
-        .selection_policies
-        .deselect_owned(device_id, &owner)
-        .await
-        .map_err(ErrorResponse::from)?
-    {
-        return Err(ErrorResponse::new(ErrorCode::NotFound));
-    }
-    Ok(StatusCode::NO_CONTENT)
+    Err(ErrorResponse::new(ErrorCode::AccessDenied)
+        .with_description("deselect resources through the application-scoped resource route"))
 }
 
 #[utoipa::path(
@@ -182,6 +168,7 @@ pub(crate) async fn delete_device_resource_selection(
     require_application_permission(
         state.management_service.as_ref(),
         &authorization,
+        application_id,
         SELECTION_PERMISSION,
     )
     .await?;

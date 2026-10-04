@@ -84,6 +84,7 @@ async fn authorize_bearer_with_principal(
     authorization_string: &str,
     expected_principal: Option<PrincipalType>,
 ) -> Result<Authorization<StandardClaims>, ErrorResponse> {
+    router_state.oauth2_service.require_security_ready()?;
     let (jwt_header, _) = decode_jwt::<StandardClaims>(authorization_string)?;
     let key_id = jwt_header
         .kid
@@ -113,6 +114,7 @@ async fn authorize_bearer_with_principal(
         || claims.iss != router_state.oauth2_service.metadata().issuer
         || claims.exp <= now
         || claims.nbf > now
+        || claims.iat > now
         || principal.get_entity_type() != claimed_entity_type
         || expected_principal.is_some_and(|expected| expected != claims.principal_type)
         || claims.sub != principal.get_entity_id().to_string()
@@ -121,6 +123,11 @@ async fn authorize_bearer_with_principal(
         return Err(ErrorResponse::new(ErrorCode::NotAuthorized)
             .with_description("invalid bearer token claims"));
     }
+
+    router_state
+        .oauth2_service
+        .validate_bearer_client(&claims)
+        .await?;
 
     Ok(Authorization {
         principal,

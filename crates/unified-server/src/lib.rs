@@ -4,6 +4,8 @@
 mod cli;
 mod config;
 mod endpoint;
+#[cfg(test)]
+mod permission_http_tests;
 mod protocol;
 mod router;
 mod runtime;

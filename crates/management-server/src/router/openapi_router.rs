@@ -14,6 +14,7 @@ use super::routes::device_selection::{
 };
 use super::routes::health::{__path_health, health};
 
+use super::routes::permission_evaluation::{__path_evaluate_permission, evaluate_permission};
 use super::routes::permissions::{
     __path_assign_permission_to_role, __path_create_permission, __path_delete_permission,
     __path_list_permissions, __path_list_role_permissions, __path_revoke_permission_from_role,
@@ -59,6 +60,7 @@ pub fn openapi_router(router_state: RouterState, prefix: &str) -> OpenApiRouter 
             .routes(routes!(delete_device_resource_selection))
             .routes(routes!(selected_resources))
             .routes(routes!(replication_admission))
+            .routes(routes!(evaluate_permission))
             .routes(routes!(list_roles))
             .routes(routes!(create_role))
             .routes(routes!(delete_role))

@@ -103,7 +103,7 @@ pub fn run() {
                     app_handle.manage(router_state.clone());
                     router
                 } else {
-                    app::init_setup_router(runtime_config, database, device_identity)
+                    app::init_setup_router(database)
                 };
                 app::init_unified_localhost_server(&app_handle, router, listener, base_url.clone())
                     .await?;

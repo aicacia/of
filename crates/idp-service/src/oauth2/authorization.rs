@@ -15,6 +15,10 @@ use model::contract::AuthorizationDetail;
 use super::scope::{parse_scopes, validate_scopes};
 
 pub(crate) fn validate_dynamic_client_grants(grant_types: &[GrantType]) -> ErrorResponseResult<()> {
+    if grant_types.is_empty() {
+        return Err(ErrorResponse::new(ErrorCode::InvalidRequest)
+            .with_description("explicit client grant types are required"));
+    }
     if grant_types.contains(&GrantType::ClientCredentials) {
         return Err(ErrorResponse::new(ErrorCode::UnauthorizedClient)
             .with_description("client credentials clients require trusted owner provisioning"));
@@ -137,6 +141,7 @@ mod tests {
     #[test]
     fn dynamic_registration_rejects_client_credentials_grant() {
         assert!(validate_dynamic_client_grants(&[GrantType::AuthorizationCode]).is_ok());
+        assert!(validate_dynamic_client_grants(&[]).is_err());
         assert_eq!(
             validate_dynamic_client_grants(&[GrantType::ClientCredentials])
                 .expect_err("dynamic registration must not create service clients")

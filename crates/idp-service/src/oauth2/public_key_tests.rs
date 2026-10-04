@@ -23,7 +23,7 @@ use super::{
     TestService, auth, grant, issue, setup, up,
 };
 
-async fn public_replica(source: &TestEngine) -> (Arc<TestEngine>, TestService) {
+async fn public_verifier(source: &TestEngine) -> (Arc<TestEngine>, TestService) {
     let engine = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
     up(&engine).await.expect("initialize independent schema");
     for table in ["applications", "clients", "users", "keys"] {
@@ -58,7 +58,7 @@ async fn public_replica(source: &TestEngine) -> (Arc<TestEngine>, TestService) {
         DbOAuth2UserConsentRepo::new(Arc::clone(&engine)),
         keys,
         OAuth2Config {
-            role: idp_model::contract::IdpRole::Replica,
+            role: idp_model::contract::IdpRole::Authority,
             ..OAuth2Config::default()
         },
     );
@@ -110,7 +110,7 @@ async fn public_keys_verify_with_independent_empty_local_stores() {
         &claims,
     )
     .expect("sign client claims");
-    let (_, verifier) = public_replica(&engine).await;
+    let (_, verifier) = public_verifier(&engine).await;
     assert!(!Arc::ptr_eq(&authority.key_service, &verifier.key_service));
     assert!(
         verifier
@@ -215,7 +215,7 @@ async fn public_keys_reject_inactive_unbound_and_invalid_material() {
         ("public_jwk", json(&malformed)),
         ("public_jwk", json(&wrong_algorithm)),
     ] {
-        let (replica_engine, verifier) = public_replica(&engine).await;
+        let (replica_engine, verifier) = public_verifier(&engine).await;
         set(&replica_engine, "keys", principal.key.id, name, value).await;
         assert!(
             verifier.find_public_jwk(principal.key.id).await.is_err(),
@@ -232,7 +232,7 @@ async fn public_keys_reject_inactive_unbound_and_invalid_material() {
             "omit invalid {name}"
         );
     }
-    let (replica_engine, verifier) = public_replica(&engine).await;
+    let (replica_engine, verifier) = public_verifier(&engine).await;
     set(
         &replica_engine,
         "clients",
@@ -423,7 +423,7 @@ async fn public_keys_preserve_subject_binding_and_filter_superseded_roots() {
         )
         .await
         .expect("create derived child with public material");
-    let (_, verifier) = public_replica(&engine).await;
+    let (_, verifier) = public_verifier(&engine).await;
     assert!(
         verifier.find_public_jwk(principal.key.id).await.is_err(),
         "superseded root rejected"

@@ -10,6 +10,10 @@ use crate::router::{ManagementRouterService, RouterState, middleware::Management
 const ROLES_READ_PERMISSION: &str = "roles.read";
 const ROLES_WRITE_PERMISSION: &str = "roles.write";
 
+#[cfg(test)]
+#[path = "permission_boundary_tests.rs"]
+mod permission_boundary_tests;
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, utoipa::ToSchema)]
 pub(crate) struct RoleResponse {
     #[schema(value_type = String)]
@@ -72,6 +76,7 @@ pub(crate) async fn list_roles(
     require_application_permission(
         state.management_service.as_ref(),
         &authorization,
+        application_id,
         ROLES_READ_PERMISSION,
     )
     .await?;
@@ -106,6 +111,7 @@ pub(crate) async fn create_role(
     require_application_permission(
         state.management_service.as_ref(),
         &authorization,
+        application_id,
         ROLES_WRITE_PERMISSION,
     )
     .await?;
@@ -139,6 +145,7 @@ pub(crate) async fn delete_role(
     require_application_permission(
         state.management_service.as_ref(),
         &authorization,
+        application_id,
         ROLES_WRITE_PERMISSION,
     )
     .await?;
@@ -180,6 +187,7 @@ pub(crate) async fn list_user_roles(
     require_application_permission(
         state.management_service.as_ref(),
         &authorization,
+        application_id,
         ROLES_READ_PERMISSION,
     )
     .await?;
@@ -218,6 +226,7 @@ pub(crate) async fn assign_role_to_user(
     require_application_permission(
         state.management_service.as_ref(),
         &authorization,
+        application_id,
         ROLES_WRITE_PERMISSION,
     )
     .await?;
@@ -264,6 +273,7 @@ pub(crate) async fn revoke_role_from_user(
     require_application_permission(
         state.management_service.as_ref(),
         &authorization,
+        application_id,
         ROLES_WRITE_PERMISSION,
     )
     .await?;
@@ -278,14 +288,15 @@ pub(crate) async fn revoke_role_from_user(
 pub(crate) async fn require_application_permission(
     management_service: &ManagementRouterService,
     authorization: &ManagementAuthorization,
+    application_id: idp_model::model::Id,
     permission: &str,
 ) -> Result<(), ErrorResponse> {
+    if application_id.is_nil() || authorization.application_id != application_id {
+        return Err(ErrorResponse::new(ErrorCode::AccessDenied)
+            .with_description("application permission does not authorize another application"));
+    }
     let has_permission = management_service
-        .has_user_application_permission(
-            authorization.subject,
-            authorization.application_id,
-            permission,
-        )
+        .has_user_application_permission(authorization.subject, application_id, permission)
         .await
         .map_err(ErrorResponse::from)?;
 

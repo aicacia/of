@@ -78,6 +78,10 @@ pub async fn run() -> io::Result<()> {
                 idp_service_audience,
             )
         })
+        .and_then(|control_plane| match app_config.idp_permission_evaluator_client_id.as_deref() {
+            Some(client_id) => control_plane.with_permission_evaluator(client_id),
+            None => Ok(control_plane),
+        })
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?,
     );
 

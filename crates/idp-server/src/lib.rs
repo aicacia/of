@@ -12,7 +12,7 @@ mod runtime;
 #[cfg(feature = "cli")]
 mod unavailable_data_protocol;
 
-pub use bootstrap::{BOOTSTRAP_ALPN, BootstrapProtocolHandler, BootstrapRegistry};
+pub use bootstrap::{BOOTSTRAP_ALPN, BootstrapProtocolHandler};
 #[cfg(feature = "cli")]
 pub use cli::run;
 pub use config::{AppConfig, PairingConfig};

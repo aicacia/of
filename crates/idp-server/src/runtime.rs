@@ -14,7 +14,7 @@ use idp_service::{
 use iroh::EndpointId;
 use iroh::protocol::{ProtocolHandler, Router as IrohRouter};
 use iroh_chain::Server;
-use management_service::{DeviceRepo, HostedControlPlane, replica::DbDeviceRepo};
+use management_service::{DeviceRepo, HostedControlPlane, PermissionClient, replica::DbDeviceRepo};
 
 use crate::{
     AppConfig, BootstrapProtocolHandler, DeviceIdentity, RouterState,
@@ -63,6 +63,7 @@ pub async fn build_runtime(
     engine: Arc<NativeEngine>,
     device_identity: Arc<DeviceIdentity>,
     server: Server,
+    permission_client: Option<PermissionClient>,
 ) -> io::Result<IdpRuntime> {
     if device_identity.endpoint_id() != server.endpoint().id() {
         return Err(io::Error::new(
@@ -124,9 +125,43 @@ pub async fn build_runtime(
         None => router_state,
     };
 
-    router_state
-        .bootstrap_grants
-        .set_admission_server(server.clone(), BOOTSTRAP_ALPN);
+    let router_state = if let Some(client) = permission_client {
+        router_state.with_permission_client(client)
+    } else {
+        match (
+            config.management_api_base.as_deref(),
+            config.permission_idp_api_base.as_deref(),
+            config.management_oauth_client_id.as_deref(),
+        ) {
+            (None, None, None) => router_state,
+            (Some(management), Some(idp), Some(client_id)) => {
+                let secret =
+                    std::env::var("LIDP_MANAGEMENT_OAUTH_CLIENT_SECRET").map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "LIDP_MANAGEMENT_OAUTH_CLIENT_SECRET is required",
+                        )
+                    })?;
+                router_state.with_permission_client(
+                    PermissionClient::new(
+                        management,
+                        idp,
+                        &config.oauth2.issuer,
+                        client_id,
+                        &secret,
+                    )
+                    .map_err(io::Error::other)?,
+                )
+            }
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "management_api_base, permission_idp_api_base and management_oauth_client_id must be configured together",
+                ));
+            }
+        }
+    };
+
     router_state
         .pairing_acceptance
         .bind(Arc::new(TimedPairingAcceptanceController::new(
@@ -135,11 +170,7 @@ pub async fn build_runtime(
         )))
         .map_err(io::Error::other)?;
 
-    let bootstrap_protocol = BootstrapProtocolHandler::new(
-        Arc::clone(&engine),
-        Arc::clone(&router_state.bootstrap_grants),
-        Arc::clone(&router_state.devices),
-    );
+    let bootstrap_protocol = BootstrapProtocolHandler;
     let router = openapi_router(router_state, config.server.prefix())
         .split_for_parts()
         .0
