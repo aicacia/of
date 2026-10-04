@@ -7,8 +7,8 @@ use alloc::{
 };
 
 use idp_model::contract::{
-    AuthorizationServerMetadata, CodeChallengeMethod, GrantType, ResponseMode, ResponseType,
-    TokenEndpointAuthMethod,
+    AuthorizationServerMetadata, CodeChallengeMethod, GrantType, IdpRole, ResponseMode,
+    ResponseType, TokenEndpointAuthMethod,
 };
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +23,8 @@ pub const DEFAULT_DEVICE_POLL_INTERVAL_SECS: i64 = 5;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OAuth2Config {
+    /// Local deployment role. Replica enrollment and freshness are separate checks.
+    pub role: IdpRole,
     pub issuer: String,
     pub require_pkce: bool,
     pub token_ttl_secs: u64,
@@ -35,6 +37,7 @@ pub struct OAuth2Config {
 impl Default for OAuth2Config {
     fn default() -> Self {
         Self {
+            role: IdpRole::Authority,
             issuer: DEFAULT_ISSUER.to_string(),
             require_pkce: DEFAULT_REQUIRE_PKCE,
             token_ttl_secs: DEFAULT_TOKEN_TTL_SECS,
@@ -43,6 +46,24 @@ impl Default for OAuth2Config {
             device_code_ttl_secs: DEFAULT_DEVICE_CODE_TTL_SECS,
             device_poll_interval_secs: DEFAULT_DEVICE_POLL_INTERVAL_SECS,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use idp_model::contract::IdpRole;
+
+    use super::OAuth2Config;
+
+    #[test]
+    fn idp_role_config_is_explicit_and_rejects_unknown_roles() {
+        let config: OAuth2Config =
+            serde_json::from_str(r#"{"role":"replica"}"#).expect("read replica config");
+        assert_eq!(config.role, IdpRole::Replica);
+        assert!(serde_json::from_str::<OAuth2Config>(r#"{"role":"primary"}"#).is_err());
+        let config: OAuth2Config =
+            serde_json::from_str(r#"{"role":"authority"}"#).expect("read authority config");
+        assert_eq!(config.role, IdpRole::Authority);
     }
 }
 

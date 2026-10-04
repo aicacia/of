@@ -63,7 +63,8 @@ CREATE TABLE IF NOT EXISTS keys (
     revoked_at INTEGER,
     expires_at INTEGER,
     created_at INTEGER,
-    updated_at INTEGER
+    updated_at INTEGER,
+    public_jwk TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS keys_derivation_path ON keys (derivation_path);
 CREATE UNIQUE INDEX IF NOT EXISTS keys_parent_derivation_index ON keys (parent_id, derivation_index);

@@ -36,7 +36,7 @@ pub struct JwkPrivate {
 impl From<JwkPrivate> for JwkPublic {
     fn from(val: JwkPrivate) -> Self {
         JwkPublic {
-            r#use: KeyUse::Encryption,
+            r#use: val.r#use,
             kid: val.kid,
             alg: val.alg,
             params: val.params.into(),

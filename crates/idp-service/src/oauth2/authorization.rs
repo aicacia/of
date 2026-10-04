@@ -157,7 +157,7 @@ mod tests {
             id: Id::nil(),
             application_id: Id::nil(),
             client_id: "client-1".to_string(),
-            client_secret: "secret".to_string(),
+            client_secret_hash: String::new(),
             client_id_issued_at: None,
             client_secret_expires_at: None,
             client_name: "Example".to_string(),

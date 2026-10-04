@@ -75,6 +75,9 @@ where
             .private_key_repo
             .ensure_derivation_path(&scoped_namespace, key.derivation_path()?)?;
 
+        let public_jwk = key.to_jwk_public(&private_key)?;
+        let key = self.key_repo.set_public_jwk(key.id, public_jwk).await?;
+
         Ok((key, private_key))
     }
 

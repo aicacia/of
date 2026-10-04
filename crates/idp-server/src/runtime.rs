@@ -7,7 +7,7 @@ use idp_service::{
     oauth2::OAuth2Service,
     replica::{
         DbApplicationRepo, DbClientRepo, DbKeyRepo, DbOAuth2AuthorizationCodeRepo,
-        DbOAuth2UserConsentRepo, DbUserRepo,
+        DbOAuth2RefreshTokenRepo, DbOAuth2UserConsentRepo, DbUserRepo,
     },
     repo::{KeyService, PrivateKeyKeyringRepo},
 };
@@ -85,6 +85,7 @@ pub async fn build_runtime(
         DbApplicationRepo::new(Arc::clone(&engine)),
         DbClientRepo::new(Arc::clone(&engine), Arc::clone(&key_service)),
         DbOAuth2AuthorizationCodeRepo::new(Arc::clone(&engine)),
+        DbOAuth2RefreshTokenRepo::new(Arc::clone(&engine)),
         DbUserRepo::new(Arc::clone(&engine), config.password.clone()),
         DbOAuth2UserConsentRepo::new(Arc::clone(&engine)),
         key_service,

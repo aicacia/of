@@ -15,6 +15,7 @@ use idp_model::{
 };
 
 use crate::{
+    PasswordConfig, encrypt_password,
     replica::DbKeyRepo,
     repo::{ClientRepo, KeyService, PrivateKeyRepo, RepoError, RepoResult},
 };
@@ -76,6 +77,20 @@ where
     }
 
     async fn clients(&self, predicate: Option<QueryExpr>) -> RepoResult<Vec<Client>> {
+        let revoked_at = QueryExpr::Value(QueryExprValue::Column(column("revoked_at")));
+        let active = QueryExpr::Or(
+            Box::new(QueryExpr::IsNull(Box::new(revoked_at.clone()))),
+            Box::new(QueryExpr::GreaterThan(
+                Box::new(revoked_at),
+                Box::new(QueryExpr::Value(QueryExprValue::Value(Value::Integer(
+                    Utc::now().timestamp(),
+                )))),
+            )),
+        );
+        let predicate = Some(match predicate {
+            Some(predicate) => QueryExpr::And(Box::new(predicate), Box::new(active)),
+            None => active,
+        });
         let mut results = self
             .engine
             .execute(vec![Statement::Query(select(predicate))])
@@ -227,7 +242,13 @@ where
                         "client_secret is required for confidential client key material".into(),
                     )
                 })?,
-            ClientType::Public => registration.client_secret.clone().unwrap_or_default(),
+            ClientType::Public => String::new(),
+        };
+        let client_secret_hash = if registration.client_type == ClientType::Confidential {
+            encrypt_password(&PasswordConfig::default(), &client_secret)
+                .map_err(|error| RepoError::Other(error.into()))?
+        } else {
+            String::new()
         };
         let application_id = self.application_id(&registration).await?;
         let now = Utc::now()
@@ -237,7 +258,7 @@ where
             id: Id::now_v7(),
             application_id,
             client_id,
-            client_secret: client_secret.clone(),
+            client_secret_hash,
             client_id_issued_at: registration
                 .client_id_issued_at
                 .map(timestamp)
@@ -277,13 +298,8 @@ where
             .await
             .map_err(db_error)?;
 
-        let passphrase = if client.client_type == ClientType::Confidential {
-            client.client_secret.as_str()
-        } else {
-            ""
-        };
         self.key_service
-            .ensure_entity_master_key(EntityType::Client, client.id, passphrase)?;
+            .ensure_entity_master_key(EntityType::Client, client.id, "")?;
         self.key_service
             .create_key(
                 None,
@@ -352,7 +368,7 @@ struct ClientRow {
     id: Uuid,
     application_id: Uuid,
     client_id: String,
-    client_secret: String,
+    client_secret_hash: String,
     client_id_issued_at: Option<i64>,
     client_secret_expires_at: Option<i64>,
     client_name: String,
@@ -385,7 +401,7 @@ impl FromRow for ClientRow {
                 "application_id",
             )?,
             client_id: db::decode(db::value(row, columns, "client_id")?, "client_id")?,
-            client_secret: db::decode(
+            client_secret_hash: db::decode(
                 db::value(row, columns, "client_secret_hash")?,
                 "client_secret_hash",
             )?,
@@ -452,7 +468,7 @@ impl TryFrom<ClientRow> for Client {
             id: row.id,
             application_id: row.application_id,
             client_id: row.client_id,
-            client_secret: row.client_secret,
+            client_secret_hash: row.client_secret_hash,
             client_id_issued_at: row.client_id_issued_at.map(timestamp).transpose()?,
             client_secret_expires_at: row.client_secret_expires_at.map(timestamp).transpose()?,
             client_name: row.client_name,
@@ -484,7 +500,7 @@ impl From<&Client> for ClientRow {
             id: client.id,
             application_id: client.application_id,
             client_id: client.client_id.clone(),
-            client_secret: client.client_secret.clone(),
+            client_secret_hash: client.client_secret_hash.clone(),
             client_id_issued_at: client.client_id_issued_at.map(|value| value.timestamp()),
             client_secret_expires_at: client
                 .client_secret_expires_at
@@ -516,7 +532,7 @@ impl ClientRow {
     fn assignments(self, updated_at: i64) -> Vec<QueryUpdateAssignment> {
         vec![
             assignment("application_id", Value::Uuid(self.application_id)),
-            assignment("client_secret_hash", Value::Text(self.client_secret)),
+            assignment("client_secret_hash", Value::Text(self.client_secret_hash)),
             assignment(
                 "client_id_issued_at",
                 self.client_id_issued_at.map_or(Value::Null, Value::Integer),
@@ -572,7 +588,7 @@ impl From<ClientRow> for Row {
             Value::Uuid(row.id),
             Value::Uuid(row.application_id),
             Value::Text(row.client_id),
-            Value::Text(row.client_secret),
+            Value::Text(row.client_secret_hash),
             row.client_id_issued_at.map_or(Value::Null, Value::Integer),
             row.client_secret_expires_at
                 .map_or(Value::Null, Value::Integer),
@@ -699,7 +715,15 @@ mod tests {
         replica::up,
     };
 
-    use crate::repo::KeyRepo;
+    use crate::{
+        oauth2::{OAuth2Config, OAuth2Service},
+        replica::{
+            DbApplicationRepo, DbOAuth2AuthorizationCodeRepo, DbOAuth2RefreshTokenRepo,
+            DbOAuth2UserConsentRepo, DbUserRepo,
+        },
+        repo::KeyRepo,
+        util::verify_password,
+    };
 
     use super::*;
 
@@ -758,11 +782,100 @@ mod tests {
             response_types: vec![ResponseType::Code],
             allowed_scopes: vec!["openid".into()],
             allowed_audiences: vec!["https://storage.example".into()],
-            token_endpoint_auth_method: TokenEndpointAuthMethod::None,
+            token_endpoint_auth_method: match client_type {
+                ClientType::Public => TokenEndpointAuthMethod::None,
+                ClientType::Confidential => TokenEndpointAuthMethod::ClientSecretPost,
+            },
             software_statement: None,
             software_id: None,
             software_version: None,
         }
+    }
+
+    #[tokio::test]
+    async fn client_secrets_are_disclosed_only_on_creation_and_rotation() {
+        let engine = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
+        up(&engine).await.expect("initialize current IdP schema");
+        let key_service = Arc::new(KeyService::new(
+            DbKeyRepo::new(Arc::clone(&engine)),
+            TestPrivateKeyRepo::default(),
+            "test",
+        ));
+        let service = OAuth2Service::new(
+            DbApplicationRepo::new(Arc::clone(&engine)),
+            DbClientRepo::new(Arc::clone(&engine), Arc::clone(&key_service)),
+            DbOAuth2AuthorizationCodeRepo::new(Arc::clone(&engine)),
+            DbOAuth2RefreshTokenRepo::new(Arc::clone(&engine)),
+            DbUserRepo::new(Arc::clone(&engine), PasswordConfig::default()),
+            DbOAuth2UserConsentRepo::new(Arc::clone(&engine)),
+            key_service,
+            OAuth2Config::default(),
+        );
+        let created = service
+            .register_client(registration(
+                ClientType::Confidential,
+                Some("initial-secret"),
+            ))
+            .await
+            .expect("register confidential client");
+        let client_id = created.client_id.as_deref().expect("created client has ID");
+        assert_eq!(created.client_secret.as_deref(), Some("initial-secret"));
+        assert_eq!(
+            service
+                .get_client(client_id)
+                .await
+                .expect("get client")
+                .client_secret,
+            None
+        );
+        assert!(
+            service
+                .list_clients(0, 10)
+                .await
+                .expect("list clients")
+                .iter()
+                .all(|client| client.client_secret.is_none())
+        );
+        let rotated = service
+            .update_client(
+                client_id,
+                registration(ClientType::Confidential, Some("rotated-secret")),
+            )
+            .await
+            .expect("rotate client secret");
+        assert_eq!(rotated.client_secret.as_deref(), Some("rotated-secret"));
+        let stored = service
+            .client_repo
+            .find_client_by_client_id(client_id)
+            .await
+            .expect("read rotated client")
+            .expect("client exists");
+        assert!(
+            verify_password("rotated-secret", &stored.client_secret_hash)
+                .expect("stored verifier is valid")
+        );
+        assert!(
+            !verify_password("initial-secret", &stored.client_secret_hash)
+                .expect("stored verifier is valid")
+        );
+        assert!(
+            serde_json::to_value(&stored)
+                .expect("serialize client")
+                .get("client_secret_hash")
+                .is_none()
+        );
+        let updated = service
+            .update_client(client_id, registration(ClientType::Confidential, None))
+            .await
+            .expect("update client without rotating secret");
+        assert_eq!(updated.client_secret, None);
+        let unchanged = service
+            .client_repo
+            .find_client_by_client_id(client_id)
+            .await
+            .expect("read updated client")
+            .expect("client exists");
+        assert_eq!(unchanged.client_secret_hash, stored.client_secret_hash);
     }
 
     #[tokio::test]
@@ -783,6 +896,21 @@ mod tests {
                 .create_client(registration(client_type, secret))
                 .await
                 .unwrap();
+            if let Some(secret) = secret {
+                assert_ne!(client.client_secret_hash, secret);
+                assert!(
+                    crate::util::verify_password(secret, &client.client_secret_hash)
+                        .expect("stored verifier is valid")
+                );
+                assert!(
+                    !crate::util::verify_password("wrong-secret", &client.client_secret_hash)
+                        .expect("stored verifier is valid")
+                );
+            } else {
+                assert!(client.client_secret_hash.is_empty());
+            }
+            let response: ClientRegistration = client.clone().into();
+            assert_eq!(response.client_secret, None);
             assert_eq!(
                 repo.find_client_by_client_id(&client.client_id)
                     .await

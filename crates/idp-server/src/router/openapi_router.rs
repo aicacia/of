@@ -6,9 +6,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use crate::RouterState;
 
 use super::openapi::{__path_openapi_json, openapi_json};
-use super::routes::device::{
-    __path_device, __path_sign_device_message, device, sign_device_message,
-};
+use super::routes::device::{__path_device, device};
 use super::routes::device_self_revocation::{__path_revoke_self, revoke_self};
 use super::routes::devices::{
     __path_enroll_device, __path_list_approved_device_endpoints, __path_list_devices,
@@ -68,7 +66,6 @@ pub fn openapi_router(router_state: RouterState, prefix: &str) -> OpenApiRouter 
             .routes(routes!(health))
             .routes(routes!(register_bootstrap))
             .routes(routes!(device))
-            .routes(routes!(sign_device_message))
             .routes(routes!(revoke_self))
             .routes(routes!(trusted_devices))
             .routes(routes!(enroll_device))

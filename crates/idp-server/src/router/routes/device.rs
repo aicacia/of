@@ -1,5 +1,5 @@
 use axum::{Json, extract::State, http::StatusCode};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use utoipa::ToSchema;
 
 use crate::RouterState;
@@ -9,16 +9,6 @@ use crate::RouterState;
 pub(crate) struct Device {
     public_key: String,
     address: String,
-}
-
-#[derive(Deserialize, ToSchema)]
-pub(crate) struct SignDeviceMessage {
-    message: String,
-}
-
-#[derive(Serialize, ToSchema)]
-pub(crate) struct DeviceSignature {
-    signature: String,
 }
 
 #[utoipa::path(
@@ -34,19 +24,4 @@ pub(crate) async fn device(State(state): State<RouterState>) -> Result<Json<Devi
             .endpoint_address()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     }))
-}
-
-#[utoipa::path(
-    post,
-    path = "/device/sign",
-    request_body = SignDeviceMessage,
-    responses((status = 200, description = "Device message signature", body = DeviceSignature))
-)]
-pub(crate) async fn sign_device_message(
-    State(state): State<RouterState>,
-    Json(request): Json<SignDeviceMessage>,
-) -> Json<DeviceSignature> {
-    Json(DeviceSignature {
-        signature: state.device_identity.sign(request.message.as_bytes()),
-    })
 }

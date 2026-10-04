@@ -3,10 +3,11 @@ use std::sync::Arc;
 use chrono::{DateTime, Timelike, Utc};
 use db::{
     Engine, FromRow, FromRowError, Kernel, Query, QueryColumn, QueryDelete, QueryExpr,
-    QueryExprValue, QueryFrom, QueryInsert, QuerySelect, Row, RowCodec, Statement, Uuid, Value,
+    QueryExprValue, QueryFrom, QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row,
+    RowCodec, Statement, Uuid, Value,
 };
 use idp_model::{
-    contract::EntityType,
+    contract::{EntityType, JwkPublic},
     model::{Id, Key},
     replica::allows_authentication,
 };
@@ -14,7 +15,7 @@ use idp_model::{
 use crate::repo::{KeyRepo, RepoError, RepoResult};
 
 const TABLE: &str = "keys";
-const COLUMNS: [&str; 12] = [
+const COLUMNS: [&str; 13] = [
     "id",
     "parent_id",
     "entity_type",
@@ -27,6 +28,7 @@ const COLUMNS: [&str; 12] = [
     "expires_at",
     "created_at",
     "updated_at",
+    "public_jwk",
 ];
 
 pub struct DbKeyRepo<K, R>
@@ -80,6 +82,43 @@ where
     K: Kernel,
     R: RowCodec<K::Transaction> + Send + Sync,
 {
+    async fn set_public_jwk(&self, id: Id, jwk: JwkPublic) -> RepoResult<Key> {
+        if jwk.kid != id.to_string() {
+            return Err(RepoError::InvalidInput(
+                "public key ID does not match key".into(),
+            ));
+        }
+        self.ensure_clear(id).await?;
+        let encoded =
+            serde_json::to_string(&jwk).map_err(|error| RepoError::Other(Box::new(error)))?;
+        let results = self
+            .engine
+            .execute(vec![Statement::Query(Query::Update(QueryUpdate {
+                from: from(),
+                assignments: vec![QueryUpdateAssignment {
+                    column: column("public_jwk"),
+                    value: QueryExprValue::Value(Value::Text(encoded)),
+                }],
+                predicate: Some(QueryExpr::And(
+                    Box::new(equals("id", Value::Uuid(id))),
+                    Box::new(QueryExpr::IsNull(Box::new(QueryExpr::Value(
+                        QueryExprValue::Column(column("public_jwk")),
+                    )))),
+                )),
+                returning: Some(COLUMNS.into_iter().map(column).collect()),
+            }))])
+            .await
+            .map_err(db_error)?;
+        if results[0].rows.len() != 1 {
+            return Err(RepoError::InvalidInput(
+                "public key is already set or key is missing".into(),
+            ));
+        }
+        self.ensure_clear(id).await?;
+        let mut keys = results[0].rows_as::<KeyRow>().map_err(row_error)?;
+        Key::try_from(keys.pop().expect("one updated key row"))
+    }
+
     async fn list_active(&self) -> RepoResult<Vec<Key>> {
         let now = Utc::now();
         let keys = self
@@ -214,6 +253,7 @@ where
             derivation_index,
             hardened,
             name,
+            public_jwk: None,
             revoked_at: None,
             expires_at,
             created_at: now,
@@ -245,6 +285,7 @@ struct KeyRow {
     expires_at: Option<i64>,
     created_at: i64,
     updated_at: i64,
+    public_jwk: Option<String>,
 }
 
 impl FromRow for KeyRow {
@@ -268,6 +309,7 @@ impl FromRow for KeyRow {
             expires_at: db::decode(db::value(row, columns, "expires_at")?, "expires_at")?,
             created_at: db::decode(db::value(row, columns, "created_at")?, "created_at")?,
             updated_at: db::decode(db::value(row, columns, "updated_at")?, "updated_at")?,
+            public_jwk: db::decode(db::value(row, columns, "public_jwk")?, "public_jwk")?,
         })
     }
 }
@@ -294,6 +336,11 @@ impl TryFrom<KeyRow> for Key {
             expires_at: row.expires_at.map(timestamp).transpose()?,
             created_at: timestamp(row.created_at)?,
             updated_at: timestamp(row.updated_at)?,
+            public_jwk: row
+                .public_jwk
+                .map(|value| serde_json::from_str(&value))
+                .transpose()
+                .map_err(|error| RepoError::Other(Box::new(error)))?,
         })
     }
 }
@@ -313,6 +360,9 @@ impl From<&Key> for KeyRow {
             expires_at: key.expires_at.map(|value| value.timestamp()),
             created_at: key.created_at.timestamp(),
             updated_at: key.updated_at.timestamp(),
+            public_jwk: key.public_jwk.as_ref().map(|jwk| {
+                serde_json::to_string(jwk).expect("public JWK contains only serializable fields")
+            }),
         }
     }
 }
@@ -332,6 +382,7 @@ impl From<KeyRow> for Row {
             row.expires_at.map_or(Value::Null, Value::Integer),
             Value::Integer(row.created_at),
             Value::Integer(row.updated_at),
+            row.public_jwk.map_or(Value::Null, Value::Text),
         ])
     }
 }

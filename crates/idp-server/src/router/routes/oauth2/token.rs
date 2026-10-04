@@ -24,7 +24,7 @@ fn parse_client_auth(
     headers: &HeaderMap,
     request: &TokenRequest,
 ) -> Result<Option<OAuth2ClientAuth>, ErrorResponse> {
-    let Some(value) = headers.get(axum::http::header::AUTHORIZATION) else {
+    if !headers.contains_key(axum::http::header::AUTHORIZATION) {
         return Ok(match request {
             TokenRequest::ClientCredentials(request) => Some(OAuth2ClientAuth {
                 client_id: request.client_id.clone(),
@@ -33,8 +33,14 @@ fn parse_client_auth(
             }),
             _ => None,
         });
-    };
+    }
+    parse_basic_client_auth(headers)
+}
 
+pub(super) fn parse_basic_client_auth(headers: &HeaderMap) -> Result<Option<OAuth2ClientAuth>, ErrorResponse> {
+    let Some(value) = headers.get(axum::http::header::AUTHORIZATION) else {
+        return Ok(None);
+    };
     let raw = value.to_str().map_err(|_| {
         ErrorResponse::new(idp_model::contract::ErrorCode::InvalidClient)
             .with_description("invalid authorization header encoding")

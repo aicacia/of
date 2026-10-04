@@ -1,22 +1,24 @@
 # Domain Context
 
+This describes the target domain. Implementation gaps are tracked in [the unified-server plan](docs/unified-server-plan.md). See [the glossary](GLOSSARY.md) for installation authority terms.
+
 ## Identity Provider (IdP)
 
 The IdP is the OAuth 2.0 and OpenID Connect authority. It authenticates users, registers and validates OAuth clients, obtains consent, issues and verifies tokens, exposes OIDC metadata and JWKS, and manages signing-key metadata.
 
-The IdP does not own device enrollment, trusted-device policy, storage resource management, or database/filesystem synchronization.
+The IdP owns device enrollment, approval/revocation, endpoint ownership, and IdP-replica enrollment. Management owns resource restrictions and replication policy; Storage owns resource management and database/filesystem synchronization. Identity administration is authorized through Management RBAC, while ordinary token issuance and validation do not depend on Management.
 
 ## Management Service
 
-The Management Service is the control plane for an IdP installation. It owns management applications, roles, permissions, user-role assignments, device enrollment and revocation, ownership, resource selection, administrator storage limits, trusted-device policy, and hosted-control-plane access.
+The Management Service is the single RBAC and resource-policy authority for an installation. It owns roles, permissions, assignments, resource restrictions, selections, and replication policy. Applications and device identities belong to IdP.
 
-It may use IdP repositories for application records because an application is an OAuth resource, but management authorization and lifecycle policy belong here.
+Management stores canonical IdP IDs and calls normal authenticated owner APIs. It neither accesses IdP repositories nor proxies identity administration.
 
 ## Bootstrap Service
 
 The Bootstrap Service establishes the idempotent system baseline for a new installation. It creates or updates the built-in IdP and management applications and clients, the initial administrator and signing key, management permissions and roles, and an optional bootstrap device.
 
-Bootstrap composes IdP and Management repositories but owns neither domain. It must be safe to run repeatedly.
+A local installation coordinator invokes separate owner-local IdP and Management operations; it does not compose their repositories. Initial permissions are explicit, not future-capability wildcards. Partial installation is not ready; retries preserve canonical IDs and do not duplicate users, clients, or keys.
 
 ## User
 
@@ -54,11 +56,11 @@ Private or derived key material is local secret state. It must not enter filesys
 
 ## Principal
 
-A Principal is the entity represented by a signing key when the IdP issues or verifies a signed credential. Device endpoint identity authenticates transport; it does not represent a user or grant access to resources.
+A Principal is the User or OAuth Client represented by a token's subject. A Replica Signer identifies the authorized IdP member that signed it, not the subject. Device endpoint identity authenticates transport; it does not represent a user or grant access to resources.
 
 ## Role and Permission
 
-A Permission is a named capability within an Application. A Role is a named collection of permissions within an Application. A user receives management authority through application-scoped role assignments.
+A Permission is a named action with Application or Installation scope. A Role groups explicit permissions; assignments grant their authority to a User. Application authority does not imply installation-wide authority.
 
 The built-in management application URI is `idp-management`.
 
@@ -74,9 +76,7 @@ Reset Device removes one runtime's local setup state, local synchronized data, a
 
 ## Installation Setup
 
-Installation Setup establishes a new installation or joins an existing one. A
-joining user authenticates with the existing IdP and explicitly authorizes the
-new Device through its setup API. The joining Device obtains the IdP's durable database state through authenticated synchronization. Installation Setup completes only after that synchronization succeeds.
+Installation Setup establishes a new installation through local owner operations or joins an existing installation in an explicit role. A Storage-only Node receives no IdP database copy. An IdP Replica requires privileged enrollment, defined IdP state synchronization, an approved independent signer, and approval of its own endpoint before it is ready. All IdP members share the installation's canonical issuer; private signer keys remain local.
 _Avoid_: Master setup, primary-node setup
 
 ## Device Setup

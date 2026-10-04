@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
+use idp_model::contract::{DeviceSelfRevocationRequest, device_self_revocation_payload};
 use idp_service::{
     oauth2::OAuth2Service,
     replica::{
         DbApplicationRepo, DbClientRepo, DbKeyRepo, DbOAuth2AuthorizationCodeRepo,
-        DbOAuth2UserConsentRepo, DbUserRepo,
+        DbOAuth2RefreshTokenRepo, DbOAuth2UserConsentRepo, DbUserRepo,
     },
     repo::PrivateKeyKeyringRepo,
 };
@@ -19,6 +20,7 @@ pub(super) type NativeOAuth2Service = OAuth2Service<
     DbApplicationRepo<RedbKernel, AutomergeRowCodec>,
     DbClientRepo<RedbKernel, AutomergeRowCodec>,
     DbOAuth2AuthorizationCodeRepo<RedbKernel, AutomergeRowCodec>,
+    DbOAuth2RefreshTokenRepo<RedbKernel, AutomergeRowCodec>,
     DbUserRepo<RedbKernel, AutomergeRowCodec>,
     DbOAuth2UserConsentRepo<RedbKernel, AutomergeRowCodec>,
     DbKeyRepo<RedbKernel, AutomergeRowCodec>,
@@ -57,10 +59,15 @@ impl DeviceIdentity {
     }
 
     #[must_use]
-    pub fn sign(&self, message: &[u8]) -> String {
+    pub fn self_revocation_request(&self) -> DeviceSelfRevocationRequest {
         use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 
-        URL_SAFE_NO_PAD.encode(self.secret_key.sign(message).to_bytes())
+        let public_key = self.endpoint_id().to_string();
+        let payload = device_self_revocation_payload(&public_key);
+        DeviceSelfRevocationRequest {
+            public_key,
+            signature: URL_SAFE_NO_PAD.encode(self.secret_key.sign(payload.as_bytes()).to_bytes()),
+        }
     }
 }
 

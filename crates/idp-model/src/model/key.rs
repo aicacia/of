@@ -31,6 +31,7 @@ pub struct Key {
     pub derivation_index: u32,
     pub name: String,
     pub hardened: bool,
+    pub public_jwk: Option<JwkPublic>,
 
     #[serde(with = "chrono::serde::ts_seconds_option")]
     pub revoked_at: Option<DateTime<Utc>>,

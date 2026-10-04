@@ -124,6 +124,10 @@ where
         ErrorResponse::new(ErrorCode::InvalidRequest)
             .with_description(format!("invalid JWT header: {error}"))
     })?;
+    if header.alg != JWT_HEADER_ALG || header.typ != JWT_HEADER_TYP || header.kid != jwk.kid {
+        return Err(ErrorResponse::new(ErrorCode::InvalidRequest)
+            .with_description("JWT header does not match the verification key"));
+    }
     let claims: T = serde_json::from_slice(&claims_bytes).map_err(|error| {
         ErrorResponse::new(ErrorCode::InvalidRequest)
             .with_description(format!("invalid JWT claims: {error}"))
@@ -165,7 +169,7 @@ fn signing_key_from_jwk(jwk: &JwkPrivate) -> ErrorResponseResult<SigningKey> {
     }
 }
 
-fn verifing_key_from_jwt(jwk: &JwkPublic) -> ErrorResponseResult<VerifyingKey> {
+pub(crate) fn verifing_key_from_jwt(jwk: &JwkPublic) -> ErrorResponseResult<VerifyingKey> {
     match &jwk.params {
         JwkPublicParameters::Ec { x, y, .. } => {
             let x_bytes = STANDARD_NO_PAD.decode(x).map_err(|error| {
@@ -187,5 +191,64 @@ fn verifing_key_from_jwt(jwk: &JwkPublic) -> ErrorResponseResult<VerifyingKey> {
         }
         _ => Err(ErrorResponse::new(ErrorCode::InvalidClient)
             .with_description("client verifying key must be an EC key")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use base64::{
+        Engine,
+        engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD},
+    };
+    use idp_model::contract::{JwkPrivate, JwkPrivateParameters, JwkPublic, JwsAlgorithm, KeyUse};
+    use k256::ecdsa::SigningKey;
+    use serde::{Deserialize, Serialize};
+
+    use super::{encode_jwt, verify_jwt};
+
+    #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
+    struct Claims {
+        subject: String,
+    }
+
+    #[test]
+    fn verifies_signature_and_binds_jwt_header_to_key() {
+        let private_bytes = [1_u8; 32];
+        let signing_key = SigningKey::from_slice(&private_bytes)
+            .expect("fixed test scalar is a valid secp256k1 key");
+        let point = signing_key.verifying_key().to_encoded_point(false);
+        let jwk = JwkPrivate {
+            r#use: KeyUse::Signature,
+            kid: "test-key".to_string(),
+            alg: JwsAlgorithm::ES256,
+            params: JwkPrivateParameters::Ec {
+                crv: "secp256k1".to_string(),
+                x: STANDARD_NO_PAD.encode(point.x().expect("public point has x coordinate")),
+                y: STANDARD_NO_PAD.encode(point.y().expect("public point has y coordinate")),
+                d: STANDARD_NO_PAD.encode(private_bytes),
+            },
+        };
+        let public_jwk = JwkPublic::from(jwk.clone());
+        let claims = Claims {
+            subject: "user-1".to_string(),
+        };
+        let token = encode_jwt(&jwk, &claims).expect("encode valid test token");
+
+        let (_, verified) =
+            verify_jwt::<Claims>(&public_jwk, &token).expect("valid token signature should verify");
+        assert_eq!(verified, claims);
+
+        let mut parts = token.split('.');
+        let header = parts.next().expect("token has a header");
+        let _claims = parts.next().expect("token has claims");
+        let signature = parts.next().expect("token has a signature");
+        let forged_claims = URL_SAFE_NO_PAD.encode(
+            serde_json::to_vec(&Claims {
+                subject: "user-2".to_string(),
+            })
+            .expect("serialize forged claims"),
+        );
+        let forged_token = format!("{header}.{forged_claims}.{signature}");
+        assert!(verify_jwt::<Claims>(&public_jwk, &forged_token).is_err());
     }
 }

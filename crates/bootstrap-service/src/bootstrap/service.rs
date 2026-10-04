@@ -89,13 +89,7 @@ where
                 )
                 .await?;
             let _idp_web_client_key = self
-                .ensure_active_key(
-                    EntityType::Client,
-                    idp_web_client.id,
-                    "IdP Web",
-                    idp_web_client.client_secret.as_str(),
-                    true,
-                )
+                .ensure_active_key(EntityType::Client, idp_web_client.id, "IdP Web", "", true)
                 .await?;
         }
         if self.config.desktop {
@@ -113,7 +107,7 @@ where
                     EntityType::Client,
                     idp_desktop_client.id,
                     "IdP Desktop",
-                    idp_desktop_client.client_secret.as_str(),
+                    "",
                     true,
                 )
                 .await?;
@@ -138,7 +132,7 @@ where
                     EntityType::Client,
                     management_web_client.id,
                     "Management Web",
-                    management_web_client.client_secret.as_str(),
+                    "",
                     true,
                 )
                 .await?;
@@ -159,7 +153,7 @@ where
                     EntityType::Client,
                     management_desktop_client.id,
                     "Management Desktop",
-                    management_desktop_client.client_secret.as_str(),
+                    "",
                     true,
                 )
                 .await?;
@@ -518,12 +512,28 @@ where
             .find_active_entity_root_key(entity_type, entity_id)
             .await?
         {
-            self.key_service.private_key_repo().ensure_derivation_path(
+            let derived_key = self.key_service.private_key_repo().ensure_derivation_path(
                 &scoped_namespace,
                 key.derivation_path()
                     .map_err(idp_service::repo::RepoError::from)?,
             )?;
-            return Ok(key);
+            let public_jwk = key
+                .to_jwk_public(&derived_key)
+                .map_err(idp_service::repo::RepoError::from)?;
+            if let Some(stored) = &key.public_jwk {
+                if stored != &public_jwk {
+                    return Err(idp_service::repo::RepoError::InvalidInput(
+                        "bootstrap signing key does not match public material".into(),
+                    )
+                    .into());
+                }
+                return Ok(key);
+            }
+            return Ok(self
+                .key_service
+                .key_repo()
+                .set_public_jwk(key.id, public_jwk)
+                .await?);
         }
 
         let (key, _derived_key) = self

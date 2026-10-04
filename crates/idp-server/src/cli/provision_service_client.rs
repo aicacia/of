@@ -260,18 +260,19 @@ mod tests {
 
     use db::open_native_engine;
     use idp_model::contract::{
-        ClientCredentialsGrantRequest, IntrospectionRequest, OAuth2ClientAuth, TokenRequest,
+        ClientCredentialsGrantRequest, EntityType, IntrospectionRequest, OAuth2ClientAuth,
+        TokenRequest,
     };
     use idp_service::{
         PasswordConfig,
         oauth2::{OAuth2Config, OAuth2Service, decode_jwt},
         replica::{
             DbApplicationRepo, DbClientRepo, DbKeyRepo, DbOAuth2AuthorizationCodeRepo,
-            DbOAuth2UserConsentRepo, DbUserRepo,
+            DbOAuth2RefreshTokenRepo, DbOAuth2UserConsentRepo, DbUserRepo,
         },
         repo::{
-            ApplicationRepo, ClientRepo, KeyRepo, KeyService, PrivateKeyKeyringRepo,
-            PrivateKeyRepo, RepoResult,
+            ApplicationRepo, ClientRepo, KeyRepo, KeyService, OAuth2AuthorizationCodeRepo,
+            PrivateKeyKeyringRepo, PrivateKeyRepo, RepoResult, UserRepo,
         },
     };
     use iroh::{Endpoint, SecretKey, endpoint::presets};
@@ -522,10 +523,7 @@ mod tests {
     }
 
     async fn run_live_idp_listener_test() {
-        use management_service::{
-            DeviceRepo, HostedControlPlane, ManagementService,
-            replica::{DbDeviceRepo, DbPermissionRepo, DbRoleRepo, DbSelectionPolicyRepo},
-        };
+        use management_service::{DeviceRepo, replica::DbDeviceRepo};
 
         let root = std::env::temp_dir().join(format!(
             "idp-live-service-client-{}-{}",
@@ -588,32 +586,6 @@ mod tests {
             .expect("service client exists")
             .application_id
             .to_string();
-        let storage_credentials_path = root.join("storage-credentials.json");
-        provision(
-            &applications,
-            &clients,
-            &key_service,
-            "https://example.test/app",
-            "storage-to-management",
-            vec!["https://management.example.test".to_owned()],
-            vec![
-                "management.replication.read".to_owned(),
-                "management.replication.admit".to_owned(),
-            ],
-            &storage_credentials_path,
-        )
-        .await
-        .expect("provision test Storage service client");
-        let storage_credentials: serde_json::Value = serde_json::from_slice(
-            &fs::read(&storage_credentials_path).expect("read Storage credentials"),
-        )
-        .expect("parse Storage credentials");
-        let storage_client_id = storage_credentials["client_id"]
-            .as_str()
-            .expect("Storage client ID is a string");
-        let storage_client_secret = storage_credentials["client_secret"]
-            .as_str()
-            .expect("Storage client secret is a string");
         let storage_idp_credentials_path = root.join("storage-idp-credentials.json");
         provision(
             &applications,
@@ -646,6 +618,7 @@ mod tests {
             DbApplicationRepo::new(Arc::clone(&engine)),
             DbClientRepo::new(Arc::clone(&engine), Arc::clone(&key_service)),
             DbOAuth2AuthorizationCodeRepo::new(Arc::clone(&engine)),
+            DbOAuth2RefreshTokenRepo::new(Arc::clone(&engine)),
             DbUserRepo::new(Arc::clone(&engine), PasswordConfig::default()),
             DbOAuth2UserConsentRepo::new(Arc::clone(&engine)),
             key_service,
@@ -654,6 +627,62 @@ mod tests {
                 ..OAuth2Config::default()
             },
         ));
+        let refresh_client = oauth2_service
+            .client_repo
+            .create_client(
+                serde_json::from_value(serde_json::json!({
+                    "application": { "uri": "https://example.test/app" },
+                    "client_id": "live-refresh-client",
+                    "client_secret": "live-refresh-secret",
+                    "client_name": "Refresh client",
+                    "client_type": "confidential",
+                    "profile": "web_application",
+                    "redirect_uris": ["https://example.test/callback"],
+                    "allowed_grant_types": ["authorization_code", "refresh_token"],
+                    "response_types": ["code"],
+                    "allowed_scopes": ["openid"],
+                    "token_endpoint_auth_method": "client_secret_basic"
+                }))
+                .expect("build refresh client registration"),
+            )
+            .await
+            .expect("create live refresh client");
+        let refresh_user = oauth2_service
+            .user_repo
+            .create_user_with_password("refresh-user", "refresh-password")
+            .await
+            .expect("create refresh user");
+        oauth2_service
+            .key_service
+            .ensure_entity_master_key(EntityType::User, refresh_user.id, "refresh-password")
+            .expect("create refresh user master key");
+        let (refresh_key, _) = oauth2_service
+            .key_service
+            .create_key(
+                None,
+                EntityType::User,
+                refresh_user.id,
+                true,
+                "refresh key".into(),
+                None,
+            )
+            .await
+            .expect("create refresh signing key");
+        let refresh_code = oauth2_service
+            .authorization_code_repo
+            .create_authorization_code(
+                refresh_client.client_id.clone(),
+                refresh_key.id,
+                "https://example.test/callback".into(),
+                vec!["openid".into()],
+                None,
+                None,
+                None,
+                None,
+                (std::time::SystemTime::now() + std::time::Duration::from_secs(300)).into(),
+            )
+            .await
+            .expect("persist live authorization code");
         let secret_key = SecretKey::generate();
         let endpoint = Endpoint::builder(presets::N0)
             .secret_key(secret_key.clone())
@@ -707,12 +736,206 @@ mod tests {
                 .expect("serve IdP test router");
         });
 
+        for (method, path, body) in [
+            ("GET", "/oauth2/register/test-client", ""),
+            ("POST", "/oauth2/register", "{}"),
+            ("PUT", "/oauth2/register/test-client", "{}"),
+            ("DELETE", "/oauth2/register/test-client", ""),
+        ] {
+            let response =
+                loopback_http_request(address, method, path, "application/json", body, None);
+            assert!(
+                response.starts_with("HTTP/1.1 401"),
+                "{method} {path}: {response}"
+            );
+        }
+        let removed_sign_route = loopback_http_request(
+            address,
+            "POST",
+            "/device/sign",
+            "application/json",
+            "{}",
+            None,
+        );
+        assert!(
+            removed_sign_route.starts_with("HTTP/1.1 404"),
+            "{removed_sign_route}"
+        );
+
+        use base64::{Engine as _, engine::general_purpose::STANDARD};
+        let refresh_auth = format!(
+            "Basic {}",
+            STANDARD.encode("live-refresh-client:live-refresh-secret")
+        );
+        let code_form = format!(
+            "grant_type=authorization_code&code={}&code_verifier=test-verifier&client_id=live-refresh-client&redirect_uri={}",
+            form_encode(&refresh_code.code),
+            form_encode("https://example.test/callback"),
+        );
+        let issued = loopback_http_authorized_request(
+            address,
+            "POST",
+            "/oauth2/token",
+            "application/x-www-form-urlencoded",
+            &code_form,
+            Some(&refresh_auth),
+        );
+        assert!(issued.starts_with("HTTP/1.1 200"), "{issued}");
+        let issued: model::contract::TokenResponse =
+            serde_json::from_str(http_response_body(&issued)).expect("parse user token response");
+        let refresh = issued.refresh_token.expect("issued refresh token").0;
+        let refresh_form = format!(
+            "grant_type=refresh_token&refresh_token={}",
+            form_encode(&refresh)
+        );
+        let wrong_auth = format!(
+            "Basic {}",
+            STANDARD.encode("live-refresh-client:wrong-secret")
+        );
+        let wrong_client_auth = format!(
+            "Basic {}",
+            STANDARD.encode(format!("{client_id}:{client_secret}"))
+        );
+        for authorization in [&wrong_auth, &wrong_client_auth] {
+            let rejected = loopback_http_authorized_request(
+                address,
+                "POST",
+                "/oauth2/token",
+                "application/x-www-form-urlencoded",
+                &refresh_form,
+                Some(authorization),
+            );
+            assert!(rejected.starts_with("HTTP/1.1 400"), "{rejected}");
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(http_response_body(&rejected))
+                    .expect("parse wrong-client rejection")["error"],
+                "invalid_client"
+            );
+        }
+        let forged = format!("{refresh}x");
+        let forged_form = format!(
+            "grant_type=refresh_token&refresh_token={}",
+            form_encode(&forged)
+        );
+        let rejected = loopback_http_authorized_request(
+            address,
+            "POST",
+            "/oauth2/token",
+            "application/x-www-form-urlencoded",
+            &forged_form,
+            Some(&refresh_auth),
+        );
+        assert!(rejected.starts_with("HTTP/1.1 400"), "{rejected}");
+        let rotated = loopback_http_authorized_request(
+            address,
+            "POST",
+            "/oauth2/token",
+            "application/x-www-form-urlencoded",
+            &refresh_form,
+            Some(&refresh_auth),
+        );
+        assert!(rotated.starts_with("HTTP/1.1 200"), "{rotated}");
+        let rotated: model::contract::TokenResponse =
+            serde_json::from_str(http_response_body(&rotated))
+                .expect("parse rotated token response");
+        let replacement = rotated.refresh_token.expect("rotated refresh token").0;
+        assert_ne!(refresh, replacement);
+        let reuse = loopback_http_authorized_request(
+            address,
+            "POST",
+            "/oauth2/token",
+            "application/x-www-form-urlencoded",
+            &refresh_form,
+            Some(&refresh_auth),
+        );
+        assert!(reuse.starts_with("HTTP/1.1 400"), "{reuse}");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(http_response_body(&reuse))
+                .expect("parse refresh reuse rejection")["error"],
+            "invalid_grant"
+        );
+        let revoke_form = format!(
+            "token={}&token_type_hint=refresh_token",
+            form_encode(&replacement)
+        );
+        for authorization in [
+            None,
+            Some(wrong_auth.as_str()),
+            Some(wrong_client_auth.as_str()),
+        ] {
+            let denied = loopback_http_authorized_request(
+                address,
+                "POST",
+                "/oauth2/revoke",
+                "application/x-www-form-urlencoded",
+                &revoke_form,
+                authorization,
+            );
+            assert!(denied.starts_with("HTTP/1.1 400"), "{denied}");
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(http_response_body(&denied))
+                    .expect("parse revoke authentication rejection")["error"],
+                "invalid_client"
+            );
+        }
+        for _ in 0..2 {
+            let revoked = loopback_http_authorized_request(
+                address,
+                "POST",
+                "/oauth2/revoke",
+                "application/x-www-form-urlencoded",
+                &revoke_form,
+                Some(&refresh_auth),
+            );
+            assert!(revoked.starts_with("HTTP/1.1 200"), "{revoked}");
+        }
+        let replacement_form = format!(
+            "grant_type=refresh_token&refresh_token={}",
+            form_encode(&replacement)
+        );
+        let revoked = loopback_http_authorized_request(
+            address,
+            "POST",
+            "/oauth2/token",
+            "application/x-www-form-urlencoded",
+            &replacement_form,
+            Some(&refresh_auth),
+        );
+        assert!(revoked.starts_with("HTTP/1.1 400"), "{revoked}");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(http_response_body(&revoked))
+                .expect("parse revoked refresh rejection")["error"],
+            "invalid_grant"
+        );
+
         let form = format!(
             "grant_type=client_credentials&client_id={}&client_secret={}&scope=idp.token.validate%20idp.device.lookup&audience={}",
             form_encode(client_id),
             form_encode(client_secret),
             form_encode(issuer),
         );
+        let wrong_secret_form = format!(
+            "grant_type=client_credentials&client_id={}&client_secret=wrong-secret&scope=idp.token.validate%20idp.device.lookup&audience={}",
+            form_encode(client_id),
+            form_encode(issuer),
+        );
+        let rejected_token = loopback_http_request(
+            address,
+            "POST",
+            "/oauth2/token",
+            "application/x-www-form-urlencoded",
+            &wrong_secret_form,
+            None,
+        );
+        assert!(
+            rejected_token.starts_with("HTTP/1.1 400"),
+            "{rejected_token}"
+        );
+        let rejected_body: serde_json::Value =
+            serde_json::from_str(http_response_body(&rejected_token))
+                .expect("parse rejected client authentication response");
+        assert_eq!(rejected_body["error"], "invalid_client");
+
         let token_response = loopback_http_request(
             address,
             "POST",
@@ -836,177 +1059,6 @@ mod tests {
         assert_eq!(endpoint_identity.owner_subject, "test-owner");
         assert_eq!(endpoint_identity.endpoint_id, endpoint_id);
 
-        let storage_form = format!(
-            "grant_type=client_credentials&client_id={}&client_secret={}&scope=management.replication.admit&audience={}",
-            form_encode(storage_client_id),
-            form_encode(storage_client_secret),
-            form_encode("https://management.example.test"),
-        );
-        let storage_token_response = loopback_http_request(
-            address,
-            "POST",
-            "/oauth2/token",
-            "application/x-www-form-urlencoded",
-            &storage_form,
-            None,
-        );
-        assert!(
-            storage_token_response.starts_with("HTTP/1.1 200"),
-            "{storage_token_response}"
-        );
-        let storage_token: serde_json::Value =
-            serde_json::from_str(http_response_body(&storage_token_response))
-                .expect("parse Storage token response");
-        let storage_access_token = storage_token["access_token"]
-            .as_str()
-            .expect("Storage access token is a string");
-
-        let management_root = root.join("management-data");
-        fs::create_dir_all(&management_root).expect("create Management data directory");
-        let management_engine = Arc::new(
-            open_native_engine(management_root.join("management.redb"))
-                .expect("open separate Management database"),
-        );
-        management_service::replica::up(&management_engine)
-            .await
-            .expect("initialize separate Management schema");
-        let idp_base_url = format!("http://{address}");
-        let management_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("bind Management HTTP listener");
-        let management_address = management_listener
-            .local_addr()
-            .expect("read Management listener address");
-        let management_base_url = format!("http://{management_address}");
-        let management_control_plane = Arc::new(
-            HostedControlPlane::new_with_services(&idp_base_url, &management_base_url, issuer)
-                .expect("configure Management HTTP clients")
-                .with_idp_service_client(client_id, client_secret, issuer)
-                .expect("configure Management IdP service client"),
-        );
-        let management_state = management_server::RouterState::new(
-            &management_base_url,
-            Arc::new(ManagementService::new(
-                DbPermissionRepo::new(Arc::clone(&management_engine)),
-                DbRoleRepo::new(Arc::clone(&management_engine)),
-            )),
-            Arc::new(DbSelectionPolicyRepo::new(Arc::clone(&management_engine))),
-            management_control_plane,
-            "https://management.example.test",
-        );
-        let management_router = management_server::openapi_router(management_state, "/")
-            .split_for_parts()
-            .0;
-        let management_server = tokio::spawn(async move {
-            axum::serve(management_listener, management_router)
-                .await
-                .expect("serve Management test router");
-        });
-        let rejected = loopback_http_request(
-            management_address,
-            "GET",
-            "/replication/devices/not-used/selections",
-            "application/json",
-            "",
-            Some(storage_access_token),
-        );
-        assert!(rejected.starts_with("HTTP/1.1 403"), "{rejected}");
-
-        let read_form = format!(
-            "grant_type=client_credentials&client_id={}&client_secret={}&scope=management.replication.read&audience={}",
-            form_encode(storage_client_id),
-            form_encode(storage_client_secret),
-            form_encode("https://management.example.test"),
-        );
-        let read_token_response = loopback_http_request(
-            address,
-            "POST",
-            "/oauth2/token",
-            "application/x-www-form-urlencoded",
-            &read_form,
-            None,
-        );
-        assert!(
-            read_token_response.starts_with("HTTP/1.1 200"),
-            "{read_token_response}"
-        );
-        let read_token: serde_json::Value =
-            serde_json::from_str(http_response_body(&read_token_response))
-                .expect("parse replication-read token");
-        let read_access_token = read_token["access_token"]
-            .as_str()
-            .expect("replication-read access token is a string");
-        let selected_resources = loopback_http_request(
-            management_address,
-            "GET",
-            &format!("/replication/devices/{endpoint_id}/selections"),
-            "application/json",
-            "",
-            Some(read_access_token),
-        );
-        assert!(
-            selected_resources.starts_with("HTTP/1.1 200"),
-            "{selected_resources}"
-        );
-        let selected_resources: serde_json::Value =
-            serde_json::from_str(http_response_body(&selected_resources))
-                .expect("parse selected resources response");
-        assert_eq!(selected_resources["resources"], serde_json::json!([]));
-
-        assert!(
-            devices
-                .create_pairing(
-                    "duplicate-storage".to_owned(),
-                    endpoint_id.clone(),
-                    "test-address".to_owned(),
-                    endpoint_id.clone(),
-                )
-                .await
-                .is_err(),
-            "IdP must reject a duplicate approved endpoint key"
-        );
-        assert!(
-            devices
-                .revoke("test-owner", approved_device.id, "protected-key")
-                .await
-                .expect("revoke approved endpoint")
-        );
-        let revoked_identity = loopback_http_request(
-            address,
-            "GET",
-            &format!("/devices/endpoints/{endpoint_id}"),
-            "application/json",
-            "",
-            Some(access_token),
-        );
-        assert!(
-            revoked_identity.starts_with("HTTP/1.1 404"),
-            "{revoked_identity}"
-        );
-        let revoked_endpoint_list = loopback_http_request(
-            address,
-            "GET",
-            "/devices/endpoints",
-            "application/json",
-            "",
-            Some(device_list_access_token),
-        );
-        assert!(
-            revoked_endpoint_list.starts_with("HTTP/1.1 200"),
-            "{revoked_endpoint_list}"
-        );
-        let revoked_endpoint_list: idp_model::contract::ApprovedDeviceEndpoints =
-            serde_json::from_str(http_response_body(&revoked_endpoint_list))
-                .expect("parse endpoint list after revocation");
-        assert_eq!(
-            revoked_endpoint_list.endpoint_ids,
-            vec![secondary_endpoint_id]
-        );
-
-        management_server.abort();
-        let _ = management_server.await;
-        drop(management_engine);
-
         server.abort();
         let _ = server.await;
         endpoint.close().await;
@@ -1024,9 +1076,34 @@ mod tests {
         body: &str,
         bearer: Option<&str>,
     ) -> String {
+        let authorization = bearer.map(|token| format!("Bearer {token}"));
+        loopback_http_authorized_request(
+            address,
+            method,
+            path,
+            content_type,
+            body,
+            authorization.as_deref(),
+        )
+    }
+
+    fn loopback_http_authorized_request(
+        address: std::net::SocketAddr,
+        method: &str,
+        path: &str,
+        content_type: &str,
+        body: &str,
+        authorization: Option<&str>,
+    ) -> String {
         let mut stream = TcpStream::connect(address).expect("connect to IdP HTTP listener");
-        let authorization = bearer
-            .map(|token| format!("Authorization: Bearer {token}\r\n"))
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+            .expect("set HTTP read timeout");
+        stream
+            .set_write_timeout(Some(std::time::Duration::from_secs(10)))
+            .expect("set HTTP write timeout");
+        let authorization = authorization
+            .map(|value| format!("Authorization: {value}\r\n"))
             .unwrap_or_default();
         write!(
             stream,
@@ -1136,7 +1213,8 @@ mod tests {
                             .await
                             .expect("read created client")
                             .expect("client exists");
-                        assert_eq!(client.client_secret, client_secret);
+                        assert_ne!(client.client_secret_hash, client_secret);
+                        assert!(client.client_secret_hash.starts_with("$argon2id$"));
                         assert_eq!(client.client_name, "management-to-idp");
                         assert_eq!(
                             client.allowed_audiences,
@@ -1245,6 +1323,7 @@ mod tests {
                             DbApplicationRepo::new(Arc::clone(&engine)),
                             DbClientRepo::new(Arc::clone(&engine), Arc::clone(&key_service)),
                             DbOAuth2AuthorizationCodeRepo::new(Arc::clone(&engine)),
+                            DbOAuth2RefreshTokenRepo::new(Arc::clone(&engine)),
                             DbUserRepo::new(Arc::clone(&engine), PasswordConfig::default()),
                             DbOAuth2UserConsentRepo::new(Arc::clone(&engine)),
                             Arc::clone(&key_service),

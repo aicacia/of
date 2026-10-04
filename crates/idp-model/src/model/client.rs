@@ -16,7 +16,8 @@ pub struct Client {
     pub application_id: Id,
 
     pub client_id: String,
-    pub client_secret: String,
+    #[serde(skip_serializing)]
+    pub client_secret_hash: String,
 
     #[serde(with = "chrono::serde::ts_seconds_option")]
     pub client_id_issued_at: Option<DateTime<Utc>>,
@@ -80,7 +81,7 @@ impl From<Client> for ClientRegistration {
                 description: None,
             },
             client_id: Some(val.client_id),
-            client_secret: Some(val.client_secret),
+            client_secret: None,
             client_id_issued_at: val.client_id_issued_at.map(|dt| dt.timestamp()),
             client_secret_expires_at: val.client_secret_expires_at.map(|dt| dt.timestamp()),
             client_name: val.client_name,

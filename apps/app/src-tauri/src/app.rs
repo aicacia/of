@@ -7,8 +7,6 @@ use std::{
 
 use axum::Router;
 
-use db::{NativeEngine, open_native_engine};
-use idp_model::contract::{DeviceSelfRevocationRequest, device_self_revocation_payload};
 use idp_server::{
     AppConfig, DeviceIdentity, RouterState, delete_device_identity, open_device_identity,
     storage_router,
@@ -17,7 +15,7 @@ use idp_service::{
     oauth2::OAuth2Service,
     replica::{
         DbApplicationRepo, DbClientRepo, DbKeyRepo, DbOAuth2AuthorizationCodeRepo,
-        DbOAuth2UserConsentRepo, DbUserRepo,
+        DbOAuth2RefreshTokenRepo, DbOAuth2UserConsentRepo, DbUserRepo,
     },
     repo::{KeyService, PrivateKeyKeyringRepo},
 };
@@ -73,6 +71,7 @@ pub fn init_router(
         DbApplicationRepo::new(database.clone()),
         DbClientRepo::new(database.clone(), key_service.clone()),
         DbOAuth2AuthorizationCodeRepo::new(database.clone()),
+        DbOAuth2RefreshTokenRepo::new(database.clone()),
         DbUserRepo::new(database.clone(), app_config.password.clone()),
         DbOAuth2UserConsentRepo::new(database.clone()),
         key_service.clone(),
@@ -205,12 +204,7 @@ pub async fn reset_device(app_handle: AppHandle<Wry>) -> Result<(), String> {
 
     if let Some(router_state) = app_handle.try_state::<Arc<RouterState>>() {
         let public_key = router_state.device_identity.endpoint_id().to_string();
-        let request = DeviceSelfRevocationRequest {
-            signature: router_state
-                .device_identity
-                .sign(device_self_revocation_payload(&public_key).as_bytes()),
-            public_key: public_key.clone(),
-        };
+        let request = router_state.device_identity.self_revocation_request();
         if let Some(control_plane) = &router_state.hosted_control_plane {
             let _ = timeout(Duration::from_secs(2), control_plane.revoke_self(request)).await;
         } else {

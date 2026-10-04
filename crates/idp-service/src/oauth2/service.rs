@@ -23,38 +23,45 @@ use idp_model::{
         AuthorizationRequest, AuthorizationServerMetadata, ClientCredentialsGrantRequest,
         ClientRegistration, ClientType, DeviceAuthorization, DeviceAuthorizationRequest,
         EntityType, ErrorCode, ErrorResponse, ErrorResponseResult, GrantType, IdTokenClaims,
-        IsAllowedForUserRequest, IsAllowedForUserResponse, JwkPrivate, JwkPublic, Jwks,
-        OAuth2ClientAuth, PasswordGrantRequest, RefreshTokenGrantRequest, RevocationRequest,
-        SubjectTokenType, TokenEndpointAuthMethod, TokenExchangeGrantRequest, TokenRequest,
-        UserInfo,
+        IdpRole, IsAllowedForUserRequest, IsAllowedForUserResponse, JwkPrivate, JwkPublic,
+        JwkPublicParameters, Jwks, JwsAlgorithm, KeyUse, OAuth2ClientAuth, PasswordGrantRequest,
+        RefreshTokenGrantRequest, RevocationRequest, SubjectTokenType, TokenEndpointAuthMethod,
+        TokenExchangeGrantRequest, TokenPrincipalBinding, TokenRequest, UserInfo,
     },
     model::User,
 };
 
 use crate::{
+    PasswordConfig,
     oauth2::{ClientPrincipal, Principal, UserPrincipal, decode_jwt, encode_jwt, verify_jwt},
     repo::{
         ApplicationRepo, ClientRepo, KeyRepo, KeyService, OAuth2AuthorizationCodeRepo,
-        OAuth2UserConsentRepo, UserRepo,
+        OAuth2RefreshToken, OAuth2RefreshTokenRepo, OAuth2UserConsentRepo, UserRepo,
     },
-    util::{generate_random_string, verify_password},
+    util::{encrypt_password, generate_random_string, verify_password},
 };
 
 use super::{
-    OAuth2Config, intersect_scopes, parse_scopes, resolve_redirect_uri,
+    OAuth2Config, intersect_scopes, jwt::verifing_key_from_jwt, parse_scopes, resolve_redirect_uri,
     validate_authorization_code_grant, validate_authorization_details,
     validate_authorization_request, validate_dynamic_client_grants, validate_scopes,
     verify_code_challenge,
 };
 
-pub struct OAuth2Service<A, C, AC, U, G, K, P> {
+#[cfg(all(test, feature = "replica"))]
+#[path = "refresh_tests.rs"]
+mod refresh_tests;
+
+pub struct OAuth2Service<A, C, AC, RT, U, G, K, P> {
     pub application_repo: A,
     pub client_repo: C,
     pub authorization_code_repo: AC,
+    pub refresh_token_repo: RT,
     pub user_repo: U,
     pub oauth2_user_consent_repo: G,
     pub key_service: Arc<KeyService<K, P>>,
     pub oauth_config: OAuth2Config,
+    role: IdpRole,
 }
 
 #[derive(Clone, Debug)]
@@ -77,11 +84,12 @@ pub struct UpdateUserInfoRequest {
     pub phone_number_verified: Option<bool>,
 }
 
-impl<A, C, AC, U, G, K, P> OAuth2Service<A, C, AC, U, G, K, P>
+impl<A, C, AC, RT, U, G, K, P> OAuth2Service<A, C, AC, RT, U, G, K, P>
 where
     A: ApplicationRepo,
     C: ClientRepo,
     AC: OAuth2AuthorizationCodeRepo,
+    RT: OAuth2RefreshTokenRepo,
     U: UserRepo,
     G: OAuth2UserConsentRepo,
     K: KeyRepo,
@@ -91,6 +99,7 @@ where
         application_repo: A,
         client_repo: C,
         authorization_code_repo: AC,
+        refresh_token_repo: RT,
         user_repo: U,
         oauth2_user_consent_repo: G,
         key_service: Arc<KeyService<K, P>>,
@@ -100,17 +109,28 @@ where
             application_repo,
             client_repo,
             authorization_code_repo,
+            refresh_token_repo,
             user_repo,
             oauth2_user_consent_repo,
             key_service,
+            role: oauth_config.role,
             oauth_config,
         }
+    }
+
+    fn require_authority(&self) -> ErrorResponseResult<()> {
+        if self.role != IdpRole::Authority {
+            return Err(ErrorResponse::new(ErrorCode::AccessDenied)
+                .with_description("operation requires the designated IdP authority"));
+        }
+        Ok(())
     }
 
     pub async fn register_client(
         &self,
         request: ClientRegistration,
     ) -> ErrorResponseResult<ClientRegistration> {
+        self.require_authority()?;
         validate_dynamic_client_grants(&request.allowed_grant_types)?;
         let client = ClientRegistration {
             client_id: Some(
@@ -126,13 +146,20 @@ where
             ..request
         };
 
+        let issued_secret = if client.client_type == ClientType::Confidential {
+            client.client_secret.clone()
+        } else {
+            None
+        };
         let client = self
             .client_repo
             .create_client(client)
             .await
             .map_err(ErrorResponse::from)?;
 
-        Ok(client.into())
+        let mut registration: ClientRegistration = client.into();
+        registration.client_secret = issued_secret;
+        Ok(registration)
     }
 
     pub async fn get_client(&self, client_id: &str) -> ErrorResponseResult<ClientRegistration> {
@@ -172,6 +199,7 @@ where
         uri: String,
         description: Option<String>,
     ) -> ErrorResponseResult<Application> {
+        self.require_authority()?;
         self.application_repo
             .create_application(name, uri, description)
             .await
@@ -182,6 +210,7 @@ where
         &self,
         application: Application,
     ) -> ErrorResponseResult<Application> {
+        self.require_authority()?;
         self.application_repo
             .update_application(application)
             .await
@@ -189,6 +218,7 @@ where
     }
 
     pub async fn delete_application(&self, id: Id) -> ErrorResponseResult<()> {
+        self.require_authority()?;
         self.application_repo
             .delete_application_by_id(id)
             .await
@@ -223,6 +253,7 @@ where
         client_id: &str,
         request: ClientRegistration,
     ) -> ErrorResponseResult<ClientRegistration> {
+        self.require_authority()?;
         validate_dynamic_client_grants(&request.allowed_grant_types)?;
         let existing = self
             .client_repo
@@ -233,12 +264,34 @@ where
                 ErrorResponse::new(ErrorCode::InvalidClient).with_description("client not found")
             })?;
 
+        let issued_secret = if request.client_type == ClientType::Confidential {
+            request.client_secret
+        } else {
+            None
+        };
+        let client_secret_hash = if request.client_type == ClientType::Confidential {
+            match issued_secret.as_deref() {
+                Some(secret) if !secret.trim().is_empty() => {
+                    encrypt_password(&PasswordConfig::default(), secret).map_err(|error| {
+                        ErrorResponse::new(ErrorCode::ServerError)
+                            .with_description(error.to_string())
+                    })?
+                }
+                None if !existing.client_secret_hash.is_empty() => existing.client_secret_hash,
+                _ => {
+                    return Err(ErrorResponse::new(ErrorCode::InvalidRequest)
+                        .with_description("a confidential client requires a nonempty secret"));
+                }
+            }
+        } else {
+            String::new()
+        };
         let now = Utc::now();
         let client = Client {
             id: existing.id,
             application_id: existing.application_id,
             client_id: existing.client_id,
-            client_secret: request.client_secret.unwrap_or(existing.client_secret),
+            client_secret_hash,
             client_id_issued_at: existing.client_id_issued_at,
             client_secret_expires_at: request
                 .client_secret_expires_at
@@ -270,10 +323,13 @@ where
             .update_client(client)
             .await
             .map_err(ErrorResponse::from)?;
-        Ok(client.into())
+        let mut registration: ClientRegistration = client.into();
+        registration.client_secret = issued_secret;
+        Ok(registration)
     }
 
     pub async fn delete_client(&self, client_id: &str) -> ErrorResponseResult<()> {
+        self.require_authority()?;
         self.client_repo
             .delete_client_by_client_id(client_id)
             .await
@@ -285,6 +341,7 @@ where
         request: AuthorizationRequest,
         principal: &PT,
     ) -> ErrorResponseResult<AuthorizationCodeResponse> {
+        self.require_authority()?;
         let client = self
             .client_repo
             .find_client_by_client_id(&request.client_id)
@@ -354,6 +411,7 @@ where
         request: ApproveForUserRequest,
         principal: &PT,
     ) -> ErrorResponseResult<IsAllowedForUserResponse> {
+        self.require_authority()?;
         if principal.get_entity_type() != EntityType::User {
             return Err(ErrorResponse::new(ErrorCode::AccessDenied)
                 .with_description("only users can approve clients"));
@@ -440,6 +498,9 @@ where
         request: TokenRequest,
         client_auth: Option<OAuth2ClientAuth>,
     ) -> ErrorResponseResult<TokenResponse> {
+        if !matches!(&request, TokenRequest::ClientCredentials(_)) {
+            self.require_authority()?;
+        }
         match request {
             TokenRequest::Password(request) => self.password(request, client_auth.as_ref()).await,
             TokenRequest::AuthorizationCode(request) => {
@@ -715,32 +776,38 @@ where
     ) -> ErrorResponseResult<TokenResponse> {
         let now = Utc::now();
 
-        let (jwt_header, refresh_token) = decode_jwt::<StandardClaims>(&request.refresh_token.0)?;
-
-        if refresh_token.r#use != TokenUse::Refresh {
-            return Err(ErrorResponse::new(ErrorCode::InvalidGrant)
-                .with_description("token is not a refresh token"));
-        }
-        if refresh_token.exp < now.timestamp() {
-            return Err(ErrorResponse::new(ErrorCode::InvalidGrant)
-                .with_description("refresh token is expired"));
-        }
-        let key_id = Id::parse_str(&jwt_header.kid).map_err(|_| {
+        let (unverified_header, _) = decode_jwt::<StandardClaims>(&request.refresh_token.0)?;
+        let key_id = Id::parse_str(&unverified_header.kid).map_err(|_| {
             ErrorResponse::new(ErrorCode::InvalidGrant)
                 .with_description("invalid refresh token signing key")
         })?;
-        let key = self
-            .key_service
-            .key_repo()
-            .find_by_id(key_id)
-            .await?
-            .ok_or_else(|| {
-                ErrorResponse::new(ErrorCode::InvalidGrant)
-                    .with_description("refresh token signing key not found")
-            })?;
+        let verification_key = self.find_public_jwk(key_id).await.map_err(|_| {
+            ErrorResponse::new(ErrorCode::InvalidGrant)
+                .with_description("refresh token signing key is not available")
+        })?;
+        let (_, refresh_token) =
+            verify_jwt::<StandardClaims>(&verification_key, &request.refresh_token.0).map_err(
+                |_| {
+                    ErrorResponse::new(ErrorCode::InvalidGrant)
+                        .with_description("refresh token signature is invalid")
+                },
+            )?;
 
-        // TODO: get a derevided key from the key ring store to validate token.
-
+        if refresh_token.r#type != TokenType::Bearer
+            || refresh_token.r#use != TokenUse::Refresh
+            || refresh_token.iss != self.oauth_config.issuer
+            || refresh_token.nbf > now.timestamp()
+            || refresh_token.iat > now.timestamp()
+            || refresh_token.aud != refresh_token.client_id
+            || refresh_token.principal_type != PrincipalType::User
+        {
+            return Err(ErrorResponse::new(ErrorCode::InvalidGrant)
+                .with_description("refresh token claims are invalid"));
+        }
+        if refresh_token.exp <= now.timestamp() {
+            return Err(ErrorResponse::new(ErrorCode::InvalidGrant)
+                .with_description("refresh token is expired"));
+        }
         let client = self
             .client_repo
             .find_client_by_client_id(&refresh_token.client_id)
@@ -768,18 +835,23 @@ where
             scopes
         };
 
-        let principal = self.find_principal(key.id).await?.ok_or_else(|| {
+        let principal = self.find_principal(key_id).await?.ok_or_else(|| {
             ErrorResponse::new(ErrorCode::InvalidGrant)
                 .with_description("principal not found for refresh token")
         })?;
 
-        self.issue_tokens_for_client(
+        if principal.get_entity_id().to_string() != refresh_token.sub {
+            return Err(ErrorResponse::new(ErrorCode::InvalidGrant)
+                .with_description("refresh token subject does not match principal"));
+        }
+        self.issue_tokens_with_refresh(
             &client,
             principal.as_ref(),
             &scopes,
             refresh_token.resource.as_deref(),
             refresh_token.authorization_details.as_deref(),
             None,
+            Some(&request.refresh_token.0),
         )
         .await
     }
@@ -919,7 +991,14 @@ where
                         .with_description("unsupported client authentication method"));
                 }
 
-                if auth.client_secret.as_deref() != Some(client.client_secret.as_str()) {
+                let secret = auth.client_secret.as_deref().ok_or_else(|| {
+                    ErrorResponse::new(ErrorCode::InvalidClient)
+                        .with_description("client secret is required")
+                })?;
+                if !verify_password(secret, &client.client_secret_hash).map_err(|_| {
+                    ErrorResponse::new(ErrorCode::ServerError)
+                        .with_description("stored client secret verifier is invalid")
+                })? {
                     return Err(ErrorResponse::new(ErrorCode::InvalidClient)
                         .with_description("invalid client credentials"));
                 }
@@ -939,15 +1018,51 @@ where
         }
     }
 
-    pub async fn revoke(&self, request: RevocationRequest) -> ErrorResponseResult<()> {
+    pub async fn revoke(
+        &self,
+        request: RevocationRequest,
+        client_auth: Option<OAuth2ClientAuth>,
+    ) -> ErrorResponseResult<()> {
+        self.require_authority()?;
         if request.token.trim().is_empty() {
             return Err(
                 ErrorResponse::new(ErrorCode::InvalidRequest).with_description("token is required")
             );
         }
 
-        Err(ErrorResponse::new(ErrorCode::UnsupportedGrantType)
-            .with_description("token revocation is not implemented"))
+        let Ok((header, _)) = decode_jwt::<StandardClaims>(&request.token) else {
+            return Ok(());
+        };
+        let Ok(key_id) = Id::parse_str(&header.kid) else {
+            return Ok(());
+        };
+        let Ok(key) = self.find_public_jwk(key_id).await else {
+            return Ok(());
+        };
+        let Ok((_, claims)) = verify_jwt::<StandardClaims>(&key, &request.token) else {
+            return Ok(());
+        };
+        if claims.r#type != TokenType::Bearer
+            || claims.r#use != TokenUse::Refresh
+            || claims.iss != self.oauth_config.issuer
+            || claims.aud != claims.client_id
+            || claims.principal_type != PrincipalType::User
+        {
+            return Ok(());
+        }
+        let Some(client) = self
+            .client_repo
+            .find_client_by_client_id(&claims.client_id)
+            .await
+            .map_err(ErrorResponse::from)?
+        else {
+            return Ok(());
+        };
+        self.authenticate_client_for_token_endpoint(&client, client_auth.as_ref())?;
+        self.refresh_token_repo
+            .revoke_refresh_token(&request.token, client.id, Utc::now().timestamp())
+            .await
+            .map_err(ErrorResponse::from)
     }
 
     pub async fn list_jwks(&self) -> ErrorResponseResult<Jwks> {
@@ -960,8 +1075,8 @@ where
 
         let mut jwks = Vec::new();
         for key in keys {
-            if let Ok(jwk) = self.load_signing_jwk(&key).await {
-                jwks.push(JwkPublic::from(jwk));
+            if let Ok(jwk) = self.find_public_jwk(key.id).await {
+                jwks.push(jwk);
             }
         }
 
@@ -993,33 +1108,25 @@ where
     }
 
     pub async fn find_public_jwk(&self, key_id: Id) -> ErrorResponseResult<JwkPublic> {
-        let key = self
-            .key_service
-            .key_repo()
-            .find_by_id(key_id)
-            .await
-            .map_err(ErrorResponse::from)?
-            .ok_or_else(|| {
-                ErrorResponse::new(ErrorCode::NotFound).with_description("key not found")
-            })?;
-
-        self.ensure_key_is_active_entity_root(&key).await?;
-
-        let private_key = self
-            .key_service
-            .private_key_repo()
-            .load(
-                &self
-                    .key_service
-                    .scoped_namespace(key.entity_type, key.entity_id),
-                &key.derivation_path()?,
-            )?
-            .ok_or_else(|| {
-                ErrorResponse::new(ErrorCode::ServerError)
-                    .with_description("signing key not found in private key repository")
-            })?;
-
-        key.to_jwk_public(&private_key).map_err(ErrorResponse::from)
+        let principal = self.find_principal(key_id).await?.ok_or_else(|| {
+            ErrorResponse::new(ErrorCode::InvalidGrant)
+                .with_description("active signing principal not found")
+        })?;
+        let jwk = principal.get_key().public_jwk.clone().ok_or_else(|| {
+            ErrorResponse::new(ErrorCode::InvalidGrant)
+                .with_description("public verification material not found")
+        })?;
+        if jwk.kid != key_id.to_string()
+            || jwk.r#use != KeyUse::Signature
+            || jwk.alg != JwsAlgorithm::EdDSA
+            || !matches!(&jwk.params,
+                JwkPublicParameters::Ec { crv, .. } if crv == "secp256k1")
+        {
+            return Err(ErrorResponse::new(ErrorCode::InvalidGrant)
+                .with_description("public verification material does not match signing key"));
+        }
+        verifing_key_from_jwt(&jwk)?;
+        Ok(jwk)
     }
 
     pub fn metadata(&self) -> AuthorizationServerMetadata {
@@ -1027,13 +1134,20 @@ where
     }
 
     async fn load_signing_jwk(&self, key: &Key) -> ErrorResponseResult<JwkPrivate> {
+        let public_jwk = self.find_public_jwk(key.id).await?;
         if let Some(private_key) = self.key_service.private_key_repo().load(
             &self
                 .key_service
                 .scoped_namespace(key.entity_type, key.entity_id),
             &key.derivation_path()?,
         )? {
-            return Ok(key.to_jwk_private(&private_key)?);
+            let signing_jwk = key.to_jwk_private(&private_key)?;
+            if JwkPublic::from(signing_jwk.clone()) != public_jwk {
+                return Err(ErrorResponse::new(ErrorCode::ServerError).with_description(
+                    "local signing key does not match public verification material",
+                ));
+            }
+            return Ok(signing_jwk);
         }
         Err(ErrorResponse::new(ErrorCode::ServerError)
             .with_description("signing key not found in private key repository"))
@@ -1043,6 +1157,7 @@ where
         &self,
         request: DeviceAuthorizationRequest,
     ) -> ErrorResponseResult<DeviceAuthorization> {
+        self.require_authority()?;
         if request.client_id.as_deref().is_some_and(str::is_empty) {
             return Err(ErrorResponse::new(ErrorCode::InvalidRequest)
                 .with_description("client_id cannot be empty"));
@@ -1072,6 +1187,29 @@ where
         authorization_details: Option<&[AuthorizationDetail]>,
         audience: Option<&str>,
     ) -> ErrorResponseResult<TokenResponse> {
+        self.issue_tokens_with_refresh(
+            client,
+            principal,
+            scopes,
+            resource,
+            authorization_details,
+            audience,
+            None,
+        )
+        .await
+    }
+
+    async fn issue_tokens_with_refresh(
+        &self,
+        client: &Client,
+        principal: &dyn Principal,
+        scopes: &[String],
+        resource: Option<&str>,
+        authorization_details: Option<&[AuthorizationDetail]>,
+        audience: Option<&str>,
+        previous: Option<&str>,
+    ) -> ErrorResponseResult<TokenResponse> {
+        self.require_authority()?;
         if principal.get_entity_type() != EntityType::User {
             return Err(ErrorResponse::new(ErrorCode::AccessDenied)
                 .with_description("this grant cannot issue user tokens to a client principal"));
@@ -1127,13 +1265,42 @@ where
         let id_token_value = encode_jwt(&signing_jwk, &id_token)?;
 
         let refresh_claims = StandardClaims {
+            aud: client.client_id.clone(),
             r#use: TokenUse::Refresh,
             exp: (now + Duration::seconds(self.oauth_config.refresh_token_ttl_secs as i64))
                 .timestamp(),
             ..access_claims
         };
 
-        let refresh_token_value = encode_jwt(&signing_jwk, &refresh_claims)?;
+        let refresh_token_value = encode_jwt(
+            &signing_jwk,
+            &super::token::RefreshClaims {
+                standard_claims: refresh_claims.clone(),
+                jti: generate_random_string::<32>(),
+            },
+        )?;
+        self.refresh_token_repo
+            .issue_refresh_token(
+                OAuth2RefreshToken {
+                    token: refresh_token_value.clone(),
+                    client_id: client.id,
+                    user_id: principal.get_entity_id(),
+                    scopes: refresh_claims.scope,
+                    resource: refresh_claims.resource,
+                    authorization_details: refresh_claims.authorization_details,
+                    expires_at: refresh_claims.exp,
+                    created_at: now.timestamp(),
+                },
+                previous,
+            )
+            .await
+            .map_err(|error| {
+                if previous.is_some() {
+                    ErrorResponse::new(ErrorCode::InvalidGrant).with_description(error.to_string())
+                } else {
+                    ErrorResponse::from(error)
+                }
+            })?;
 
         Ok(TokenResponse {
             id_token: Some(IdToken(id_token_value)),
@@ -1155,6 +1322,13 @@ where
         audience: &str,
         resource: Option<&str>,
     ) -> ErrorResponseResult<TokenResponse> {
+        if self.role == IdpRole::Replica {
+            return Err(
+                ErrorResponse::new(ErrorCode::AccessDenied).with_description(
+                    "replica issuance requires approved local signer and fresh authority state",
+                ),
+            );
+        }
         if principal.get_entity_type() != EntityType::Client
             || principal.get_entity_id() != client.id
         {
@@ -1231,6 +1405,7 @@ where
         user_id: Id,
         request: UpdateUserInfoRequest,
     ) -> ErrorResponseResult<UserInfo> {
+        self.require_authority()?;
         let existing = self
             .user_repo
             .find_user_by_id(user_id)
@@ -1313,6 +1488,7 @@ where
         user_id: Id,
         password: &str,
     ) -> ErrorResponseResult<()> {
+        self.require_authority()?;
         if self
             .user_repo
             .find_user_by_id(user_id)
@@ -1331,6 +1507,7 @@ where
     }
 
     pub async fn delete_user(&self, user_id: Id) -> ErrorResponseResult<()> {
+        self.require_authority()?;
         if self
             .user_repo
             .find_user_by_id(user_id)
@@ -1376,6 +1553,7 @@ where
         user_id: Id,
         consent_id: Id,
     ) -> ErrorResponseResult<()> {
+        self.require_authority()?;
         if self
             .user_repo
             .find_user_by_id(user_id)
@@ -1489,7 +1667,12 @@ where
                 .with_description("active entity root key not found")
         })?;
 
-        if active_root.id != key.id {
+        let binding = TokenPrincipalBinding {
+            entity_type: key.entity_type,
+            entity_id: key.entity_id,
+            key_id: key.id,
+        };
+        if !binding.matches_active_root(&active_root, Utc::now().timestamp()) {
             return Err(ErrorResponse::new(ErrorCode::InvalidGrant)
                 .with_description("key is not the active entity root"));
         }

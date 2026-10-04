@@ -2,6 +2,13 @@ use idp_model::contract::{
     AuthorizationCodeGrantRequest, ErrorCode, ErrorResponse, ErrorResponseResult,
 };
 
+#[derive(serde::Serialize)]
+pub(super) struct RefreshClaims {
+    #[serde(flatten)]
+    pub standard_claims: model::contract::StandardClaims,
+    pub jti: alloc::string::String,
+}
+
 pub fn validate_authorization_code_grant(
     request: &AuthorizationCodeGrantRequest,
     expected_client_id: &str,

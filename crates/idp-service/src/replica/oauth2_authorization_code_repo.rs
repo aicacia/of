@@ -176,18 +176,35 @@ where
                 "authorization code already consumed".into(),
             ));
         }
-        self.engine
+        let mut results = self
+            .engine
             .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                 from: from(),
                 assignments: vec![
                     assignment("consumed_at", Value::Integer(consumed_at.timestamp())),
                     assignment("updated_at", Value::Integer(consumed_at.timestamp())),
                 ],
-                predicate: Some(equals("id", Value::Uuid(id))),
-                returning: None,
+                predicate: Some(QueryExpr::And(
+                    Box::new(equals("id", Value::Uuid(id))),
+                    Box::new(QueryExpr::IsNull(Box::new(QueryExpr::Value(
+                        QueryExprValue::Column(column("consumed_at")),
+                    )))),
+                )),
+                returning: Some(vec![column("id")]),
             }))])
             .await
             .map_err(db_error)?;
+        let updated = results
+            .pop()
+            .ok_or_else(|| {
+                RepoError::InvalidInput("missing authorization code update result".into())
+            })?
+            .rows;
+        if updated.is_empty() {
+            return Err(RepoError::InvalidInput(
+                "authorization code not found or already consumed".into(),
+            ));
+        }
         self.ensure_clear(id).await
     }
 }
@@ -383,7 +400,7 @@ mod tests {
     use std::sync::Arc;
 
     #[tokio::test]
-    async fn consumes_uuid_code_once() {
+    async fn concurrent_consumers_have_one_winner() {
         let engine = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
         up(&engine).await.unwrap();
         let repo = DbOAuth2AuthorizationCodeRepo::new(engine);
@@ -407,14 +424,11 @@ mod tests {
                 .unwrap(),
             Some(code.clone())
         );
-        repo.consume_authorization_code(code.id, now())
-            .await
-            .unwrap();
-        assert!(
-            repo.consume_authorization_code(code.id, now())
-                .await
-                .is_err()
+        let (first, second) = tokio::join!(
+            repo.consume_authorization_code(code.id, now()),
+            repo.consume_authorization_code(code.id, now()),
         );
+        assert_ne!(first.is_ok(), second.is_ok());
         assert!(
             repo.find_authorization_code_by_code(&code.code)
                 .await
