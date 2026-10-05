@@ -1,4 +1,3 @@
-import { Configuration, DefaultApi } from "@aicacia/management-client";
 import { createStorage } from "@aicacia/svelte-headless";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
@@ -16,16 +15,17 @@ function wait(delayMs: number): Promise<void> {
 }
 
 async function isLocalhostServerReady(baseUrl: string): Promise<boolean> {
-  const api = new DefaultApi(
-    new Configuration({ basePath: `${baseUrl}/idp-management` }),
-  );
-
-  try {
-    const [version] = await Promise.all([api.version(), api.health()]);
-    return version.name === "management-server";
-  } catch {
-    return false;
+  for (const path of ["/idp/health", "/lidp/setup/status"]) {
+    try {
+      const response = await fetch(`${baseUrl}${path}`);
+      if (response.ok) {
+        return true;
+      }
+    } catch {
+      continue;
+    }
   }
+  return false;
 }
 
 export function getLocalhostBaseUrlCached(): string | null {

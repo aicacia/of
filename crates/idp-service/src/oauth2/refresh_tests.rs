@@ -150,6 +150,121 @@ async fn setup() -> (Arc<TestEngine>, TestService, Client, UserPrincipal) {
     (engine, service, client, UserPrincipal { user, key })
 }
 
+#[tokio::test]
+async fn initial_user_provisioning_is_stable_authority_only_and_conflict_safe() {
+    let (engine, authority, _, _) = setup().await;
+    let user_id = Id::from_u128(101);
+    let credential_id = Id::from_u128(102);
+    let created = authority
+        .ensure_initial_user(user_id, credential_id, "administrator", "strong-password")
+        .await
+        .expect("provision initial user");
+    let retried = authority
+        .ensure_initial_user(user_id, credential_id, "administrator", "strong-password")
+        .await
+        .expect("retry initial user");
+    assert_eq!(created, retried);
+    assert_eq!(created.id, user_id);
+
+    assert!(
+        authority
+            .ensure_initial_user(user_id, credential_id, "other-name", "strong-password")
+            .await
+            .is_err()
+    );
+    assert!(
+        authority
+            .ensure_initial_user(
+                user_id,
+                credential_id,
+                "administrator",
+                "different-password"
+            )
+            .await
+            .is_err()
+    );
+
+    let replica = replica_service(&engine, &authority);
+    assert_eq!(
+        replica
+            .ensure_initial_user(
+                Id::from_u128(103),
+                Id::from_u128(104),
+                "replica-user",
+                "password"
+            )
+            .await
+            .expect_err("replica must not provision users")
+            .error,
+        ErrorCode::AccessDenied
+    );
+}
+
+fn infrastructure_client_registration() -> ClientRegistration {
+    ClientRegistration {
+        application: ApplicationRegistration {
+            name: Some("Storage service".into()),
+            uri: "https://storage.example/".into(),
+            description: Some("Storage API service identity".into()),
+        },
+        client_id: Some("storage-service".into()),
+        client_secret: Some("stable-secret".into()),
+        client_id_issued_at: None,
+        client_secret_expires_at: None,
+        client_name: "Storage service".into(),
+        client_uri: None,
+        logo_uri: None,
+        contacts: vec![],
+        terms_of_service_uri: None,
+        policy_uri: None,
+        client_type: ClientType::Confidential,
+        profile: ClientProfile::Web,
+        redirect_uris: vec![],
+        allowed_grant_types: vec![GrantType::ClientCredentials],
+        response_types: vec![],
+        allowed_scopes: vec![],
+        allowed_audiences: vec![],
+        token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretBasic,
+        software_statement: None,
+        software_id: None,
+        software_version: None,
+    }
+}
+
+#[tokio::test]
+async fn infrastructure_client_provisioning_is_retry_safe_and_authority_only() {
+    let (engine, authority, _, _) = setup().await;
+    let created = authority
+        .ensure_infrastructure_client(infrastructure_client_registration())
+        .await
+        .expect("provision service client");
+    let retried = authority
+        .ensure_infrastructure_client(infrastructure_client_registration())
+        .await
+        .expect("retry service client");
+    assert_eq!(created.client_id, retried.client_id);
+    assert_eq!(created.client_secret, retried.client_secret);
+
+    let mut conflict = infrastructure_client_registration();
+    conflict.client_secret = Some("different-secret".into());
+    assert!(
+        authority
+            .ensure_infrastructure_client(conflict)
+            .await
+            .is_err()
+    );
+
+    let replica = replica_service(&engine, &authority);
+    assert_eq!(
+        replica
+            .ensure_infrastructure_client(infrastructure_client_registration())
+            .await
+            .expect_err("replica must not provision service clients")
+            .error,
+        ErrorCode::AccessDenied
+    );
+}
+
 fn auth(client: &Client) -> OAuth2ClientAuth {
     OAuth2ClientAuth {
         client_id: client.client_id.clone(),

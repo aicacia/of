@@ -12,7 +12,7 @@ use model::contract::SelectedResource;
 use storage_model::StorageNamespace;
 use storage_service::ScopedFileSystemRuntime;
 
-use crate::ManagementClient;
+use crate::{ManagementClient, sync_timeout};
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 const POLICY_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
@@ -153,14 +153,17 @@ impl StorageProtocolHandler {
             .open_resource(&namespace, filesystem_id)
             .await
             .map_err(std::io::Error::other)?;
-        tokio::time::timeout(SYNC_OPERATION_TIMEOUT, file_system.sync_peer(transport))
-            .await
-            .map_err(|_| {
-                std::io::Error::new(
-                    std::io::ErrorKind::TimedOut,
-                    "filesystem sync operation timed out",
-                )
-            })??;
+        sync_timeout::run(
+            SYNC_OPERATION_TIMEOUT,
+            "filesystem sync operation timed out",
+            async {
+                file_system
+                    .sync_peer(transport)
+                    .await
+                    .map_err(std::io::Error::other)
+            },
+        )
+        .await?;
         Ok(())
     }
 }
@@ -249,12 +252,23 @@ impl StorageProtocolHandler {
             }
         };
         tokio::spawn(async move {
-            match tokio::time::timeout(SYNC_OPERATION_TIMEOUT, file_system.sync_peer(transport))
-                .await
+            match sync_timeout::run(
+                SYNC_OPERATION_TIMEOUT,
+                "filesystem sync operation timed out",
+                async {
+                    file_system
+                        .sync_peer(transport)
+                        .await
+                        .map_err(std::io::Error::other)
+                },
+            )
+            .await
             {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => log::warn!("filesystem sync session ended: {error}"),
-                Err(_) => log::warn!("filesystem sync operation timed out"),
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::TimedOut => {
+                    log::warn!("filesystem sync operation timed out")
+                }
+                Err(error) => log::warn!("filesystem sync session ended: {error}"),
             }
         });
     }

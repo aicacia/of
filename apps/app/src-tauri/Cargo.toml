@@ -17,77 +17,61 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
-base64 = { version = "0.22", default-features = false, features = [] }
-serde_json = "1.0"
-yaml_serde = "0.10"
-serde = { version = "1.0", features = ["derive"] }
-uuid = { version = "1.16", default-features = false, features = ["std", "v4"] }
-futures-core = { version = "0.3", default-features = false, features = [] }
-log = "0.4"
-axum = { version = "0.8", default-features = false, features = ["ws"] }
-rcgen = { version = "0.14", default-features = false, features = [
-  "pem",
-  "ring",
+# HTTP
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+reqwest = { version = "0.12", default-features = false, features = [
+  "json",
+  "rustls-tls",
+  "rustls-tls-native-roots",
 ] }
+# Random
+getrandom = { version = "0.3", default-features = false, features = ["std"] }
+
+# Serialization
+serde_json = { version = "1.0", default-features = false, features = ["std"] }
+
+# TLS
+rcgen = { version = "0.14", default-features = false, features = ["pem", "ring"] }
 rustls = { version = "0.23", default-features = false, features = [] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+
+# Async
+log = "0.4"
 tokio = { version = "1.52", default-features = false, features = [
   "macros",
   "net",
   "rt-multi-thread",
   "sync",
   "time",
-  "io-util",
 ] }
-getrandom = { version = "0.3", default-features = false, features = [] }
-reqwest = { version = "0.12", default-features = false, features = [
-  "json",
-  "rustls-tls",
-  "rustls-tls-native-roots",
-] }
-iroh = { version = "1.1", default-features = false, features = ["tls-ring"] }
 
-tokio-rustls = { version = "0.26", default-features = false, features = [
-  "ring",
-] }
-tower-http = { version = "0.7", default-features = false, features = ["cors"] }
-
-db = { package = "idp-db", path = "../../../crates/db", default-features = false, features = [
-  "native",
-] }
-ofdb-sql = { package = "ofdb-sql", path = "../../../../ofdb/crates/sql", default-features = false, features = [
-
-  "redb",
-  "sync",
-] }
-management-server = { path = "../../../crates/management-server", default-features = false, features = [
-] }
+# Service contracts
 idp-model = { path = "../../../crates/idp-model", default-features = false, features = [
   "replica",
   "std",
 ] }
-idp-server = { path = "../../../crates/idp-server", default-features = false, features = [
-] }
-bootstrap-service = { path = "../../../crates/bootstrap-service", default-features = false, features = ["std"] }
-idp-service = { path = "../../../crates/idp-service", default-features = false, features = [
-  "replica",
-  "std",
-] }
-management-service = { path = "../../../crates/management-service", default-features = false, features = [
-  "replica",
-  "std",
-] }
+idp-server = { path = "../../../crates/idp-server", default-features = false, features = [] }
+idp-service = { path = "../../../crates/idp-service", default-features = false, features = ["std"] }
+management-server = { path = "../../../crates/management-server", default-features = false, features = [] }
 model = { path = "../../../crates/model", default-features = false, features = ["std"] }
-file-system = { path = "../../../../offs/crates/file-system", default-features = false, features = [] }
-storage-server = { path = "../../../crates/storage-server", default-features = false, features = [] }
-storage-service = { path = "../../../crates/storage-service", default-features = false, features = [] }
+storage-server = { path = "../../../crates/storage-server", default-features = false, features = ["network"] }
+unified-server = { path = "../../../crates/unified-server", default-features = false, features = [] }
 
+# Desktop
 tauri = { version = "2", default-features = false, features = [
   "tray-icon",
   "wry",
 ] }
+tauri-plugin-deep-link = "2"
 tauri-plugin-log = "2"
+tauri-plugin-opener = { version = "2", default-features = false, features = [] }
 tauri-plugin-single-instance = { version = "2", default-features = false, features = [
   "deep-link",
 ] }
-tauri-plugin-deep-link = "2"
-tauri-plugin-opener = { version = "2", default-features = false, features = [] }
+
+[dev-dependencies]
+# Keyring
+keyring-core = { version = "1.0", default-features = false, features = [] }
+
+# Utilities
+uuid = { version = "1.16", default-features = false, features = ["std", "v4"] }

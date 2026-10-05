@@ -2,7 +2,7 @@
 name = "idp-unified"
 description = "Local First OIDC / OAuth 2.x implementation"
 repository = "https://github.com/aicacia/rs-oauth"
-rust-version = "1.98"
+rust-version = "1.99"
 edition = "2024"
 
 [package.version]
@@ -40,7 +40,6 @@ members = [
   "crates/db",
   "crates/cli",
   "crates/api",
-  "crates/bootstrap-service",
   "crates/key",
   "crates/model",
   "crates/management-server",
@@ -61,7 +60,7 @@ version = "0.1.0"
 edition = "2024"
 authors = ["nathanfaucett@gmail.com"]
 license = "MIT OR Apache-2.0"
-rust-version = "1.98"
+rust-version = "1.99"
 repository = "https://github.com/aicacia/rs-oauth"
 
 [workspace.lints.rust]

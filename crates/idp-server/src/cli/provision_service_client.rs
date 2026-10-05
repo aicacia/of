@@ -60,7 +60,7 @@ pub async fn run(
 
     let key_service = Arc::new(KeyService::new(
         DbKeyRepo::new(Arc::clone(&engine)),
-        PrivateKeyKeyringRepo::new(&app_config.oauth2.issuer),
+        PrivateKeyKeyringRepo::new(&app_config.oauth2.issuer).map_err(io::Error::other)?,
         app_config.key_namespace.clone(),
     ));
     let client_repo = DbClientRepo::new(Arc::clone(&engine), Arc::clone(&key_service));

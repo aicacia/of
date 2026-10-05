@@ -39,7 +39,7 @@ pub fn identity_from_server(server: &Server, secret_key: SecretKey) -> io::Resul
 }
 
 fn load_or_create_secret_key() -> io::Result<SecretKey> {
-    let keyring = RawKeyringRepo::new(KEYRING_SERVICE);
+    let keyring = RawKeyringRepo::new(KEYRING_SERVICE).map_err(io::Error::other)?;
     match keyring
         .load("", "", KEYRING_ENTRY)
         .map_err(io::Error::other)?
@@ -59,6 +59,7 @@ fn load_or_create_secret_key() -> io::Result<SecretKey> {
 
 pub fn delete() -> io::Result<()> {
     RawKeyringRepo::new(KEYRING_SERVICE)
+        .map_err(io::Error::other)?
         .delete("", "", KEYRING_ENTRY)
         .map_err(io::Error::other)
 }

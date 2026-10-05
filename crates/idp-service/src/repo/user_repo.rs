@@ -34,6 +34,14 @@ pub trait UserRepo {
         password: &str,
     ) -> impl Future<Output = RepoResult<User>>;
 
+    fn create_user_with_password_and_ids(
+        &self,
+        user_id: Id,
+        credential_id: Id,
+        name: &str,
+        password: &str,
+    ) -> impl Future<Output = RepoResult<User>>;
+
     fn update_user(&self, user: User) -> impl Future<Output = RepoResult<User>>;
 
     fn upsert_primary_user_email(

@@ -6,8 +6,9 @@ use axum::{
 use idp_model::{
     contract::{
         ApprovedDeviceEndpoints, DeviceEndpointIdentity, DeviceEnrollment, DeviceEnrollmentRequest,
-        DeviceInfo, DeviceState, ErrorCode, ErrorResponse, IdentityAction, IdentityResource,
-        PairingAcceptance, PermissionTarget, TrustedDevice, UpdateDeviceRequest,
+        DeviceInfo, DeviceState, ErrorCode, ErrorResponse, IDP_DEVICE_LIST_SCOPE,
+        IDP_DEVICE_LOOKUP_SCOPE, IdentityAction, IdentityResource, PairingAcceptance,
+        PermissionTarget, TrustedDevice, UpdateDeviceRequest,
     },
     model::Id,
 };
@@ -20,8 +21,8 @@ use crate::router::{
     middleware::{StandardAuthorization, authorize_bearer_client, require_identity_permission},
 };
 
-const DEVICE_LOOKUP_SCOPE: &str = "idp.device.lookup";
-const DEVICE_LIST_SCOPE: &str = "idp.device.list";
+const DEVICE_LOOKUP_SCOPE: &str = IDP_DEVICE_LOOKUP_SCOPE;
+const DEVICE_LIST_SCOPE: &str = IDP_DEVICE_LIST_SCOPE;
 
 #[utoipa::path(
     get,

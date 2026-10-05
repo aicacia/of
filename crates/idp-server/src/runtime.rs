@@ -78,7 +78,7 @@ pub async fn build_runtime(
 
     let key_service = Arc::new(KeyService::new(
         DbKeyRepo::new(Arc::clone(&engine)),
-        PrivateKeyKeyringRepo::new(&config.oauth2.issuer),
+        PrivateKeyKeyringRepo::new(&config.oauth2.issuer).map_err(io::Error::other)?,
         config.key_namespace.clone(),
     ));
     let devices = Arc::new(DbDeviceRepo::new(Arc::clone(&engine)));

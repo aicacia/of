@@ -184,9 +184,25 @@ where
         name: &str,
         description: Option<&str>,
     ) -> ManagementResult<Role> {
+        self.create_role_with_id(Id::now_v7(), application_id, name, description)
+            .await
+    }
+
+    async fn create_role_with_id(
+        &self,
+        id: Id,
+        application_id: Id,
+        name: &str,
+        description: Option<&str>,
+    ) -> ManagementResult<Role> {
+        if id.is_nil() {
+            return Err(ManagementError::InvalidInput(
+                "role ID must not be nil".into(),
+            ));
+        }
         let now = now();
         let role = Role {
-            id: Id::now_v7(),
+            id,
             application_id,
             name: name.into(),
             description: description.map(str::to_owned),

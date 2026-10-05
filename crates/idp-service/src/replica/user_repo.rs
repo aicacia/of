@@ -267,12 +267,23 @@ where
     }
 
     async fn create_user_with_password(&self, name: &str, password: &str) -> RepoResult<User> {
+        self.create_user_with_password_and_ids(Id::now_v7(), Id::now_v7(), name, password)
+            .await
+    }
+
+    async fn create_user_with_password_and_ids(
+        &self,
+        user_id: Id,
+        credential_id: Id,
+        name: &str,
+        password: &str,
+    ) -> RepoResult<User> {
         if password.trim().is_empty() {
             return Err(RepoError::InvalidInput("password is required".into()));
         }
         let now = now();
         let user = User {
-            id: Id::now_v7(),
+            id: user_id,
             name: name.into(),
             given_name: None,
             family_name: None,
@@ -289,7 +300,7 @@ where
             updated_at: now,
         };
         let credential = CredentialRow {
-            id: Id::now_v7(),
+            id: credential_id,
             user_id: user.id,
             kind: PASSWORD_KIND.into(),
             secret_hash: encrypt_password(&self.password_config, password)

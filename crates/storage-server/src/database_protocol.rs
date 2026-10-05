@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use storage_model::StorageNamespace;
 use storage_service::{DatabaseId, DatabaseRuntime};
 
-use crate::{ManagementClient, data_protocol::DATABASE_STREAM_KIND};
+use crate::{ManagementClient, data_protocol::DATABASE_STREAM_KIND, sync_timeout};
 
 type FrameAuthorizer = Arc<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;
 
@@ -170,33 +170,34 @@ impl DatabaseProtocolHandler {
             transport: IrohTransport::new(send, recv),
             authorize,
         };
-        tokio::time::timeout(SYNC_OPERATION_TIMEOUT, async {
-            database
-                .synchronize(
-                    &mut transport,
-                    &SessionConfig::default(),
-                    SyncRole::Initiator,
+        sync_timeout::run(
+            SYNC_OPERATION_TIMEOUT,
+            "database sync operation timed out",
+            async {
+                database
+                    .synchronize(
+                        &mut transport,
+                        &SessionConfig::default(),
+                        SyncRole::Initiator,
+                    )
+                    .await
+                    .map_err(io::Error::other)?;
+                ofdb_kv_sync::synchronize(
+                    &kv_store,
+                    &mut KvAuthorizedTransport {
+                        transport: &mut transport,
+                    },
+                    ofdb_kv_sync::SyncRole::Initiator,
+                    ofdb_kv_sync::Config {
+                        max_frame_bytes: MAX_SYNC_FRAME_BYTES,
+                        ..ofdb_kv_sync::Config::default()
+                    },
                 )
                 .await
-                .map_err(io::Error::other)?;
-            ofdb_kv_sync::synchronize(
-                &kv_store,
-                &mut KvAuthorizedTransport {
-                    transport: &mut transport,
-                },
-                ofdb_kv_sync::SyncRole::Initiator,
-                ofdb_kv_sync::Config {
-                    max_frame_bytes: MAX_SYNC_FRAME_BYTES,
-                    ..ofdb_kv_sync::Config::default()
-                },
-            )
-            .await
-            .map_err(|error| io::Error::other(format!("database KV sync failed: {error:?}")))
-        })
-        .await
-        .map_err(|_| {
-            io::Error::new(io::ErrorKind::TimedOut, "database sync operation timed out")
-        })??;
+                .map_err(|error| io::Error::other(format!("database KV sync failed: {error:?}")))
+            },
+        )
+        .await?;
         Ok(())
     }
 
@@ -205,9 +206,7 @@ impl DatabaseProtocolHandler {
         resource: &DatabaseResourceDescriptor,
         connection: &Connection,
     ) -> bool {
-        tokio::time::timeout(POLICY_CHECK_TIMEOUT, self.authorize(resource, connection))
-            .await
-            .unwrap_or(false)
+        authorize_with_timeout(POLICY_CHECK_TIMEOUT, self.authorize(resource, connection)).await
     }
 
     async fn authorize(
@@ -347,34 +346,42 @@ impl DatabaseProtocolHandler {
                 transport: IrohTransport::new(send, recv),
                 authorize,
             };
-            let result = tokio::time::timeout(SYNC_OPERATION_TIMEOUT, async {
-                database
-                    .synchronize(
-                        &mut transport,
-                        &SessionConfig::default(),
-                        SyncRole::Responder,
+            let result = sync_timeout::run(
+                SYNC_OPERATION_TIMEOUT,
+                "database sync operation timed out",
+                async {
+                    database
+                        .synchronize(
+                            &mut transport,
+                            &SessionConfig::default(),
+                            SyncRole::Responder,
+                        )
+                        .await
+                        .map_err(io::Error::other)?;
+                    ofdb_kv_sync::synchronize(
+                        &kv_store,
+                        &mut KvAuthorizedTransport {
+                            transport: &mut transport,
+                        },
+                        ofdb_kv_sync::SyncRole::Responder,
+                        ofdb_kv_sync::Config {
+                            max_frame_bytes: MAX_SYNC_FRAME_BYTES,
+                            ..ofdb_kv_sync::Config::default()
+                        },
                     )
                     .await
-                    .map_err(io::Error::other)?;
-                ofdb_kv_sync::synchronize(
-                    &kv_store,
-                    &mut KvAuthorizedTransport {
-                        transport: &mut transport,
-                    },
-                    ofdb_kv_sync::SyncRole::Responder,
-                    ofdb_kv_sync::Config {
-                        max_frame_bytes: MAX_SYNC_FRAME_BYTES,
-                        ..ofdb_kv_sync::Config::default()
-                    },
-                )
-                .await
-                .map_err(|error| io::Error::other(format!("database KV sync failed: {error:?}")))
-            })
+                    .map_err(|error| {
+                        io::Error::other(format!("database KV sync failed: {error:?}"))
+                    })
+                },
+            )
             .await;
             match result {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => log::warn!("database sync session ended: {error}"),
-                Err(_) => log::warn!("database sync operation timed out"),
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::TimedOut => {
+                    log::warn!("database sync operation timed out")
+                }
+                Err(error) => log::warn!("database sync session ended: {error}"),
             }
         });
     }
@@ -399,6 +406,15 @@ impl ProtocolHandler for DatabaseProtocolHandler {
     }
 }
 
+async fn authorize_with_timeout<F>(timeout: Duration, authorization: F) -> bool
+where
+    F: Future<Output = bool>,
+{
+    tokio::time::timeout(timeout, authorization)
+        .await
+        .unwrap_or(false)
+}
+
 fn descriptor(resource: &SelectedResource) -> DatabaseResourceDescriptor {
     DatabaseResourceDescriptor {
         owner_subject: resource.owner_subject.clone(),
@@ -407,8 +423,8 @@ fn descriptor(resource: &SelectedResource) -> DatabaseResourceDescriptor {
     }
 }
 
-struct AuthorizedTransport {
-    transport: IrohTransport,
+struct AuthorizedTransport<T = IrohTransport> {
+    transport: T,
     authorize: FrameAuthorizer,
 }
 
@@ -428,7 +444,10 @@ impl ofdb_kv_sync::SyncTransport for KvAuthorizedTransport<'_> {
     }
 }
 
-impl SyncTransport for AuthorizedTransport {
+impl<T> SyncTransport for AuthorizedTransport<T>
+where
+    T: SyncTransport<Error = io::Error>,
+{
     type Error = io::Error;
 
     async fn receive(&mut self) -> Result<Vec<u8>, Self::Error> {

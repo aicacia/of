@@ -10,11 +10,11 @@ pub struct RawKeyringRepo {
 }
 
 impl RawKeyringRepo {
-    pub fn new(service_name: impl Into<String>) -> Self {
-        init_credential_store().expect("failed to initialize credential store");
-        Self {
+    pub fn new(service_name: impl Into<String>) -> RepoResult<Self> {
+        init_credential_store()?;
+        Ok(Self {
             service_name: service_name.into(),
-        }
+        })
     }
 
     pub fn load(

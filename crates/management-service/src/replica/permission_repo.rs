@@ -170,9 +170,25 @@ where
         name: &str,
         description: Option<&str>,
     ) -> ManagementResult<Permission> {
+        self.create_permission_with_id(Id::now_v7(), application_id, name, description)
+            .await
+    }
+
+    async fn create_permission_with_id(
+        &self,
+        id: Id,
+        application_id: Id,
+        name: &str,
+        description: Option<&str>,
+    ) -> ManagementResult<Permission> {
+        if id.is_nil() {
+            return Err(ManagementError::InvalidInput(
+                "permission ID must not be nil".into(),
+            ));
+        }
         let now = now();
         let permission = Permission {
-            id: Id::now_v7(),
+            id,
             application_id,
             name: name.into(),
             description: description.map(str::to_owned),

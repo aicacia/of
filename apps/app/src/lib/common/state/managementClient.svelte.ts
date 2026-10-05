@@ -25,7 +25,7 @@ async function hydrateTauriManagementApiUrl(): Promise<void> {
 
   const baseUrl = await loadLocalhostBaseUrl();
   if (baseUrl) {
-    managementApiUrl.item = `${baseUrl}/idp-management`;
+    managementApiUrl.item = `${baseUrl}/management`;
   }
 }
 

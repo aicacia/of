@@ -49,6 +49,7 @@ mod refresh_token_grant_request;
 mod response_mode;
 mod response_type;
 mod revocation_request;
+mod service_scopes;
 mod setup_bootstrap_registration;
 mod setup_bootstrap_request;
 mod setup_join_request;
@@ -127,6 +128,9 @@ pub use refresh_token_grant_request::RefreshTokenGrantRequest;
 pub use response_mode::ResponseMode;
 pub use response_type::ResponseType;
 pub use revocation_request::RevocationRequest;
+pub use service_scopes::{
+    IDP_DEVICE_LIST_SCOPE, IDP_DEVICE_LOOKUP_SCOPE, IDP_TOKEN_VALIDATE_SCOPE,
+};
 pub use setup_bootstrap_registration::SetupBootstrapRegistration;
 pub use setup_bootstrap_request::SetupBootstrapRequest;
 pub use setup_join_request::SetupJoinRequest;

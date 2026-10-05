@@ -138,6 +138,59 @@ where
         Ok(())
     }
 
+    pub async fn ensure_initial_user(
+        &self,
+        user_id: Id,
+        credential_id: Id,
+        name: &str,
+        password: &str,
+    ) -> ErrorResponseResult<User> {
+        self.require_authority()?;
+        if user_id == Id::nil() || credential_id == Id::nil() || name.trim().is_empty() {
+            return Err(ErrorResponse::new(ErrorCode::InvalidRequest)
+                .with_description("stable user and credential IDs and a name are required"));
+        }
+        if password.trim().is_empty() {
+            return Err(ErrorResponse::new(ErrorCode::InvalidRequest)
+                .with_description("password is required"));
+        }
+
+        if let Some(user) = self
+            .user_repo
+            .find_user_by_id(user_id)
+            .await
+            .map_err(ErrorResponse::from)?
+        {
+            if user.name != name {
+                return Err(ErrorResponse::new(ErrorCode::InvalidRequest)
+                    .with_description("initial user ID is already used by different data"));
+            }
+            let stored = self
+                .user_repo
+                .find_user_password_by_user_id(user_id)
+                .await
+                .map_err(ErrorResponse::from)?
+                .ok_or_else(|| {
+                    ErrorResponse::new(ErrorCode::InvalidRequest)
+                        .with_description("initial user has no active password credential")
+                })?;
+            if stored.id != credential_id
+                || !verify_password(password, &stored.password_hash).map_err(|error| {
+                    ErrorResponse::new(ErrorCode::ServerError).with_description(error.to_string())
+                })?
+            {
+                return Err(ErrorResponse::new(ErrorCode::InvalidRequest)
+                    .with_description("initial user ID is already used by different credentials"));
+            }
+            return Ok(user);
+        }
+
+        self.user_repo
+            .create_user_with_password_and_ids(user_id, credential_id, name, password)
+            .await
+            .map_err(ErrorResponse::from)
+    }
+
     pub async fn register_client(
         &self,
         request: ClientRegistration,
@@ -158,6 +211,102 @@ where
             return Err(ErrorResponse::new(ErrorCode::InvalidRequest));
         }
         self.register_owned_client(request).await
+    }
+
+    pub async fn ensure_infrastructure_client(
+        &self,
+        request: ClientRegistration,
+    ) -> ErrorResponseResult<ClientRegistration> {
+        self.require_authority()?;
+        if request.client_type != ClientType::Confidential
+            || request.allowed_grant_types != [GrantType::ClientCredentials]
+        {
+            return Err(ErrorResponse::new(ErrorCode::InvalidRequest));
+        }
+        let client_id = request
+            .client_id
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                ErrorResponse::new(ErrorCode::InvalidRequest)
+                    .with_description("stable infrastructure client ID is required")
+            })?
+            .to_owned();
+        let client_secret = request
+            .client_secret
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                ErrorResponse::new(ErrorCode::InvalidRequest)
+                    .with_description("infrastructure client secret is required")
+            })?
+            .to_owned();
+
+        let Some(client) = self
+            .client_repo
+            .find_client_by_client_id(&client_id)
+            .await
+            .map_err(ErrorResponse::from)?
+        else {
+            return self.register_infrastructure_client(request).await;
+        };
+
+        let application = self
+            .application_repo
+            .find_by_id(client.application_id)
+            .await
+            .map_err(ErrorResponse::from)?
+            .ok_or_else(|| {
+                ErrorResponse::new(ErrorCode::InvalidRequest)
+                    .with_description("infrastructure client application is missing")
+            })?;
+        let secret_matches =
+            verify_password(&client_secret, &client.client_secret_hash).map_err(|error| {
+                ErrorResponse::new(ErrorCode::ServerError).with_description(error.to_string())
+            })?;
+        let application_name = request
+            .application
+            .name
+            .as_deref()
+            .unwrap_or(&request.client_name);
+        let client_uri = request
+            .client_uri
+            .as_deref()
+            .unwrap_or(&request.application.uri);
+        let exact_match = secret_matches
+            && application.name == application_name
+            && application.uri == request.application.uri
+            && application.description == request.application.description
+            && client.client_name == request.client_name
+            && client.client_uri == client_uri
+            && client.client_id_issued_at.map(|time| time.timestamp())
+                == request.client_id_issued_at
+            && client.client_secret_expires_at.map(|time| time.timestamp())
+                == request.client_secret_expires_at
+            && client.client_type == request.client_type
+            && client.profile == request.profile
+            && client.token_endpoint_auth_method == request.token_endpoint_auth_method
+            && client.allowed_grant_types == request.allowed_grant_types
+            && client.response_types == request.response_types
+            && client.allowed_scopes == request.allowed_scopes
+            && client.allowed_audiences == request.allowed_audiences
+            && client.redirect_uris == request.redirect_uris
+            && client.logo_uri == request.logo_uri
+            && client.contacts == request.contacts
+            && client.terms_of_service_uri == request.terms_of_service_uri
+            && client.policy_uri == request.policy_uri
+            && client.software_statement == request.software_statement
+            && client.software_id == request.software_id
+            && client.software_version == request.software_version;
+        if !exact_match {
+            return Err(ErrorResponse::new(ErrorCode::InvalidRequest)
+                .with_description("infrastructure client ID is already used by different data"));
+        }
+
+        let mut registration: ClientRegistration = client.into();
+        registration.application = request.application;
+        registration.client_secret = Some(client_secret);
+        Ok(registration)
     }
 
     async fn register_owned_client(

@@ -11,7 +11,6 @@ Applications authenticate through OAuth/OIDC and manage resources in a `(user su
 
 - `idp-service` — OAuth/OIDC, users, clients, tokens, and signing keys.
 - `management-service` — applications, permissions, device ownership and approval, resource selection, administrator limits, and sync policy.
-- `bootstrap-service` — initializes system applications, administrator, signing keys, and optionally a device.
 - `storage-service` — provides authenticated database and filesystem resource APIs.
 - `storage-server` — exposes storage over WebSocket.
 - `file-system` — offline-first storage and synchronization.

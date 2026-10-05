@@ -1,129 +1,76 @@
 <script lang="ts">
-    import { goto } from "$app/navigation";
-    import { setupJoin, setupNew } from "$lib/common/state/setupClient.svelte";
+    import { invoke, isTauri } from "@tauri-apps/api/core";
 
-    let mode = $state<"new" | "join">("new");
-    let deviceName = $state("");
-    let adminUsername = $state("");
-    let adminPassword = $state("");
-    let idpUrl = $state("");
-    let username = $state("");
+    let name = $state("");
     let password = $state("");
+    let busy = $state(false);
     let error = $state("");
+    let result = $state("");
 
-    let submitting = $state(false);
-
-    async function submit(event: SubmitEvent) {
+    async function provision(event: SubmitEvent) {
         event.preventDefault();
+        busy = true;
         error = "";
-        submitting = true;
+        result = "";
+
         try {
-            if (mode === "new") {
-                await setupNew({ deviceName, adminUsername, adminPassword });
-                await goto("/signin");
-            } else {
-                await setupJoin({
-                    deviceName,
-                    idpUrl,
-                    username,
-                    password,
-                });
-                await goto("/setup/device");
-            }
-        } catch (reason) {
-            error =
-                reason instanceof Error
-                    ? reason.message
-                    : `Could not ${mode === "new" ? "create" : "join"} the installation`;
+            await invoke<string>("provision_initial_administrator", {
+                name,
+                password,
+            });
+            password = "";
+            result =
+                "The initial administrator is provisioned. Service credentials and unified runtime setup are still incomplete.";
+        } catch (cause) {
+            error = cause instanceof Error ? cause.message : String(cause);
         } finally {
-            submitting = false;
+            busy = false;
         }
     }
 </script>
 
 <div class="flex grow flex-col items-center justify-center">
     <div class="card w-sm">
-        <h1>Set up this device</h1>
-        <fieldset class="flex flex-col">
-            <legend>Setup method</legend>
-            <label>
-                <input bind:group={mode} type="radio" value="new" />
-                Create a new installation
-            </label>
-            <label>
-                <input bind:group={mode} type="radio" value="join" />
-                Join an existing installation
-            </label>
-        </fieldset>
-        <form class="flex flex-col" onsubmit={submit}>
-            <label class="flex flex-col">
-                Device name
-                <input
-                    bind:value={deviceName}
-                    autocomplete="nickname"
-                    required
-                />
-            </label>
-            {#if mode === "new"}
-                <label class="flex flex-col">
-                    Admin username
+        <h1>Start installation</h1>
+        {#if !isTauri()}
+            <p role="status">
+                Installation is available only in the desktop app.
+            </p>
+        {:else}
+            <p>
+                This creates the first IdP user and grants explicit installation
+                administration permissions. It does not complete service setup.
+            </p>
+            <form onsubmit={provision}>
+                <label>
+                    Administrator name
                     <input
-                        bind:value={adminUsername}
+                        bind:value={name}
                         autocomplete="username"
                         required
+                        disabled={busy}
                     />
                 </label>
-                <label class="flex flex-col">
-                    Admin password
-                    <input
-                        bind:value={adminPassword}
-                        autocomplete="new-password"
-                        required
-                        type="password"
-                    />
-                </label>
-            {:else}
-                <label class="flex flex-col">
-                    Existing IdP URL
-                    <input
-                        bind:value={idpUrl}
-                        placeholder="https://idp.example/lidp"
-                        required
-                        type="url"
-                    />
-                </label>
-                <label class="flex flex-col">
-                    Admin username
-                    <input
-                        bind:value={username}
-                        autocomplete="username"
-                        required
-                    />
-                </label>
-                <label class="flex flex-col">
-                    Admin password
+                <label>
+                    Password
                     <input
                         bind:value={password}
-                        autocomplete="current-password"
-                        required
                         type="password"
+                        autocomplete="new-password"
+                        required
+                        disabled={busy}
                     />
                 </label>
-            {/if}
+                <button type="submit" disabled={busy}>
+                    {busy ? "Provisioning…" : "Provision administrator"}
+                </button>
+            </form>
             {#if error}
                 <p role="alert">{error}</p>
             {/if}
-            <button
-                class="btn primary mt-4"
-                disabled={submitting}
-                type="submit"
-            >
-                {submitting
-                    ? "Saving…"
-                    : mode === "new"
-                      ? "Create installation"
-                      : "Start joining"}
-            </button>
-        </form>
+            {#if result}
+                <p role="status">{result}</p>
+            {/if}
+        {/if}
     </div>
 </div>

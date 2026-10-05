@@ -99,7 +99,7 @@ export async function ensureTauriIdpApiUrl(): Promise<string | null> {
   }
 
   const baseUrl = await ensureLocalhostBaseUrl();
-  idpApiUrl.item = `${baseUrl}/lidp`;
+  idpApiUrl.item = `${baseUrl}/idp`;
   return idpApiUrl.item;
 }
 

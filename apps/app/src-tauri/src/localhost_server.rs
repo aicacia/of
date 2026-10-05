@@ -1,5 +1,6 @@
 use std::{
-    fs, io,
+    fs::{self, OpenOptions},
+    io::{self, Write},
     net::Ipv4Addr,
     path::{Path, PathBuf},
     sync::Arc,
@@ -57,13 +58,14 @@ fn generate_ca_certificate(ca_key: &KeyPair) -> io::Result<rcgen::Certificate> {
 async fn load_or_create_ca(data_dir: &Path) -> io::Result<(KeyPair, bool)> {
     let key_path = localhost_ca_key_path(data_dir);
 
-    if fs::exists(&key_path)? {
+    if fs::symlink_metadata(&key_path).is_ok() {
+        protect_private_key_file(&key_path)?;
         let key = fs::read_to_string(&key_path)?;
         return Ok((KeyPair::from_pem(&key).map_err(io::Error::other)?, false));
     }
 
     let key = KeyPair::generate().map_err(io::Error::other)?;
-    fs::write(&key_path, key.serialize_pem())?;
+    write_private_key_file(&key_path, key.serialize_pem().as_bytes())?;
 
     Ok((key, true))
 }
@@ -90,7 +92,11 @@ async fn ensure_ca_certificate_pem(
 async fn load_or_create_server_cert(data_dir: &Path, ca_key: &KeyPair) -> io::Result<()> {
     let (cert_path, key_path, cert_pem_path) = localhost_server_cert_paths(data_dir);
 
-    if fs::exists(&cert_path)? && fs::exists(&key_path)? && fs::exists(&cert_pem_path)? {
+    if fs::exists(&cert_path)?
+        && fs::symlink_metadata(&key_path).is_ok()
+        && fs::exists(&cert_pem_path)?
+    {
+        protect_private_key_file(&key_path)?;
         return Ok(());
     }
 
@@ -127,9 +133,36 @@ async fn load_or_create_server_cert(data_dir: &Path, ca_key: &KeyPair) -> io::Re
     let cert_pem = cert.pem();
 
     fs::write(&cert_path, &cert_der)?;
-    fs::write(&key_path, &key_der)?;
+    write_private_key_file(&key_path, &key_der)?;
     fs::write(cert_pem_path, cert_pem.as_bytes())?;
 
+    Ok(())
+}
+
+fn write_private_key_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)?.write_all(bytes)
+}
+
+fn protect_private_key_file(path: &Path) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.file_type().is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("private key path is not a regular file: {}", path.display()),
+        ));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+    }
     Ok(())
 }
 
@@ -161,13 +194,12 @@ pub fn invalidate_localhost_certificate_trust(data_dir: &Path) -> io::Result<()>
 
 pub async fn verify_localhost_server(base_url: &str) -> io::Result<()> {
     let client = reqwest::Client::new();
-    let version_url = format!("{base_url}/idp-management/version");
-    let health_url = format!("{base_url}/idp-management/health");
+    let setup_status_url = format!("{base_url}/lidp/setup/status");
 
     for _ in 0..50 {
         let result = async {
-            let version = client
-                .get(&version_url)
+            let status = client
+                .get(&setup_status_url)
                 .send()
                 .await
                 .map_err(io::Error::other)?
@@ -176,17 +208,9 @@ pub async fn verify_localhost_server(base_url: &str) -> io::Result<()> {
                 .json::<serde_json::Value>()
                 .await
                 .map_err(io::Error::other)?;
-            if version.get("name").and_then(serde_json::Value::as_str) != Some("management-server")
-            {
-                return Err(io::Error::other("unexpected localhost server"));
+            if status.get("stage").and_then(serde_json::Value::as_str) != Some("installation") {
+                return Err(io::Error::other("unexpected localhost setup state"));
             }
-            client
-                .get(&health_url)
-                .send()
-                .await
-                .map_err(io::Error::other)?
-                .error_for_status()
-                .map_err(io::Error::other)?;
             Ok(())
         }
         .await;
@@ -199,6 +223,25 @@ pub async fn verify_localhost_server(base_url: &str) -> io::Result<()> {
 
     Err(io::Error::other(
         "localhost server failed trust verification",
+    ))
+}
+
+pub async fn verify_unified_localhost_server(base_url: &str) -> io::Result<()> {
+    let client = reqwest::Client::new();
+    let health_url = format!("{base_url}/idp/health");
+    for _ in 0..50 {
+        if client
+            .get(&health_url)
+            .send()
+            .await
+            .is_ok_and(|response| response.status().is_success())
+        {
+            return Ok(());
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+    Err(io::Error::other(
+        "unified localhost server failed TLS and health verification",
     ))
 }
 
@@ -255,12 +298,57 @@ pub fn localhost_server_base_url(port: u16) -> String {
     format!("https://localhost:{port}")
 }
 
-pub async fn reserve_localhost_listener(_: &Path) -> Result<(TcpListener, u16), String> {
+pub async fn reserve_localhost_listener(data_dir: &Path) -> Result<(TcpListener, u16), String> {
+    fs::create_dir_all(data_dir).map_err(|error| error.to_string())?;
+    let port_path = data_dir.join("https-port");
+    if port_path.exists() {
+        return bind_saved_localhost_port(&port_path).await;
+    }
+
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
-        .map_err(|err| err.to_string())?;
-    let port = listener.local_addr().map_err(|err| err.to_string())?.port();
+        .map_err(|error| error.to_string())?;
+    let port = listener
+        .local_addr()
+        .map_err(|error| error.to_string())?
+        .port();
+    let mut port_file = match OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&port_path)
+    {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+            drop(listener);
+            return bind_saved_localhost_port(&port_path).await;
+        }
+        Err(error) => return Err(error.to_string()),
+    };
+    if let Err(error) = writeln!(port_file, "{port}").and_then(|()| port_file.sync_all()) {
+        let _ = fs::remove_file(&port_path);
+        return Err(error.to_string());
+    }
 
+    Ok((listener, port))
+}
+
+async fn bind_saved_localhost_port(port_path: &Path) -> Result<(TcpListener, u16), String> {
+    let port_text = fs::read_to_string(port_path).map_err(|error| error.to_string())?;
+    let port = port_text.trim().parse::<u16>().map_err(|error| {
+        format!(
+            "saved HTTPS port in {} is invalid: {error}",
+            port_path.display()
+        )
+    })?;
+    if port == 0 {
+        return Err(format!(
+            "saved HTTPS port in {} must not be zero",
+            port_path.display()
+        ));
+    }
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, port))
+        .await
+        .map_err(|error| format!("cannot bind saved HTTPS port {port}: {error}"))?;
     Ok((listener, port))
 }
 
@@ -294,19 +382,10 @@ pub fn start_unified_localhost_server(
     router: Router,
     listener: TcpListener,
     data_dir: &Path,
-) -> LocalhostServer {
-    let tls_listener = match build_server_config(data_dir) {
-        Ok(server_config) => TlsListener {
-            inner: listener,
-            acceptor: TlsAcceptor::from(server_config),
-        },
-        Err(err) => {
-            log::error!("failed to build localhost TLS config: {err}");
-            return LocalhostServer {
-                shutdown: None,
-                task: None,
-            };
-        }
+) -> Result<LocalhostServer, String> {
+    let tls_listener = TlsListener {
+        inner: listener,
+        acceptor: TlsAcceptor::from(build_server_config(data_dir)?),
     };
 
     let (shutdown, shutdown_signal) = oneshot::channel();
@@ -324,10 +403,10 @@ pub fn start_unified_localhost_server(
         }
     });
 
-    LocalhostServer {
+    Ok(LocalhostServer {
         shutdown: Some(shutdown),
         task: Some(task),
-    }
+    })
 }
 
 #[cfg(test)]
@@ -349,10 +428,82 @@ mod tests {
         fs::remove_dir_all(data_dir).unwrap();
     }
 
+    #[cfg(unix)]
     #[tokio::test]
-    async fn reserves_localhost_listener() {
-        let (listener, port) = reserve_localhost_listener(Path::new("")).await.unwrap();
-        assert_eq!(listener.local_addr().unwrap().port(), port);
+    async fn private_key_files_are_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let data_dir = std::env::temp_dir().join(format!("private-key-{}", uuid::Uuid::new_v4()));
+        ensure_localhost_certificate(&data_dir)
+            .await
+            .expect("create localhost keys");
+        for path in [
+            localhost_ca_key_path(&data_dir),
+            localhost_server_cert_paths(&data_dir).1,
+        ] {
+            assert_eq!(
+                fs::metadata(path)
+                    .expect("read private key metadata")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+        fs::remove_dir_all(data_dir).expect("remove private key fixture");
+    }
+
+    #[tokio::test]
+    async fn reserves_localhost_listener_and_reuses_its_port() {
+        let data_dir = std::env::temp_dir().join(format!("https-port-{}", uuid::Uuid::new_v4()));
+        let (listener, port) = reserve_localhost_listener(&data_dir)
+            .await
+            .expect("reserve localhost listener");
+        assert_eq!(
+            listener.local_addr().expect("read listener address").port(),
+            port
+        );
+        drop(listener);
+
+        let (restarted_listener, restarted_port) = reserve_localhost_listener(&data_dir)
+            .await
+            .expect("reuse persisted localhost port");
+        assert_eq!(restarted_port, port);
+        drop(restarted_listener);
+        fs::remove_dir_all(data_dir).expect("remove temporary listener state");
+    }
+
+    #[tokio::test]
+    async fn fails_if_saved_localhost_port_is_occupied() {
+        let data_dir = std::env::temp_dir().join(format!("https-port-{}", uuid::Uuid::new_v4()));
+        let (listener, port) = reserve_localhost_listener(&data_dir)
+            .await
+            .expect("reserve localhost listener");
+        let error = reserve_localhost_listener(&data_dir)
+            .await
+            .expect_err("an occupied persisted port must fail");
+        assert!(error.contains(&port.to_string()));
+        drop(listener);
+        fs::remove_dir_all(data_dir).expect("remove temporary listener state");
+    }
+
+    #[tokio::test]
+    async fn rejects_invalid_saved_localhost_ports() {
+        let data_dir = std::env::temp_dir().join(format!("https-port-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&data_dir).expect("create temporary listener state");
+        let port_path = data_dir.join("https-port");
+        for value in ["invalid", "0"] {
+            fs::write(&port_path, value).expect("write invalid persisted port");
+            assert!(reserve_localhost_listener(&data_dir).await.is_err());
+        }
+        fs::remove_dir_all(data_dir).expect("remove temporary listener state");
+    }
+
+    #[tokio::test]
+    async fn localhost_server_rejects_missing_tls_configuration() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let data_dir = std::env::temp_dir().join(format!("missing-tls-{}", uuid::Uuid::new_v4()));
+        assert!(start_unified_localhost_server(Router::new(), listener, &data_dir).is_err());
     }
 
     #[tokio::test]
@@ -366,6 +517,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         start_unified_localhost_server(Router::new(), listener, &data_dir)
+            .expect("start localhost HTTPS listener")
             .close()
             .await
             .unwrap();

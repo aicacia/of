@@ -1,10 +1,16 @@
 #[cfg(test)]
 mod database_protocol_tests {
     use std::{
-        io::{Read, Write},
+        collections::VecDeque,
+        future::pending,
+        io::{self, Read, Write},
         net::TcpListener,
-        sync::Arc,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+        },
         thread,
+        time::Duration,
     };
 
     use iroh::{
@@ -15,12 +21,46 @@ mod database_protocol_tests {
     };
     use iroh_chain::{DATA_ALPN, EndpointIdStore, Server};
     use model::contract::{SelectedResource, SelectedResourcesResponse};
+    use ofdb_sql::{IrohTransport, SyncTransport};
     use storage_service::DatabaseRuntime;
 
     use crate::{
         ManagementClient,
-        database_protocol::{DatabaseProtocolHandler, DatabaseResourceDescriptor},
+        database_protocol::{
+            AuthorizedTransport, DatabaseProtocolHandler, DatabaseResourceDescriptor,
+            authorize_with_timeout,
+        },
+        sync_timeout,
     };
+
+    struct DropSignal(Arc<AtomicBool>);
+
+    impl Drop for DropSignal {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+
+    #[derive(Default)]
+    struct MemorySyncTransport {
+        incoming: VecDeque<Vec<u8>>,
+        outgoing: Vec<Vec<u8>>,
+    }
+
+    impl SyncTransport for MemorySyncTransport {
+        type Error = io::Error;
+
+        async fn receive(&mut self) -> Result<Vec<u8>, Self::Error> {
+            self.incoming
+                .pop_front()
+                .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "no test frame"))
+        }
+
+        async fn send(&mut self, frame: Vec<u8>) -> Result<(), Self::Error> {
+            self.outgoing.push(frame);
+            Ok(())
+        }
+    }
 
     #[derive(Debug)]
     struct TestProtocol;
@@ -63,6 +103,234 @@ mod database_protocol_tests {
             body.len()
         )
         .expect("write HTTP response");
+    }
+
+    #[tokio::test]
+    async fn timed_out_policy_check_drops_its_future_and_fails_closed() {
+        let dropped = Arc::new(AtomicBool::new(false));
+        let drop_signal = DropSignal(Arc::clone(&dropped));
+        let authorization = async move {
+            let _drop_signal = drop_signal;
+            pending::<bool>().await
+        };
+
+        assert!(!authorize_with_timeout(std::time::Duration::from_millis(10), authorization).await);
+        assert!(dropped.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn sql_sync_rechecks_policy_between_sends_and_receives() {
+        let send_checks = Arc::new(AtomicUsize::new(0));
+        let send_authorize = Arc::clone(&send_checks);
+        let mut send_transport = AuthorizedTransport {
+            transport: MemorySyncTransport::default(),
+            authorize: Arc::new(move || {
+                let checks = Arc::clone(&send_authorize);
+                Box::pin(async move { checks.fetch_add(1, Ordering::SeqCst) == 0 })
+            }),
+        };
+        send_transport
+            .send(vec![1])
+            .await
+            .expect("first operation is allowed");
+        let error = send_transport
+            .send(vec![2])
+            .await
+            .expect_err("next operation observes policy revocation");
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(send_transport.transport.outgoing, [vec![1]]);
+
+        let receive_checks = Arc::new(AtomicUsize::new(0));
+        let receive_authorize = Arc::clone(&receive_checks);
+        let mut receive_transport = AuthorizedTransport {
+            transport: MemorySyncTransport {
+                incoming: VecDeque::from([vec![3]]),
+                outgoing: Vec::new(),
+            },
+            authorize: Arc::new(move || {
+                let checks = Arc::clone(&receive_authorize);
+                Box::pin(async move { checks.fetch_add(1, Ordering::SeqCst) == 0 })
+            }),
+        };
+        let error = receive_transport
+            .receive()
+            .await
+            .expect_err("revocation after frame receipt rejects the frame");
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        assert!(receive_transport.transport.incoming.is_empty());
+    }
+
+    #[tokio::test]
+    async fn revoked_policy_rejects_a_received_frame_and_closes_the_real_iroh_stream() {
+        let lookup = MemoryLookup::new();
+        let initiator = Endpoint::builder(presets::Minimal)
+            .address_lookup(lookup.clone())
+            .bind()
+            .await
+            .expect("bind initiator endpoint");
+        let responder = Endpoint::builder(presets::Minimal)
+            .alpns(vec![b"storage-revocation-test".to_vec()])
+            .address_lookup(lookup.clone())
+            .bind()
+            .await
+            .expect("bind responder endpoint");
+        lookup.add_endpoint_info(responder.addr());
+
+        let (connection, peer) = tokio::time::timeout(Duration::from_secs(10), async {
+            tokio::join!(
+                initiator.connect(responder.id(), b"storage-revocation-test"),
+                async {
+                    responder
+                        .accept()
+                        .await
+                        .expect("incoming connection")
+                        .accept()
+                        .expect("start accepting")
+                        .await
+                }
+            )
+        })
+        .await
+        .expect("Iroh connection setup completes");
+        let connection = connection.expect("connect endpoints");
+        let peer = peer.expect("accept connection");
+        let (mut client_send, mut client_receive) =
+            tokio::time::timeout(Duration::from_secs(10), connection.open_bi())
+                .await
+                .expect("open client stream")
+                .expect("client stream opens");
+        client_send
+            .write_all(&3u32.to_be_bytes())
+            .await
+            .expect("write frame length before peer accepts stream");
+        client_send
+            .write_all(&[1, 2, 3])
+            .await
+            .expect("write frame before peer accepts stream");
+        let (server_send, server_receive) =
+            tokio::time::timeout(Duration::from_secs(10), peer.accept_bi())
+                .await
+                .expect("accept server stream")
+                .expect("server stream opens");
+        let checks = Arc::new(AtomicUsize::new(0));
+        let authorize_checks = Arc::clone(&checks);
+        let mut transport = AuthorizedTransport {
+            transport: IrohTransport::new(server_send, server_receive),
+            authorize: Arc::new(move || {
+                let checks = Arc::clone(&authorize_checks);
+                Box::pin(async move { checks.fetch_add(1, Ordering::SeqCst) == 0 })
+            }),
+        };
+
+        let error = tokio::time::timeout(Duration::from_secs(5), transport.receive())
+            .await
+            .expect("authorized receive completes")
+            .expect_err("revocation after frame receipt rejects the frame");
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(checks.load(Ordering::SeqCst), 2);
+        drop(transport);
+
+        let mut prefix = [0; 4];
+        let peer_closed = tokio::time::timeout(
+            Duration::from_secs(2),
+            client_receive.read_exact(&mut prefix),
+        )
+        .await
+        .expect("revoked server closes peer stream");
+        assert!(peer_closed.is_err());
+
+        drop(client_send);
+        connection.close(0u32.into(), b"test complete");
+        peer.close(0u32.into(), b"test complete");
+        tokio::time::timeout(Duration::from_secs(5), initiator.close())
+            .await
+            .expect("initiator endpoint closes");
+        tokio::time::timeout(Duration::from_secs(5), responder.close())
+            .await
+            .expect("responder endpoint closes");
+    }
+
+    #[tokio::test]
+    async fn timed_out_sql_frame_read_closes_the_real_iroh_stream() {
+        let lookup = MemoryLookup::new();
+        let initiator = Endpoint::builder(presets::Minimal)
+            .address_lookup(lookup.clone())
+            .bind()
+            .await
+            .expect("bind initiator endpoint");
+        let responder = Endpoint::builder(presets::Minimal)
+            .alpns(vec![b"storage-timeout-test".to_vec()])
+            .address_lookup(lookup.clone())
+            .bind()
+            .await
+            .expect("bind responder endpoint");
+        lookup.add_endpoint_info(responder.addr());
+
+        let (connection, peer) = tokio::time::timeout(Duration::from_secs(10), async {
+            tokio::join!(
+                initiator.connect(responder.id(), b"storage-timeout-test"),
+                async {
+                    responder
+                        .accept()
+                        .await
+                        .expect("incoming connection")
+                        .accept()
+                        .expect("start accepting")
+                        .await
+                }
+            )
+        })
+        .await
+        .expect("Iroh connection setup completes");
+        let connection = connection.expect("connect endpoints");
+        let peer = peer.expect("accept connection");
+        let (mut client_send, mut client_receive) =
+            tokio::time::timeout(Duration::from_secs(10), connection.open_bi())
+                .await
+                .expect("open client stream")
+                .expect("client stream opens");
+        client_send
+            .write_all(&[0, 0])
+            .await
+            .expect("send incomplete frame prefix");
+        let (server_send, server_receive) =
+            tokio::time::timeout(Duration::from_secs(10), peer.accept_bi())
+                .await
+                .expect("accept server stream")
+                .expect("server stream opens");
+        let mut transport = AuthorizedTransport {
+            transport: IrohTransport::new(server_send, server_receive),
+            authorize: Arc::new(|| Box::pin(async { true })),
+        };
+
+        let error = sync_timeout::run(
+            Duration::from_millis(20),
+            "database sync operation timed out",
+            async { transport.receive().await },
+        )
+        .await
+        .expect_err("stalled authorized frame read must time out");
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        drop(transport);
+
+        let mut prefix = [0; 4];
+        let peer_closed = tokio::time::timeout(
+            Duration::from_secs(2),
+            client_receive.read_exact(&mut prefix),
+        )
+        .await
+        .expect("timed-out server read closes peer stream");
+        assert!(peer_closed.is_err());
+
+        drop(client_send);
+        connection.close(0u32.into(), b"test complete");
+        peer.close(0u32.into(), b"test complete");
+        tokio::time::timeout(Duration::from_secs(5), initiator.close())
+            .await
+            .expect("initiator endpoint closes");
+        tokio::time::timeout(Duration::from_secs(5), responder.close())
+            .await
+            .expect("responder endpoint closes");
     }
 
     #[tokio::test]

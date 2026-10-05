@@ -26,6 +26,7 @@ const PEER_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 
 pub struct UnifiedRuntime {
     listener: Option<TcpListener>,
+    listener_addr: std::net::SocketAddr,
     router: Router,
     endpoint: Arc<UnifiedEndpoint>,
     idp_runtime: Arc<IdpRuntime>,
@@ -38,9 +39,18 @@ pub struct UnifiedRuntime {
 
 impl UnifiedRuntime {
     pub async fn build(config: UnifiedConfig) -> io::Result<Self> {
+        let listener = TcpListener::bind(config.listen_addr).await?;
+        let listener_addr = listener.local_addr()?;
+        Self::build_on_listener(config, listener, loopback_base(listener_addr)).await
+    }
+
+    pub async fn build_on_listener(
+        config: UnifiedConfig,
+        listener: TcpListener,
+        api_base: String,
+    ) -> io::Result<Self> {
         validate_config(&config)?;
         validate_data_dirs(&config)?;
-        let listener = TcpListener::bind(config.listen_addr).await?;
         let listener_addr = listener.local_addr()?;
         if !listener_addr.ip().is_loopback() {
             return Err(io::Error::new(
@@ -48,7 +58,7 @@ impl UnifiedRuntime {
                 "unified listener must bind to loopback; use a TLS-terminating reverse proxy for external access",
             ));
         }
-        let api_base = loopback_base(listener_addr);
+        validate_api_base(&api_base, listener_addr)?;
         let cancellation_token = CancellationToken::new();
         let endpoint = Arc::new(UnifiedEndpoint::open(&config.endpoint_data_dir).await?);
         let server = endpoint.server().clone();
@@ -197,6 +207,7 @@ impl UnifiedRuntime {
         .layer(CompressionLayer::new().gzip(idp_config.server.gzip));
         Ok(Self {
             listener: Some(listener),
+            listener_addr,
             router,
             endpoint,
             idp_runtime,
@@ -208,11 +219,17 @@ impl UnifiedRuntime {
         })
     }
 
-    pub fn local_addr(&self) -> io::Result<std::net::SocketAddr> {
-        self.listener
-            .as_ref()
-            .expect("Unified runtime listener is present")
-            .local_addr()
+    pub fn local_addr(&self) -> std::net::SocketAddr {
+        self.listener_addr
+    }
+
+    pub fn take_listener(&mut self) -> io::Result<TcpListener> {
+        self.listener.take().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "Unified runtime listener was already taken",
+            )
+        })
     }
 
     pub fn endpoint_id(&self) -> iroh::EndpointId {
@@ -227,21 +244,9 @@ impl UnifiedRuntime {
         self.cancellation_token.clone()
     }
 
-    pub async fn serve(mut self) -> io::Result<()> {
-        let listener = self
-            .listener
-            .take()
-            .expect("Unified runtime listener is present");
-        let serve_task = tokio::spawn(serve_listener(
-            self.router.clone(),
-            listener,
-            self.cancellation_token.clone(),
-        ));
-        if let Err(error) = wait_until_ready(&self.api_base, &self.cancellation_token).await {
-            self.cancellation_token.cancel();
-            let _ = serve_task.await;
-            let _ = self.shutdown().await;
-            return Err(error);
+    pub async fn start_background_tasks(&mut self) -> io::Result<()> {
+        if self.peer_refresh.is_some() {
+            return Ok(());
         }
         if let Err(error) = self
             .endpoint
@@ -259,6 +264,23 @@ impl UnifiedRuntime {
             Arc::clone(&self.idp_runtime),
             self.cancellation_token.clone(),
         ));
+        Ok(())
+    }
+
+    pub async fn serve(mut self) -> io::Result<()> {
+        let listener = self.take_listener()?;
+        let serve_task = tokio::spawn(serve_listener(
+            self.router.clone(),
+            listener,
+            self.cancellation_token.clone(),
+        ));
+        if let Err(error) = wait_until_ready(&self.api_base, &self.cancellation_token).await {
+            self.cancellation_token.cancel();
+            let _ = serve_task.await;
+            let _ = self.shutdown().await;
+            return Err(error);
+        }
+        self.start_background_tasks().await?;
 
         let serve_result = match serve_task.await {
             Ok(result) => result,
@@ -409,6 +431,30 @@ fn build_control_plane(
         .map_err(invalid_config)
 }
 
+fn validate_api_base(api_base: &str, listener_addr: std::net::SocketAddr) -> io::Result<()> {
+    let url = reqwest::Url::parse(api_base).map_err(|error| invalid_config(error.to_string()))?;
+    let loopback_host = url.host_str().is_some_and(|host| {
+        host == "localhost"
+            || host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|address| address.is_loopback())
+    });
+    if !matches!(url.scheme(), "http" | "https")
+        || !loopback_host
+        || url.port() != Some(listener_addr.port())
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err(invalid_config(
+            "unified API base must use HTTP(S) on the supplied loopback listener without a path, credentials, query, or fragment".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 fn loopback_base(address: std::net::SocketAddr) -> String {
     let loopback = match address.ip() {
         std::net::IpAddr::V4(_) => std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
@@ -487,11 +533,22 @@ mod tests {
 
     use crate::permission_http_tests::{run_permission_http_checks, seed_idp, seed_permissions};
     use axum::{body::Body, http::Request};
+    use tokio::net::TcpListener;
     use tower::ServiceExt;
 
     use crate::{ServiceClientCredentials, UnifiedConfig};
 
-    use super::{UnifiedRuntime, validate_config};
+    use super::{UnifiedRuntime, loopback_base, validate_api_base, validate_config};
+
+    #[test]
+    fn host_api_base_must_match_the_loopback_listener() {
+        let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 4321);
+        assert!(validate_api_base("https://localhost:4321", address).is_ok());
+        assert!(validate_api_base("http://127.0.0.1:4321", address).is_ok());
+        assert!(validate_api_base("https://example.com:4321", address).is_err());
+        assert!(validate_api_base("https://localhost:4322", address).is_err());
+        assert!(validate_api_base("https://localhost:4321/idp", address).is_err());
+    }
 
     #[test]
     fn builds_three_prefixed_services_with_one_endpoint() {
@@ -567,9 +624,13 @@ mod tests {
         seed_permissions(&root, &mut fixture).await;
         endpoint.close().await;
 
-        let runtime = UnifiedRuntime::build(config)
+        let listener = TcpListener::bind(config.listen_addr)
             .await
-            .expect("build unified runtime");
+            .expect("bind host-owned unified listener");
+        let api_base = loopback_base(listener.local_addr().expect("read host listener address"));
+        let runtime = UnifiedRuntime::build_on_listener(config, listener, api_base)
+            .await
+            .expect("build unified runtime on host-owned listener");
         assert_eq!(runtime.endpoint_id(), endpoint_id);
         runtime
             .endpoint
@@ -579,7 +640,7 @@ mod tests {
         assert!(runtime.endpoint.server().peers().contains(approved_peer_id));
         assert!(runtime.endpoint.server().peers().contains(endpoint_id));
 
-        let address = runtime.local_addr().expect("read bound listener address");
+        let address = runtime.local_addr();
         assert_ne!(address.port(), 0);
         assert!(fs::metadata(root.join("endpoint/endpoint.key")).is_ok());
 
@@ -628,7 +689,7 @@ mod tests {
         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
 
         let cancellation_token = runtime.cancellation_token();
-        let server_address = runtime.local_addr().expect("read bound listener address");
+        let server_address = runtime.local_addr();
         let serve_task = tokio::spawn(runtime.serve());
         let client = reqwest::Client::new();
         for path in ["/idp/health", "/management/health", "/storage/health"] {

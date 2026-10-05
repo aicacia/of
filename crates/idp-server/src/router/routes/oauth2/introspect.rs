@@ -3,11 +3,13 @@ use axum::{
     extract::State,
     http::{HeaderMap, header::AUTHORIZATION},
 };
-use idp_model::contract::{ErrorCode, ErrorResponse, IntrospectionRequest, IntrospectionResponse};
+use idp_model::contract::{
+    ErrorCode, ErrorResponse, IDP_TOKEN_VALIDATE_SCOPE, IntrospectionRequest, IntrospectionResponse,
+};
 
 use crate::{RouterState, authorize_bearer_any_principal, authorize_bearer_client};
 
-const VALIDATE_TOKEN_SCOPE: &str = "idp.token.validate";
+const VALIDATE_TOKEN_SCOPE: &str = IDP_TOKEN_VALIDATE_SCOPE;
 
 #[utoipa::path(
     post,

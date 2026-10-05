@@ -1197,6 +1197,17 @@ pub(crate) async fn run_permission_http_checks(
         .expect("registration object")
         .remove("client_id");
     create["client_name"] = "created through normal RBAC".into();
+    expect_status(
+        client
+            .post(format!("{base}/idp/oauth2/register"))
+            .bearer_auth(&unassigned)
+            .json(&create)
+            .send()
+            .await
+            .expect("deny client create without permission"),
+        http::StatusCode::FORBIDDEN,
+    )
+    .await;
     let created = expect_status(
         client
             .post(format!("{base}/idp/oauth2/register"))
@@ -1209,7 +1220,41 @@ pub(crate) async fn run_permission_http_checks(
     )
     .await;
     let created_id = created["client_id"].as_str().expect("created ID");
+    let created_url = format!("{base}/idp/oauth2/register/{created_id}");
     let mut update = created.clone();
+    update["client_name"] = "updated without permission".into();
+    expect_status(
+        client
+            .put(&created_url)
+            .bearer_auth(&unassigned)
+            .json(&update)
+            .send()
+            .await
+            .expect("deny client update without permission"),
+        http::StatusCode::FORBIDDEN,
+    )
+    .await;
+    expect_status(
+        client
+            .delete(&created_url)
+            .bearer_auth(&unassigned)
+            .send()
+            .await
+            .expect("deny client delete without permission"),
+        http::StatusCode::FORBIDDEN,
+    )
+    .await;
+    let still_created = expect_status(
+        client
+            .get(&created_url)
+            .bearer_auth(&admin)
+            .send()
+            .await
+            .expect("verify denied mutations preserved client"),
+        http::StatusCode::OK,
+    )
+    .await;
+    assert_eq!(still_created["client_name"], "created through normal RBAC");
     update["client_name"] = "updated through normal RBAC".into();
     expect_status(
         client
