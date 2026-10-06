@@ -1,4 +1,5 @@
 /target
+/.scratch
 /node_modules
 /.env*
 !/.env.example

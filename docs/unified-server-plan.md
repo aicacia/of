@@ -6,6 +6,21 @@ Ship independently deployable IdP, Management, and Storage services, plus `unifi
 
 The architecture is settled in [ADR 0002](adr/0002-service-authority-and-replica-boundaries.md); this plan records implementation and acceptance status. Work is in progress. Breaking changes and a temporarily broken repository are allowed. Do not claim a step complete until its acceptance criteria are met.
 
+## Domain invariants
+
+The [glossary map](../GLOSSARY-MAP.md) defines shared and context vocabulary. These rules define the target domain; implementation status is recorded below.
+
+- A User's stable public identifier is the OAuth/OIDC `sub` claim. Store profile, email, phone, password-verifier, and key records separately from the core user record. Never persist or synchronize raw passwords.
+- Bootstrap creates or updates the built-in IdP and Management Applications and clients, Initial Administrator, signing key, Management permissions and roles, and optional bootstrap Device through separate owner-local operations. The built-in Management Application URI is `idp-management`.
+- Device pairing creates a pending Device; an approved Device signs the pairing approval payload. Revocation removes future trust but cannot erase data already copied.
+- Reset Device removes only the runtime's local setup state, synchronized data, and Device identity. Attempt authorized remote revocation of its approved Device record, but allow reset while offline.
+- Record Device Setup completion in local Device state. A Storage-only Node receives no IdP database copy; IdP Replica readiness requires privileged enrollment, defined state synchronization, an approved independent signer, and approval of its endpoint.
+- Configure the Hosted Control Plane issuer locally; never derive it from untrusted claims. Validate tokens against issuer, audience, use, lifetime, and signature. Authorization-code redemption durably and atomically marks the code consumed so only one redemption succeeds.
+- Private and derived key material is local secret state and must not enter filesystem synchronization.
+- A Storage Resource namespace is identified by `(subject, application_id)`. Keep resource identity distinct from its non-unique display name. Catalog discovery grants neither resource access nor local content possession.
+- File entries retain stable file IDs, content revisions, and provider metadata. Synchronize deletion Tombstones; keep Full/Passthrough Residency local, with Passthrough reads from available Full peers and no writes.
+- Repository backends persist service traits through the native replicated `ofdb` engine. CLI and desktop runtimes compose native database repositories directly.
+
 ## Required service boundaries
 
 | Component                          | Owns                                                                                           | Calls                                                                      |
@@ -90,6 +105,18 @@ Oversized records/transactions fail clearly and retain local data. Do not trunca
 ## Verified implementation and open work
 
 Status below reflects repository evidence available on 2026-10-06. Earlier focused results are not final validation. Do not infer completion from a passing unit test where live topology or production wiring remains absent.
+
+### Documentation audit: API and security gaps
+
+Source audit on 2026-10-06; no tests rerun for this audit. Current Storage [API](../crates/storage-service/docs/api.md) and [security](../crates/storage-service/docs/security.md) contracts replace the earlier duplicated service docs. These findings are not new acceptance results:
+
+- [ ] Establish Management permission/action enforcement for IdP enrollment and owner revocation. Those handlers currently use the generic User bearer check; a Storage `read` action restriction alone does not prove Device mutation denial. Pairing-acceptance changes do use Management permission evaluation.
+- [ ] Verify selection owner binding against the authoritative IdP Device owner. Selection and deselection checks must not treat a stored selection-policy owner as sufficient proof of Device ownership.
+- [ ] Complete administrator restriction and ownership-transfer APIs and acceptance. Stored `admin_allowed` policy affects admission, but there is no mounted public Device restriction route or established ownership-transfer implementation. The mounted delete-all selection route denies; use the resource-specific Application-scoped route.
+- [ ] Complete deselection/transfer cleanup. Filesystem cleanup currently removes projected copies only after external handles drop; it does not remove all locally created resources. The database sync loop does not establish equivalent deselection cleanup. Target transfer clears selections and local copies before the new owner selects; an offline Device must not resume sync until transfer/reset completes.
+- [ ] Check policy at bounded apply/write boundaries. SQL/KV checks surround transport sends/receives; filesystem checks surround receives and outgoing enqueue, not every subsequent apply operation or queued socket write. The current 30-second synchronization wrapper is not an individual timer for every batch/chunk. Verify total memory, disk, concurrent-work, outage, cancellation, and shutdown bounds through production acceptance.
+
+Management and IdP currently use separate engines in unified hosting. Storage obtains admission through live Management APIs; earlier shared-repository and locally replicated Management policy claims are obsolete. Current SQL/KV and filesystem frames are limited to 1 MiB; filesystem reads are limited to 1 MiB with response data chunks of 1 MiB minus 1,024 bytes. Do not carry forward the earlier 8 MiB filesystem frame or 16 MiB read limits.
 
 ### 1. Close unsafe OAuth and signing paths
 
