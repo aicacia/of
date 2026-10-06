@@ -20,20 +20,20 @@ SQL/KV transport checks policy before send and before/after receive. Filesystem 
 
 These checks are not a guarantee of fresh authorization at each SQL apply transaction, filesystem metadata import/file operation, or queued filesystem socket write. Keep those gaps separate from the target requirement to check each bounded operation.
 
-| Boundary | Current limit |
-| --- | --- |
-| SQL encoded message / Iroh payload | 1 MiB |
-| Storage KV encoded frame | 1 MiB |
-| Filesystem metadata/session frame | 1 MiB |
-| Filesystem read request | 1 MiB |
-| Filesystem response data chunk | 1 MiB minus 1,024 bytes |
-| SQL default units per frame | 64 |
-| SQL default session accounting budget | 64 MiB |
-| SQL data apply batch | 1 MiB |
-| Storage file stage | 64 MiB per stage |
-| Filesystem active requests | 64 |
-| Filesystem response channel | 1 entry |
-| Filesystem transport queue | 64 entries |
+| Boundary                              | Current limit           |
+| ------------------------------------- | ----------------------- |
+| SQL encoded message / Iroh payload    | 1 MiB                   |
+| Storage KV encoded frame              | 1 MiB                   |
+| Filesystem metadata/session frame     | 1 MiB                   |
+| Filesystem read request               | 1 MiB                   |
+| Filesystem response data chunk        | 1 MiB minus 1,024 bytes |
+| SQL default units per frame           | 64                      |
+| SQL default session accounting budget | 64 MiB                  |
+| SQL data apply batch                  | 1 MiB                   |
+| Storage file stage                    | 64 MiB per stage        |
+| Filesystem active requests            | 64                      |
+| Filesystem response channel           | 1 entry                 |
+| Filesystem transport queue            | 64 entries              |
 
 Length-prefixed SQL and filesystem transports reject oversized payload lengths before allocating payload buffers. Storage's KV limit overrides the generic sibling KV default; do not treat generic defaults as deployed Storage limits.
 
@@ -48,7 +48,7 @@ Storage uses 5-second connection/handshake bounds, 10-second policy-check bounds
 
 Owning crates validate version, framing, and payload. Admission must precede synchronization, and the target requires renewed policy checks before each bounded operation. Do not use permissive adapters to hide missing checks.
 
-The [system plan](../../../docs/unified-server-plan.md) owns test results and remaining acceptance work. Earlier policy-replica tests do not prove the deployed live-HTTP admission path. Full outage, cancellation, resource-bound, and topology acceptance must be established separately.
+The [implementation evidence](../../../.scratch/unified-server/evidence.md) preserves recorded test results; the [ticket index](../../../.scratch/unified-server/map.md) owns remaining acceptance work. Earlier policy-replica tests do not prove the deployed live-HTTP admission path. Full outage, cancellation, resource-bound, and topology acceptance must be established separately.
 
 ## Source
 

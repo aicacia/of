@@ -1,6 +1,6 @@
 # Storage API
 
-This is a source-checked API description, not a runtime acceptance result. See [security](security.md) for peer authorization and the [system plan](../../../docs/unified-server-plan.md) for targets and open work.
+This is a source-checked API description, not a runtime acceptance result. See [security](security.md) for peer authorization, the [unified service spec](../../../.scratch/unified-server/spec.md) for targets, and the [ticket index](../../../.scratch/unified-server/map.md) for open work.
 
 ## Identity and ownership
 
@@ -14,16 +14,16 @@ Use IdP-issued Storage-audience access tokens from sign-in or exchange. Check th
 
 Routes below show the unified `/storage` prefix; standalone prefixes are configurable.
 
-| Operation | Route | Action | Success |
-| --- | --- | --- | --- |
-| Create database | `POST /storage/databases` | `write` | `201` |
-| List databases | `GET /storage/databases` | `read` | `200` |
-| Get database | `GET /storage/databases/{database_id}` | `read` | `200` |
-| Delete database | `DELETE /storage/databases/{database_id}` | `write` | `204` |
-| Create filesystem | `POST /storage/filesystems` | `write` | `201` |
-| List filesystems | `GET /storage/filesystems` | `read` | `200` |
-| Get filesystem | `GET /storage/filesystems/{filesystem_id}` | `read` | `200` |
-| Delete filesystem | `DELETE /storage/filesystems/{filesystem_id}` | `write` | `204` |
+| Operation         | Route                                         | Action  | Success |
+| ----------------- | --------------------------------------------- | ------- | ------- |
+| Create database   | `POST /storage/databases`                     | `write` | `201`   |
+| List databases    | `GET /storage/databases`                      | `read`  | `200`   |
+| Get database      | `GET /storage/databases/{database_id}`        | `read`  | `200`   |
+| Delete database   | `DELETE /storage/databases/{database_id}`     | `write` | `204`   |
+| Create filesystem | `POST /storage/filesystems`                   | `write` | `201`   |
+| List filesystems  | `GET /storage/filesystems`                    | `read`  | `200`   |
+| Get filesystem    | `GET /storage/filesystems/{filesystem_id}`    | `read`  | `200`   |
+| Delete filesystem | `DELETE /storage/filesystems/{filesystem_id}` | `write` | `204`   |
 
 Create accepts an optional `name`. List returns only the caller's namespace. Unknown, deleted, wrong-kind, and wrong-namespace resources do not grant access; a delete that finds no matching resource returns `404`.
 
@@ -35,11 +35,11 @@ IdP owns Device enrollment, approval, and revocation. Management owns resource s
 
 Routes below show the unified `/management` prefix. Management bearer validation uses IdP introspection, requires a User principal with the Management audience, and checks the Application-scoped `devices.select` permission.
 
-| Operation | Route | Current behavior |
-| --- | --- | --- |
-| Select resource | `PUT /management/devices/{device_id}/selection` | Validates Device and resource, stores selection, returns `204` |
+| Operation         | Route                                                                                    | Current behavior                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Select resource   | `PUT /management/devices/{device_id}/selection`                                          | Validates Device and resource, stores selection, returns `204`           |
 | Deselect resource | `DELETE /management/devices/{device_id}/selection/{application_id}/{kind}/{resource_id}` | Checks selection-policy owner and permission; returns `204` or not found |
-| Deselect all | `DELETE /management/devices/{device_id}/selection` | Mounted but denies; use the resource-specific route |
+| Deselect all      | `DELETE /management/devices/{device_id}/selection`                                       | Mounted but denies; use the resource-specific route                      |
 
 Selection JSON contains `applicationId`, `kind` (`database` or `filesystem`), `id`, and `storageAccessToken`. The token is not supplied through an `X-Storage-Authorization` header. The Management token's Application must match `applicationId`.
 

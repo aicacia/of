@@ -6,7 +6,7 @@
 - Read the shared `GLOSSARY.md` and relevant context glossaries.
 - Read relevant system-wide decisions in `docs/adr/`.
 - Read relevant context contracts in `crates/<context>-service/docs/` and decisions in its `adr/` directory, as listed in the glossary map.
-- Read `docs/unified-server-plan.md` for architecture rules and implementation status.
+- Read `.scratch/unified-server/spec.md` for unified service requirements, `map.md` in that feature for active tickets, and `evidence.md` for historical implementation results. Operator procedures are in `operations.md` in the same feature.
 
 If a mapped file or directory is absent, proceed silently. Create glossaries and ADRs only when terms or decisions are resolved.
 

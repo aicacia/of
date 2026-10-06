@@ -26,4 +26,4 @@ Key rotation need not change the Principal's identity. A stable entity subject d
 - Raw public keys as subjects: rejected because key rotation would change identity.
 - One shared private signer for replicas: rejected by system ADR 0002.
 
-For setup lifecycle, authority, synchronization, and acceptance status, use the [system plan](../../../../docs/unified-server-plan.md).
+For setup lifecycle, authority, and synchronization requirements, use the [unified service spec](../../../../.scratch/unified-server/spec.md). Remaining work is in the [ticket index](../../../../.scratch/unified-server/map.md); recorded results are in [implementation evidence](../../../../.scratch/unified-server/evidence.md).

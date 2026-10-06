@@ -4,7 +4,7 @@
 
 - [Shared terms](GLOSSARY.md): Installation, User, Application, Principal, Device, and setup lifecycle.
 - [System-wide decisions](docs/adr/).
-- [Architecture and implementation status](docs/unified-server-plan.md).
+- [Unified service spec](.scratch/unified-server/spec.md), [tickets](.scratch/unified-server/map.md), and [implementation evidence](.scratch/unified-server/evidence.md).
 
 ## Contexts
 
