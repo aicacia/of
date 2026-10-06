@@ -1,4 +1,4 @@
-use std::{io, sync::Arc, time::Duration};
+use std::{io, path::PathBuf, sync::Arc, time::Duration};
 
 use iroh::EndpointId;
 use iroh_chain::Server;
@@ -24,10 +24,24 @@ impl StorageReplicationRuntime {
         management: ManagementClient,
         databases: Arc<DatabaseRuntime>,
         file_systems: Arc<ScopedFileSystemRuntime<EndpointId>>,
+        staging_directory: PathBuf,
+        cancellation_token: CancellationToken,
     ) -> Self {
-        let database = DatabaseProtocolHandler::new(server.clone(), management.clone(), databases);
-        let file_system = StorageProtocolHandler::new(server.clone(), management, file_systems);
-        let data_handler = DataProtocolHandler::new(database.clone(), file_system.clone());
+        let database = DatabaseProtocolHandler::new(
+            server.clone(),
+            management.clone(),
+            databases,
+            staging_directory,
+            cancellation_token.clone(),
+        );
+        let file_system = StorageProtocolHandler::new(
+            server.clone(),
+            management,
+            file_systems,
+            cancellation_token.clone(),
+        );
+        let data_handler =
+            DataProtocolHandler::new(database.clone(), file_system.clone(), cancellation_token);
         Self {
             data_handler,
             sync_task: None,

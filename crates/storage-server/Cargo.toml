@@ -88,6 +88,8 @@ iroh-chain = { path = "../../../ofnet/crates/iroh-chain", default-features = fal
 
 # Async
 tokio = { version = "1.52", default-features = false, features = [
+  "fs",
+  "io-util",
   "macros",
   "rt-multi-thread",
   "time",
@@ -100,5 +102,8 @@ log = { version = "0.4", default-features = false, features = ["std"] }
 env_logger = { version = "0.10", default-features = false, features = [] }
 
 [dev-dependencies]
+# Serialization
+postcard = { version = "1.1", default-features = false, features = ["alloc"] }
+
 # Web
 tower = { version = "0.5", default-features = false, features = ["util"] }

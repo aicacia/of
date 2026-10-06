@@ -19,6 +19,8 @@ mod runtime;
 #[cfg(feature = "network")]
 mod storage_protocol;
 #[cfg(feature = "network")]
+mod sync_stage;
+#[cfg(feature = "network")]
 mod sync_timeout;
 
 #[cfg(feature = "cli")]

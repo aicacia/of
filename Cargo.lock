@@ -6748,6 +6748,7 @@ dependencies = [
  "model",
  "ofdb-kv-sync",
  "ofdb-sql",
+ "postcard",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

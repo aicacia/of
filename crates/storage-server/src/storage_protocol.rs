@@ -11,6 +11,7 @@ use model::contract::SelectedResource;
 
 use storage_model::StorageNamespace;
 use storage_service::ScopedFileSystemRuntime;
+use tokio_util::sync::CancellationToken;
 
 use crate::{ManagementClient, sync_timeout};
 
@@ -23,6 +24,7 @@ pub(crate) struct StorageProtocolHandler {
     server: Server,
     management: ManagementClient,
     file_systems: Arc<ScopedFileSystemRuntime<EndpointId>>,
+    cancellation_token: CancellationToken,
 }
 
 impl StorageProtocolHandler {
@@ -30,11 +32,13 @@ impl StorageProtocolHandler {
         server: Server,
         management: ManagementClient,
         file_systems: Arc<ScopedFileSystemRuntime<EndpointId>>,
+        cancellation_token: CancellationToken,
     ) -> Self {
         Self {
             server,
             management,
             file_systems,
+            cancellation_token,
         }
     }
 
@@ -251,19 +255,33 @@ impl StorageProtocolHandler {
                 return;
             }
         };
+        let cancellation_token = self.cancellation_token.clone();
         tokio::spawn(async move {
-            match sync_timeout::run(
-                SYNC_OPERATION_TIMEOUT,
-                "filesystem sync operation timed out",
-                async {
-                    file_system
-                        .sync_peer(transport)
-                        .await
-                        .map_err(std::io::Error::other)
+            let mut sync_task = tokio::spawn(async move {
+                sync_timeout::run(
+                    SYNC_OPERATION_TIMEOUT,
+                    "filesystem sync operation timed out",
+                    async {
+                        file_system
+                            .sync_peer(transport)
+                            .await
+                            .map_err(std::io::Error::other)
+                    },
+                )
+                .await
+            });
+            let result = tokio::select! {
+                () = cancellation_token.cancelled() => {
+                    sync_task.abort();
+                    let _ = sync_task.await;
+                    return;
+                }
+                result = &mut sync_task => match result {
+                    Ok(result) => result,
+                    Err(error) => Err(std::io::Error::other(error)),
                 },
-            )
-            .await
-            {
+            };
+            match result {
                 Ok(()) => {}
                 Err(error) if error.kind() == std::io::ErrorKind::TimedOut => {
                     log::warn!("filesystem sync operation timed out")

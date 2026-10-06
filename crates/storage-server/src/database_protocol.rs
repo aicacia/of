@@ -1,4 +1,4 @@
-use std::{future::Future, io, pin::Pin, sync::Arc, time::Duration};
+use std::{future::Future, io, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
 
 use iroh::{
     EndpointId,
@@ -11,8 +11,12 @@ use ofdb_sql::{IrohTransport, SessionConfig, SyncRole, SyncTransport};
 use serde::{Deserialize, Serialize};
 use storage_model::StorageNamespace;
 use storage_service::{DatabaseId, DatabaseRuntime};
+use tokio_util::sync::CancellationToken;
 
-use crate::{ManagementClient, data_protocol::DATABASE_STREAM_KIND, sync_timeout};
+use crate::{
+    ManagementClient, data_protocol::DATABASE_STREAM_KIND, sync_stage::FileSyncStageFactory,
+    sync_timeout,
+};
 
 type FrameAuthorizer = Arc<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;
 
@@ -40,6 +44,8 @@ pub(crate) struct DatabaseProtocolHandler {
     server: Server,
     management: ManagementClient,
     databases: Arc<DatabaseRuntime>,
+    stage_factory: FileSyncStageFactory,
+    cancellation_token: CancellationToken,
 }
 
 impl DatabaseProtocolHandler {
@@ -47,11 +53,15 @@ impl DatabaseProtocolHandler {
         server: Server,
         management: ManagementClient,
         databases: Arc<DatabaseRuntime>,
+        staging_directory: PathBuf,
+        cancellation_token: CancellationToken,
     ) -> Self {
         Self {
             server,
             management,
             databases,
+            stage_factory: FileSyncStageFactory::new(staging_directory),
+            cancellation_token,
         }
     }
 
@@ -175,10 +185,11 @@ impl DatabaseProtocolHandler {
             "database sync operation timed out",
             async {
                 database
-                    .synchronize(
+                    .synchronize_with_stage_factory(
                         &mut transport,
                         &SessionConfig::default(),
                         SyncRole::Initiator,
+                        &self.stage_factory,
                     )
                     .await
                     .map_err(io::Error::other)?;
@@ -271,8 +282,19 @@ impl DatabaseProtocolHandler {
     pub(crate) async fn accept_stream(
         &self,
         connection: Connection,
+        send: iroh::endpoint::SendStream,
+        recv: iroh::endpoint::RecvStream,
+    ) {
+        self.accept_stream_with_timeout(connection, send, recv, SYNC_OPERATION_TIMEOUT)
+            .await;
+    }
+
+    async fn accept_stream_with_timeout(
+        &self,
+        connection: Connection,
         mut send: iroh::endpoint::SendStream,
         mut recv: iroh::endpoint::RecvStream,
+        operation_timeout: Duration,
     ) {
         let handshake =
             match tokio::time::timeout(HANDSHAKE_TIMEOUT, read_handshake(&mut recv)).await {
@@ -334,6 +356,8 @@ impl DatabaseProtocolHandler {
             return;
         }
         let handler = self.clone();
+        let cancellation_token = self.cancellation_token.clone();
+        let stage_factory = self.stage_factory.clone();
         tokio::spawn(async move {
             let resource_for_guard = handshake.resource.clone();
             let authorize: FrameAuthorizer = Arc::new(move || {
@@ -346,36 +370,51 @@ impl DatabaseProtocolHandler {
                 transport: IrohTransport::new(send, recv),
                 authorize,
             };
-            let result = sync_timeout::run(
-                SYNC_OPERATION_TIMEOUT,
-                "database sync operation timed out",
-                async {
-                    database
-                        .synchronize(
-                            &mut transport,
-                            &SessionConfig::default(),
-                            SyncRole::Responder,
+            let sync_task = tokio::spawn(async move {
+                sync_timeout::run(
+                    operation_timeout,
+                    "database sync operation timed out",
+                    async {
+                        database
+                            .synchronize_with_stage_factory(
+                                &mut transport,
+                                &SessionConfig::default(),
+                                SyncRole::Responder,
+                                &stage_factory,
+                            )
+                            .await
+                            .map_err(io::Error::other)?;
+                        ofdb_kv_sync::synchronize(
+                            &kv_store,
+                            &mut KvAuthorizedTransport {
+                                transport: &mut transport,
+                            },
+                            ofdb_kv_sync::SyncRole::Responder,
+                            ofdb_kv_sync::Config {
+                                max_frame_bytes: MAX_SYNC_FRAME_BYTES,
+                                ..ofdb_kv_sync::Config::default()
+                            },
                         )
                         .await
-                        .map_err(io::Error::other)?;
-                    ofdb_kv_sync::synchronize(
-                        &kv_store,
-                        &mut KvAuthorizedTransport {
-                            transport: &mut transport,
-                        },
-                        ofdb_kv_sync::SyncRole::Responder,
-                        ofdb_kv_sync::Config {
-                            max_frame_bytes: MAX_SYNC_FRAME_BYTES,
-                            ..ofdb_kv_sync::Config::default()
-                        },
-                    )
-                    .await
-                    .map_err(|error| {
-                        io::Error::other(format!("database KV sync failed: {error:?}"))
-                    })
+                        .map_err(|error| {
+                            io::Error::other(format!("database KV sync failed: {error:?}"))
+                        })
+                    },
+                )
+                .await
+            });
+            let mut sync_task = sync_task;
+            let result = tokio::select! {
+                () = cancellation_token.cancelled() => {
+                    sync_task.abort();
+                    let _ = sync_task.await;
+                    return;
+                }
+                result = &mut sync_task => match result {
+                    Ok(result) => result,
+                    Err(error) => Err(io::Error::other(error)),
                 },
-            )
-            .await;
+            };
             match result {
                 Ok(()) => {}
                 Err(error) if error.kind() == io::ErrorKind::TimedOut => {

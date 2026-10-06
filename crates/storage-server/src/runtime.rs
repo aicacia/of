@@ -71,6 +71,8 @@ pub fn build_runtime(
                 management,
                 Arc::clone(&databases),
                 file_systems,
+                data_dir.join("sync-staging"),
+                cancellation_token.clone(),
             ))
         }
         _ => None,
