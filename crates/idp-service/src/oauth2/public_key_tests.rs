@@ -208,11 +208,17 @@ async fn public_node_signers_verify_without_private_material_or_principal_impers
         .find_public_jwk(binding.key_id)
         .await
         .expect("approved signer");
-    let mut public_record = serde_json::json!({"id": binding.key_id, "public_jwk": approved});
+    let mut public_record = serde_json::json!({
+        "id": binding.key_id, "member_id": binding.member_id, "active_member_id": binding.member_id,
+        "key_id": binding.key_id, "issuer": service.oauth_config.issuer,
+        "public_jwk": serde_json::to_string(&approved).expect("SQL public JWK"),
+        "approved_at": 1, "revoked_at": null, "expires_at": null,
+    });
     assert!(
         crate::security_sync::PublicSecurityTable::Signers
             .permits_record(public_record.as_object().expect("public record"))
     );
+    public_record["public_jwk"] = serde_json::to_value(&approved).expect("public JWK object");
     public_record["public_jwk"]["d"] = "private-scalar-must-not-synchronize".into();
     assert!(
         !crate::security_sync::PublicSecurityTable::Signers
@@ -433,6 +439,91 @@ async fn public_keys_survive_native_reopen_without_secret_store() {
         );
     }
     std::fs::remove_file(path).expect("remove temporary database");
+}
+
+#[tokio::test]
+async fn id_tokens_bind_the_principal_root_for_owner_local_verification() {
+    let (engine, service, client, principal) = setup().await;
+    let tokens = issue(&service, &client, &principal).await;
+    let token = tokens.id_token.expect("issued ID token").0;
+    let (header, claims) = decode_jwt::<serde_json::Value>(&token).expect("ID claims");
+    assert_eq!(claims["principal_key_id"], principal.key.id.to_string());
+    assert_ne!(header.kid, principal.key.id.to_string());
+    let (_, typed) =
+        decode_jwt::<idp_model::contract::IdTokenClaims>(&token).expect("typed bound ID claims");
+    assert_eq!(typed.principal_key_id, principal.key.id);
+    assert_eq!(
+        typed.user_info.as_ref().expect("OIDC profile").sub,
+        principal.user.id.to_string()
+    );
+    assert_eq!(
+        serde_json::to_value(&typed).expect("roundtrip profile"),
+        claims
+    );
+    let (verifier_engine, verifier) = public_verifier(&engine).await;
+    let (verified, _) = verifier
+        .verify_token_principal(&token)
+        .await
+        .expect("owner verifies ID Principal");
+    assert_eq!(verified.r#use, model::contract::TokenUse::Id);
+    assert_eq!(verified.sub, principal.user.id.to_string());
+    assert!(
+        verifier
+            .validate_access_token(&token, &client.client_id)
+            .await
+            .is_err(),
+        "ID token is not an access token"
+    );
+    for binding in [None, Some(Id::now_v7())] {
+        let mut altered = claims.clone();
+        if let Some(binding) = binding {
+            altered["principal_key_id"] = binding.to_string().into();
+        } else {
+            altered
+                .as_object_mut()
+                .expect("claims object")
+                .remove("principal_key_id");
+        }
+        let invalid = encode_jwt(
+            &service.local_signing_jwk().await.expect("Node signer"),
+            &altered,
+        )
+        .expect("sign altered binding");
+        assert!(
+            verifier.verify_token_principal(&invalid).await.is_err(),
+            "missing/wrong signed root must deny"
+        );
+    }
+    service
+        .key_service
+        .rotate_active_entity_root_key(
+            EntityType::User,
+            principal.user.id,
+            "rotated root".into(),
+            None,
+        )
+        .await
+        .expect("rotate local Principal root");
+    assert!(
+        service.verify_token_principal(&token).await.is_err(),
+        "owner learns root rotation"
+    );
+    assert!(
+        verifier.verify_token_principal(&token).await.is_ok(),
+        "disconnected verifier has not learned root rotation"
+    );
+    set(
+        &verifier_engine,
+        "keys",
+        principal.key.id,
+        "revoked_at",
+        Value::Integer(chrono::Utc::now().timestamp()),
+    )
+    .await;
+    assert!(
+        verifier.verify_token_principal(&token).await.is_err(),
+        "locally learned root revocation denies ID Principal verification"
+    );
 }
 
 #[tokio::test]

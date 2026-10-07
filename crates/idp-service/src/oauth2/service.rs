@@ -1569,6 +1569,7 @@ where
                 r#use: TokenUse::Id,
                 ..access_claims.clone()
             },
+            principal_key_id: principal.get_key().id,
             user_info,
         };
 

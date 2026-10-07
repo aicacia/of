@@ -140,7 +140,9 @@ impl PublicSecurityTable {
                 "user_id",
                 "client_id",
                 "redirect_uri",
-                "scopes",
+                "scope",
+                "authorization_details",
+                "revoked_at",
                 "created_at",
                 "updated_at",
             ],
@@ -148,10 +150,12 @@ impl PublicSecurityTable {
                 "id",
                 "code_hash",
                 "client_id",
+                "user_id",
                 "key_id",
                 "redirect_uri",
                 "scopes",
                 "resource",
+                "authorization_details",
                 "code_challenge",
                 "code_challenge_method",
                 "nonce",
@@ -177,31 +181,81 @@ impl PublicSecurityTable {
         }
     }
 
-    /// Reject unknown fields and private JWK material before handing records to a sync adapter.
+    fn nullable(self, column: &str) -> bool {
+        if column == "id" {
+            return false;
+        }
+        match self {
+            Self::Keys => column != "derivation_index",
+            Self::Devices => column != "owner_subject",
+            Self::Members => column == "revoked_at",
+            Self::Signers => matches!(column, "active_member_id" | "revoked_at" | "expires_at"),
+            _ => true,
+        }
+    }
+
+    fn permits_value(self, column: &str, value: &serde_json::Value) -> bool {
+        if value.is_null() {
+            return self.nullable(column);
+        }
+        let uuid = matches!(
+            column,
+            "id" | "parent_id"
+                | "entity_id"
+                | "application_id"
+                | "user_id"
+                | "member_id"
+                | "active_member_id"
+                | "key_id"
+        ) || (column == "client_id" && self != Self::Clients);
+        if uuid {
+            return value
+                .as_str()
+                .and_then(|text| idp_model::model::Id::parse_str(text).ok())
+                .is_some_and(|id| !id.is_nil() && (column != "id" || id.get_version_num() == 7));
+        }
+        let integer = matches!(
+            column,
+            "sex"
+                | "entity_type"
+                | "derivation_index"
+                | "hardened"
+                | "state"
+                | "client_type"
+                | "token_endpoint_auth_method"
+                | "code_challenge_method"
+        ) || column.ends_with("_at")
+            || (self == Self::Clients && column == "profile");
+        if integer {
+            value.as_i64().is_some()
+        } else {
+            value.is_string()
+        }
+    }
+
+    /// Validate a complete SQL-shaped public projection, not provenance or import authorization.
     #[must_use]
     pub fn permits_record(
         self,
         record: &serde_json::Map<alloc::string::String, serde_json::Value>,
     ) -> bool {
-        if !record.contains_key("id")
-            || record
-                .keys()
-                .any(|column| !self.columns().contains(&column.as_str()))
+        if record.len() != self.columns().len()
+            || self.columns().iter().any(|column| {
+                record
+                    .get(*column)
+                    .is_none_or(|value| !self.permits_value(column, value))
+            })
         {
             return false;
         }
-        if let Some(public) = record.get("public_jwk") {
-            let decoded;
-            let public = if let Some(text) = public.as_str() {
-                let Ok(value) = serde_json::from_str::<serde_json::Value>(text) else {
-                    return false;
-                };
-                decoded = value;
-                &decoded
-            } else {
-                public
+        if let Some(public) = record.get("public_jwk").filter(|value| !value.is_null()) {
+            let Some(text) = public.as_str() else {
+                return false;
             };
-            let Some(public) = public.as_object() else {
+            let Ok(decoded) = serde_json::from_str::<serde_json::Value>(text) else {
+                return false;
+            };
+            let Some(public) = decoded.as_object() else {
                 return false;
             };
             if public.keys().any(|field| {
@@ -219,7 +273,7 @@ impl PublicSecurityTable {
             }
         }
         for field in ["code_hash", "token_hash"] {
-            if let Some(hash) = record.get(field)
+            if let Some(hash) = record.get(field).filter(|value| !value.is_null())
                 && hash.as_str().is_none_or(|hash| {
                     hash.len() != 64 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit())
                 })
@@ -250,11 +304,119 @@ pub fn public_security_tables() -> Vec<PublicSecurityTable> {
 
 #[cfg(test)]
 mod tests {
-    use super::{PublicSecurityTable, public_security_tables};
+    use super::PublicSecurityTable;
+    #[cfg(feature = "replica")]
+    use super::public_security_tables;
 
     #[test]
-    fn projections_exclude_passwords_secrets_private_keys_and_raw_grants() {
+    fn projections_require_complete_typed_records() {
+        let table = PublicSecurityTable::Users;
+        let mut record: serde_json::Map<alloc::string::String, serde_json::Value> = table
+            .columns()
+            .iter()
+            .map(|column| ((*column).into(), serde_json::Value::Null))
+            .collect();
+        record.insert(
+            "id".into(),
+            serde_json::json!("01900000-0000-7000-8000-000000000001"),
+        );
+        assert!(
+            table.permits_record(&record),
+            "complete nullable SQL projection"
+        );
+        for column in table.columns() {
+            let mut incomplete = record.clone();
+            incomplete.remove(*column);
+            assert!(
+                !table.permits_record(&incomplete),
+                "missing {column} must not implicitly erase state"
+            );
+        }
+        for (column, value) in [
+            ("id", serde_json::Value::Null),
+            ("id", serde_json::json!("not-a-uuid")),
+            ("created_at", serde_json::json!("1")),
+            ("created_at", serde_json::json!(1.5)),
+            ("name", serde_json::json!({"password": "secret"})),
+        ] {
+            let mut malformed = record.clone();
+            malformed.insert(column.into(), value);
+            assert!(
+                !table.permits_record(&malformed),
+                "invalid type for {column}"
+            );
+        }
+    }
+
+    #[cfg(feature = "replica")]
+    #[tokio::test]
+    async fn projections_match_actual_schema_columns_and_types() {
+        use db::{AutomergeRowCodec, Engine, InMemoryKernel, ValueType};
+        let engine =
+            alloc::sync::Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
+        idp_model::replica::up(&engine)
+            .await
+            .expect("initialize actual schema");
+        let public = serde_json::json!({"kid": idp_model::model::Id::now_v7(), "use": "sig", "alg": "ES256K", "kty": "Ec", "crv": "secp256k1",
+            "x": "eb5mfvncu6xVoGKVzocLBwKb/NstzijZWfKBWxb4F5g", "y": "SDradyajxGVdpPv8DhEIqP0XtEimhVQZnEfQj/sQ1Lg"});
         for table in public_security_tables() {
+            let schema = engine
+                .table_schema(table.name())
+                .await
+                .expect("public table schema");
+            let mut record = serde_json::Map::new();
+            for column in &schema.columns {
+                if [
+                    "client_secret_hash",
+                    "enrollment_code_hash",
+                    "enrollment_expires_at",
+                    "pairing_accepting_public_key",
+                ]
+                .contains(&column.name.as_str())
+                {
+                    continue;
+                }
+                assert!(
+                    table.columns().contains(&column.name.as_str()),
+                    "{table:?} missing actual column {}",
+                    column.name
+                );
+                let value = match column.r#type {
+                    ValueType::Uuid => serde_json::json!(idp_model::model::Id::now_v7()),
+                    ValueType::Integer => serde_json::json!(1),
+                    ValueType::Text => serde_json::json!("fixture"),
+                    _ => panic!("unexpected public column type"),
+                };
+                record.insert(column.name.clone(), value);
+            }
+            assert_eq!(
+                record.len(),
+                table.columns().len(),
+                "no invented projection columns"
+            );
+            for hash in ["code_hash", "token_hash"] {
+                if record.contains_key(hash) {
+                    record.insert(hash.into(), serde_json::json!("a".repeat(64)));
+                }
+            }
+            if record.contains_key("public_jwk") {
+                record.insert(
+                    "public_jwk".into(),
+                    serde_json::json!(serde_json::to_string(&public).expect("SQL JWK text")),
+                );
+            }
+            assert!(
+                table.permits_record(&record),
+                "complete schema-shaped {table:?} projection"
+            );
+            for column in table.columns() {
+                let mut missing = record.clone();
+                missing.remove(*column);
+                assert!(
+                    !table.permits_record(&missing),
+                    "{table:?} requires {column} even when SQL-nullable"
+                );
+            }
             for forbidden in [
                 "password",
                 "secret_hash",
@@ -267,22 +429,35 @@ mod tests {
                 "private_key",
                 "d",
             ] {
-                let mut record = serde_json::json!({"id": "fixture"});
-                record
-                    .as_object_mut()
-                    .expect("record")
-                    .insert(forbidden.into(), serde_json::json!("secret"));
+                let mut injected = record.clone();
+                injected.insert(forbidden.into(), serde_json::json!("secret"));
                 assert!(
-                    !table.permits_record(record.as_object().expect("record")),
-                    "{table:?} admitted {forbidden}"
+                    !table.permits_record(&injected),
+                    "{table:?} must not project {forbidden}"
+                );
+            }
+            for hash in ["code_hash", "token_hash"] {
+                if record.contains_key(hash) {
+                    let mut raw = record.clone();
+                    raw.insert(hash.into(), serde_json::json!("raw-grant"));
+                    assert!(
+                        !table.permits_record(&raw),
+                        "raw grant is not hashed lifecycle data"
+                    );
+                }
+            }
+            for column in &schema.columns {
+                if !record.contains_key(&column.name) {
+                    continue;
+                }
+                let mut wrong = record.clone();
+                wrong.insert(column.name.clone(), serde_json::json!(false));
+                assert!(
+                    !table.permits_record(&wrong),
+                    "{table:?} accepts wrong type for {}",
+                    column.name
                 );
             }
         }
-        let public = serde_json::json!({"id": "fixture", "client_id": "client"});
-        assert!(PublicSecurityTable::Clients.permits_record(public.as_object().expect("record")));
-        let raw = serde_json::json!({"id": "fixture", "token_hash": "raw-refresh-token"});
-        assert!(
-            !PublicSecurityTable::RefreshTokens.permits_record(raw.as_object().expect("record"))
-        );
     }
 }

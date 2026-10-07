@@ -255,18 +255,13 @@ mod tests {
         io::{Read, Write},
         net::TcpStream,
         os::unix::fs::PermissionsExt,
-        sync::{
-            Arc, Mutex,
-            atomic::{AtomicBool, Ordering},
-        },
+        sync::{Arc, Mutex},
     };
 
-    use axum::{Json, Router, extract::State, http::HeaderMap, routing::post};
     use db::open_native_engine;
     use idp_model::contract::{
-        ClientCredentialsGrantRequest, EntityType, IntrospectionRequest,
-        MANAGEMENT_PERMISSION_EVALUATE_SCOPE, OAuth2ClientAuth, PermissionAuditIdentity,
-        PermissionEvaluationRequest, PermissionEvaluationResponse, TokenRequest,
+        ClientCredentialsGrantRequest, EntityType, IntrospectionRequest, OAuth2ClientAuth,
+        TokenRequest,
     };
     use idp_service::{
         PasswordConfig,
@@ -282,7 +277,7 @@ mod tests {
     };
     use iroh::{Endpoint, SecretKey, endpoint::presets};
     use key::{DerivationPath, DerivedKey};
-    use management_service::{LocalPermissions, MANAGEMENT_APPLICATION_URI};
+    use management_service::LocalPermissions;
     use model::contract::{PrincipalType, StandardClaims, TokenType, TokenUse};
 
     struct ModifierTolerantTestStore {
@@ -326,40 +321,6 @@ mod tests {
     }
 
     use super::{has_duplicates, provision, validate_values};
-
-    #[derive(Clone)]
-    struct PermissionFixture {
-        requests: Arc<Mutex<Vec<PermissionEvaluationRequest>>>,
-        allowed: Arc<AtomicBool>,
-    }
-
-    async fn allow_permission_evaluation(
-        State(fixture): State<PermissionFixture>,
-        headers: HeaderMap,
-        Json(request): Json<PermissionEvaluationRequest>,
-    ) -> Json<PermissionEvaluationResponse> {
-        let token = headers
-            .get(http::header::AUTHORIZATION)
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.strip_prefix("Bearer "))
-            .expect("permission request has bearer token");
-        let (_, claims) = decode_jwt::<StandardClaims>(token)
-            .expect("permission request has a valid IdP-signed token");
-        fixture
-            .requests
-            .lock()
-            .expect("permission request log lock")
-            .push(request.clone());
-        Json(PermissionEvaluationResponse {
-            audit: PermissionAuditIdentity {
-                service_subject: claims.sub.parse().expect("service subject is an Id"),
-                service_client_id: claims.client_id,
-                actor: request.subject.clone(),
-            },
-            request,
-            allowed: fixture.allowed.load(Ordering::SeqCst),
-        })
-    }
 
     #[derive(Clone)]
     struct TestPrivateKeyRepo {
@@ -585,14 +546,6 @@ mod tests {
             )
             .await
             .expect("create canonical application");
-        applications
-            .create_application(
-                "Management evaluator application".to_owned(),
-                MANAGEMENT_APPLICATION_URI.to_owned(),
-                None,
-            )
-            .await
-            .expect("create Management evaluator application");
         let key_service = Arc::new(KeyService::new(
             DbKeyRepo::new(Arc::clone(&engine)),
             PrivateKeyKeyringRepo::new_with_store("idp-live-test", test_keyring_store()),
@@ -665,30 +618,71 @@ mod tests {
         let storage_idp_client_secret = storage_idp_credentials["client_secret"]
             .as_str()
             .expect("Storage IdP client secret is a string");
-        let evaluator_credentials_path = root.join("idp-management-credentials.json");
-        provision(
-            &applications,
-            &clients,
-            &key_service,
-            MANAGEMENT_APPLICATION_URI,
-            "idp-management-evaluator",
-            vec![MANAGEMENT_APPLICATION_URI.to_owned()],
-            vec![MANAGEMENT_PERMISSION_EVALUATE_SCOPE.to_owned()],
-            &evaluator_credentials_path,
-        )
-        .await
-        .expect("provision IdP-to-Management evaluator client");
-        let evaluator_credentials: serde_json::Value = serde_json::from_slice(
-            &fs::read(&evaluator_credentials_path).expect("read evaluator credentials"),
-        )
-        .expect("parse evaluator credentials");
-        let _evaluator_client_id = evaluator_credentials["client_id"]
-            .as_str()
-            .expect("evaluator client ID is a string");
-        let _evaluator_client_secret = evaluator_credentials["client_secret"]
-            .as_str()
-            .expect("evaluator client secret is a string");
         let issuer = "https://idp.example.test";
+        let secret_key = SecretKey::generate();
+        let endpoint = Endpoint::builder(presets::N0)
+            .secret_key(secret_key.clone())
+            .bind()
+            .await
+            .expect("bind temporary IdP Iroh endpoint");
+        let devices = Arc::new(DbDeviceRepo::new(Arc::clone(&engine)));
+        let endpoint_id = endpoint.id().to_string();
+        let approved_device = devices
+            .create(
+                "test-owner".to_owned(),
+                "approved-storage".to_owned(),
+                endpoint_id.clone(),
+                "test-address".to_owned(),
+                Vec::new(),
+                0,
+            )
+            .await
+            .expect("create approved endpoint identity");
+        let secondary_endpoint_id = SecretKey::generate().public().to_string();
+        let secondary_device = devices
+            .create_pairing(
+                "secondary-storage".to_owned(),
+                secondary_endpoint_id.clone(),
+                "test-address".to_owned(),
+                endpoint_id.clone(),
+            )
+            .await
+            .expect("create secondary device enrollment");
+        devices
+            .approve_pairing(secondary_device.id)
+            .await
+            .expect("approve secondary device")
+            .expect("secondary device exists");
+        let local_signer = idp_service::oauth2::NodeSignerBinding {
+            member_id: approved_device.id,
+            key_id: idp_model::model::Id::now_v7(),
+            endpoint_id: endpoint_id.clone(),
+        };
+        let public_jwk = key_service
+            .prepare_node_signer(&local_signer)
+            .expect("prepare independent local Node signer");
+        idp_service::replica::DbReplicaSignerRepo::new(Arc::clone(&engine))
+            .enroll(
+                &idp_model::contract::ReplicaMembership {
+                    installation_id: issuer.into(),
+                    issuer: issuer.into(),
+                    member_id: local_signer.member_id,
+                    endpoint_id: endpoint_id.clone(),
+                    approved_at: 1,
+                    revoked_at: None,
+                },
+                &idp_model::contract::IdpSignerRecord {
+                    member_id: local_signer.member_id,
+                    key_id: local_signer.key_id,
+                    issuer: issuer.into(),
+                    public_jwk,
+                    approved_at: Some(1),
+                    revoked_at: None,
+                    expires_at: None,
+                },
+            )
+            .await
+            .expect("approve matching local signer trust");
         let oauth2_service = Arc::new(OAuth2Service::new(
             DbApplicationRepo::new(Arc::clone(&engine)),
             DbClientRepo::new(Arc::clone(&engine), Arc::clone(&key_service)),
@@ -699,6 +693,7 @@ mod tests {
             key_service,
             OAuth2Config {
                 issuer: issuer.to_owned(),
+                local_signer: Some(local_signer.clone()),
                 ..OAuth2Config::default()
             },
         ));
@@ -758,59 +753,16 @@ mod tests {
             )
             .await
             .expect("persist live authorization code");
-        let secret_key = SecretKey::generate();
-        let endpoint = Endpoint::builder(presets::N0)
-            .secret_key(secret_key.clone())
-            .bind()
+        let policy_engine = Arc::new(
+            open_native_engine(root.join("management.redb")).expect("open local policy store"),
+        );
+        management_service::replica::up(&policy_engine)
             .await
-            .expect("bind temporary IdP Iroh endpoint");
-        let devices = Arc::new(DbDeviceRepo::new(Arc::clone(&engine)));
-        let endpoint_id = endpoint.id().to_string();
-        let approved_device = devices
-            .create(
-                "test-owner".to_owned(),
-                "approved-storage".to_owned(),
-                endpoint_id.clone(),
-                "test-address".to_owned(),
-                Vec::new(),
-                0,
-            )
-            .await
-            .expect("create approved endpoint identity");
-        let secondary_endpoint_id = SecretKey::generate().public().to_string();
-        let secondary_device = devices
-            .create_pairing(
-                "secondary-storage".to_owned(),
-                secondary_endpoint_id.clone(),
-                "test-address".to_owned(),
-                endpoint_id.clone(),
-            )
-            .await
-            .expect("create secondary device enrollment");
-        devices
-            .approve_pairing(secondary_device.id)
-            .await
-            .expect("approve secondary device")
-            .expect("secondary device exists");
-        let permission_requests = Arc::new(Mutex::new(Vec::new()));
-        let permission_allowed = Arc::new(AtomicBool::new(false));
-        let management_app = Router::new()
-            .route("/permissions/evaluate", post(allow_permission_evaluation))
-            .with_state(PermissionFixture {
-                requests: Arc::clone(&permission_requests),
-                allowed: Arc::clone(&permission_allowed),
-            });
-        let management_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("bind Management permission fixture");
-        let _management_address = management_listener
-            .local_addr()
-            .expect("read Management fixture address");
-        let _management_server = tokio::spawn(async move {
-            axum::serve(management_listener, management_app)
-                .await
-                .expect("serve Management permission fixture");
-        });
+            .expect("initialize local policy");
+        let policy = management_service::ManagementService::new(
+            management_service::replica::DbPermissionRepo::new(Arc::clone(&policy_engine)),
+            management_service::replica::DbRoleRepo::new(Arc::clone(&policy_engine)),
+        );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind IdP HTTP listener");
@@ -823,10 +775,7 @@ mod tests {
             Arc::clone(&devices),
             Arc::new(crate::DeviceIdentity::new(endpoint.clone(), secret_key)),
         )
-        .with_local_permissions(LocalPermissions::new(Arc::new(
-            open_native_engine(root.join("management.redb"))
-                .expect("open local Management fixture"),
-        )));
+        .with_local_permissions(LocalPermissions::new(Arc::clone(&policy_engine)));
         let app = crate::openapi_router(state.clone(), "/")
             .split_for_parts()
             .0;
@@ -843,7 +792,7 @@ mod tests {
             .expect("read signer authorization address");
         let signer_state = state.clone().with_service_audience("live-refresh-client");
         let signer_app = crate::openapi_router(signer_state, "/").split_for_parts().0;
-        let _signer_server = tokio::spawn(async move {
+        let signer_server = tokio::spawn(async move {
             axum::serve(signer_listener, signer_app)
                 .await
                 .expect("serve signer authorization router");
@@ -900,43 +849,27 @@ mod tests {
         let (_, user_claims) = decode_jwt::<StandardClaims>(&user_access_token)
             .expect("decode issued user access token");
         assert_eq!(user_claims.aud, "live-refresh-client");
-        let member_id = idp_model::model::Id::now_v7();
-        let replica_signer_owner = state
-            .oauth2_service
-            .user_repo
-            .create_user_with_password("replica-signer-owner", "replica-signer-password")
-            .await
-            .expect("create independent replica signer owner");
-        state
-            .oauth2_service
-            .key_service
-            .ensure_entity_master_key(
-                EntityType::User,
-                replica_signer_owner.id,
-                "replica-signer-password",
-            )
-            .expect("create replica signer owner's master key");
-        let (replica_key, _) = state
-            .oauth2_service
-            .key_service
-            .create_key(
-                None,
-                EntityType::User,
-                replica_signer_owner.id,
-                true,
-                "replica local signer".into(),
-                None,
-            )
-            .await
-            .expect("create independent replica signer key");
+        assert_ne!(
+            decode_jwt::<StandardClaims>(&user_access_token)
+                .expect("user signer header")
+                .0
+                .kid,
+            refresh_key.id.to_string()
+        );
+        let member_id = secondary_device.id;
+        let peer_binding = idp_service::oauth2::NodeSignerBinding {
+            member_id,
+            key_id: idp_model::model::Id::now_v7(),
+            endpoint_id: secondary_endpoint_id.clone(),
+        };
         let signer_jwk = state
             .oauth2_service
-            .find_public_jwk(replica_key.id)
-            .await
-            .expect("load replica signer JWK for route authorization test");
+            .key_service
+            .prepare_node_signer(&peer_binding)
+            .expect("prepare independent peer signer");
         let enrollment = serde_json::json!({
             "memberId": member_id,
-            "endpointId": endpoint_id,
+            "endpointId": secondary_endpoint_id,
             "publicJwk": signer_jwk,
         })
         .to_string();
@@ -971,7 +904,11 @@ mod tests {
             )
             .await
             .expect("check rejected enrollment did not create signer state");
-        assert!(signer_rows[0].rows.is_empty());
+        assert_eq!(
+            signer_rows[0].rows.len(),
+            1,
+            "denied enrollment leaves only local signer"
+        );
         let membership_rows = engine
             .translate_and_execute(
                 "SELECT id FROM idp_replica_members",
@@ -979,72 +916,28 @@ mod tests {
             )
             .await
             .expect("check rejected enrollment did not create membership state");
-        assert!(membership_rows[0].rows.is_empty());
+        assert_eq!(
+            membership_rows[0].rows.len(),
+            1,
+            "denied enrollment leaves only local membership"
+        );
 
-        let replica_oauth = Arc::new(OAuth2Service::new(
-            DbApplicationRepo::new(Arc::clone(&engine)),
-            DbClientRepo::new(
-                Arc::clone(&engine),
-                Arc::clone(&state.oauth2_service.key_service),
-            ),
-            DbOAuth2AuthorizationCodeRepo::new(Arc::clone(&engine)),
-            DbOAuth2RefreshTokenRepo::new(Arc::clone(&engine)),
-            DbUserRepo::new(Arc::clone(&engine), PasswordConfig::default()),
-            DbOAuth2UserConsentRepo::new(Arc::clone(&engine)),
-            Arc::clone(&state.oauth2_service.key_service),
-            OAuth2Config {
-                issuer: issuer.to_owned(),
-                ..OAuth2Config::default()
-            },
-        ));
-        let replica_state = crate::RouterState::new(
-            issuer,
-            "https://example.test/app",
-            Arc::clone(&engine),
-            replica_oauth,
-            Arc::clone(&devices),
-            Arc::clone(&state.device_identity),
-        )
-        .with_service_audience("live-refresh-client");
-        let replica_app = crate::openapi_router(replica_state, "/")
-            .split_for_parts()
-            .0;
-        let replica_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        use idp_model::contract::IdentityAction;
+        let admin_role = policy
+            .provision_initial_administrator(
+                refresh_user.id,
+                idp_model::model::Id::now_v7(),
+                &[
+                    IdentityAction::DevicePairingRead,
+                    IdentityAction::DevicePairingUpdate,
+                    IdentityAction::ReplicaSignersEnroll,
+                    IdentityAction::ReplicaSignersRotate,
+                    IdentityAction::ReplicaSignersRevoke,
+                ]
+                .map(|action| (idp_model::model::Id::now_v7(), action)),
+            )
             .await
-            .expect("bind replica IdP listener");
-        let replica_address = replica_listener
-            .local_addr()
-            .expect("read replica listener address");
-        let _replica_server = tokio::spawn(async move {
-            axum::serve(replica_listener, replica_app)
-                .await
-                .expect("serve replica IdP listener");
-        });
-        let replica_denied = loopback_http_request(
-            replica_address,
-            "POST",
-            "/replica-signers",
-            "application/json",
-            &enrollment,
-            Some(&user_access_token),
-        );
-        assert!(
-            replica_denied.starts_with("HTTP/1.1 403"),
-            "{replica_denied}"
-        );
-        assert!(
-            engine
-                .translate_and_execute(
-                    "SELECT id FROM idp_replica_signers",
-                    &ofdb_sql::SqlTranslator
-                )
-                .await
-                .expect("check replica denied enrollment state")[0]
-                .rows
-                .is_empty()
-        );
-
-        permission_allowed.store(true, Ordering::SeqCst);
+            .expect("grant local signer administration permissions");
         let approved_enrollment = loopback_http_request(
             signer_address,
             "POST",
@@ -1055,11 +948,7 @@ mod tests {
         );
         assert!(
             approved_enrollment.starts_with("HTTP/1.1 201"),
-            "{approved_enrollment}; permission requests: {:?}",
-            permission_requests
-                .lock()
-                .expect("permission request log lock")
-                .as_slice()
+            "{approved_enrollment}"
         );
         let enrollment_retry = loopback_http_request(
             signer_address,
@@ -1089,24 +978,15 @@ mod tests {
         );
         assert!(conflict.starts_with("HTTP/1.1 400"), "{conflict}");
 
-        let (replacement_key, _) = state
-            .oauth2_service
-            .key_service
-            .create_key(
-                None,
-                EntityType::User,
-                replica_signer_owner.id,
-                true,
-                "replica replacement signer".into(),
-                None,
-            )
-            .await
-            .expect("create replacement public signer key");
+        let replacement_binding = idp_service::oauth2::NodeSignerBinding {
+            key_id: idp_model::model::Id::now_v7(),
+            ..peer_binding
+        };
         let replacement_jwk = state
             .oauth2_service
-            .find_public_jwk(replacement_key.id)
-            .await
-            .expect("load replacement public signer JWK");
+            .key_service
+            .prepare_node_signer(&replacement_binding)
+            .expect("prepare independent replacement signer");
         let replacement_body = serde_json::json!({ "publicJwk": replacement_jwk }).to_string();
         let rotated_signer = loopback_http_request(
             signer_address,
@@ -1139,23 +1019,10 @@ mod tests {
             )
             .await
             .expect("check revocation removed active signer binding");
-        assert!(active_signers[0].rows.is_empty());
-        let permission_actions = permission_requests
-            .lock()
-            .expect("permission request log lock")
-            .iter()
-            .map(|request| request.action)
-            .collect::<Vec<_>>();
         assert_eq!(
-            permission_actions,
-            vec![
-                idp_model::contract::IdentityAction::ReplicaSignersEnroll,
-                idp_model::contract::IdentityAction::ReplicaSignersEnroll,
-                idp_model::contract::IdentityAction::ReplicaSignersEnroll,
-                idp_model::contract::IdentityAction::ReplicaSignersEnroll,
-                idp_model::contract::IdentityAction::ReplicaSignersRotate,
-                idp_model::contract::IdentityAction::ReplicaSignersRevoke,
-            ]
+            active_signers[0].rows.len(),
+            1,
+            "local issuer signer remains active"
         );
         assert_eq!(
             engine
@@ -1164,17 +1031,20 @@ mod tests {
                     &ofdb_sql::SqlTranslator
                 )
                 .await
-                .expect("count approved membership")[0]
+                .expect("count memberships")[0]
                 .rows
                 .len(),
-            1
+            2
         );
 
         let registration = serde_json::to_string(&idp_model::contract::ClientRegistration::from(
             refresh_client.clone(),
         ))
         .expect("serialize valid registration body");
-        permission_allowed.store(false, Ordering::SeqCst);
+        policy
+            .delete_role_by_id(admin_role.application_id, admin_role.id)
+            .await
+            .expect("revoke local administration grants");
         for (method, path, body) in [
             ("GET", "/oauth2/register/live-refresh-client", ""),
             ("POST", "/oauth2/register", registration.as_str()),
@@ -1537,117 +1407,13 @@ mod tests {
         assert_eq!(endpoint_identity.owner_subject, "test-owner");
         assert_eq!(endpoint_identity.endpoint_id, endpoint_id);
 
-        let replica_engine = Arc::new(
-            open_native_engine(root.join("replica.redb"))
-                .expect("open independent empty replica database"),
-        );
-        let replica_keys = Arc::new(KeyService::new(
-            DbKeyRepo::new(Arc::clone(&replica_engine)),
-            PrivateKeyKeyringRepo::new_with_store("replica-live-test", test_keyring_store()),
-            "replica-live-namespace",
-        ));
-        let replica_oauth = Arc::new(OAuth2Service::new(
-            DbApplicationRepo::new(Arc::clone(&replica_engine)),
-            DbClientRepo::new(Arc::clone(&replica_engine), Arc::clone(&replica_keys)),
-            DbOAuth2AuthorizationCodeRepo::new(Arc::clone(&replica_engine)),
-            DbOAuth2RefreshTokenRepo::new(Arc::clone(&replica_engine)),
-            DbUserRepo::new(Arc::clone(&replica_engine), PasswordConfig::default()),
-            DbOAuth2UserConsentRepo::new(Arc::clone(&replica_engine)),
-            replica_keys,
-            OAuth2Config {
-                issuer: issuer.to_owned(),
-                ..OAuth2Config::default()
-            },
-        ));
-        for _ in 0..2 {
-            let replica_state = crate::RouterState::new(
-                issuer,
-                issuer,
-                Arc::clone(&replica_engine),
-                Arc::clone(&replica_oauth),
-                Arc::new(DbDeviceRepo::new(Arc::clone(&replica_engine))),
-                Arc::clone(&state.device_identity),
-            );
-            let replica_app = crate::openapi_router(replica_state, "/idp")
-                .split_for_parts()
-                .0;
-            let replica_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-                .await
-                .expect("bind replica listener");
-            let replica_address = replica_listener.local_addr().expect("read replica address");
-            let replica_server = tokio::spawn(async move {
-                axum::serve(replica_listener, replica_app)
-                    .await
-                    .expect("serve replica router");
-            });
-            for (method, path, content_type, body, bearer) in [
-                (
-                    "POST",
-                    "/idp/oauth2/token",
-                    "application/x-www-form-urlencoded",
-                    form.as_str(),
-                    None,
-                ),
-                (
-                    "POST",
-                    "/idp/oauth2/token",
-                    "application/x-www-form-urlencoded",
-                    refresh_form.as_str(),
-                    None,
-                ),
-                (
-                    "GET",
-                    "/idp/.well-known/jwks.json",
-                    "application/json",
-                    "",
-                    None,
-                ),
-                (
-                    "POST",
-                    "/idp/oauth2/introspect",
-                    "application/json",
-                    introspection_body.as_str(),
-                    Some(access_token),
-                ),
-                (
-                    "GET",
-                    "/idp/userinfo",
-                    "application/json",
-                    "",
-                    Some(user_access_token.as_str()),
-                ),
-                (
-                    "GET",
-                    "/idp/devices/endpoints",
-                    "application/json",
-                    "",
-                    Some(device_list_access_token),
-                ),
-            ] {
-                let denied = loopback_http_request(
-                    replica_address,
-                    method,
-                    path,
-                    content_type,
-                    body,
-                    bearer,
-                );
-                let error: serde_json::Value = serde_json::from_str(http_response_body(&denied))
-                    .expect("replica denial is a structured OAuth error");
-                assert_eq!(error["error"], "access_denied", "{method} {path}: {denied}");
-                assert!(
-                    denied.starts_with("HTTP/1.1 403"),
-                    "{method} {path}: {denied}"
-                );
-            }
-            replica_server.abort();
-            let _ = replica_server.await;
-        }
-        drop(replica_oauth);
-        drop(replica_engine);
+        signer_server.abort();
+        let _ = signer_server.await;
         server.abort();
         let _ = server.await;
         drop(state);
+        drop(policy);
+        drop(policy_engine);
         endpoint.close().await;
         drop(clients);
         drop(applications);

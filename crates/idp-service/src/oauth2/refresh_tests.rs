@@ -694,24 +694,45 @@ async fn missing_local_signer_does_not_consume_authorization_code() {
 }
 
 #[tokio::test]
-async fn approved_local_node_signer_survives_native_reopen_without_peer_or_trust_lease() {
+async fn persisted_node_binding_reopens_for_real_offline_issuance_and_rotation() {
     let (source, service, client, principal) = setup().await;
-    let token = issue(&service, &client, &principal).await.access_token.0;
-    let binding = service
+    let tokens = issue(&service, &client, &principal).await;
+    let token = tokens.access_token.0;
+    let refresh = tokens.refresh_token.expect("initial refresh grant").0;
+    let private_store = service.key_service.private_key_repo().clone();
+    let root = std::env::temp_dir().join(format!("local-node-{}", Id::now_v7()));
+    std::fs::create_dir_all(&root).expect("create persisted Node fixture");
+    let path = root.join("idp.redb");
+    let config_path = root.join("oauth.json");
+    std::fs::write(
+        &config_path,
+        serde_json::to_vec(&service.oauth_config).expect("serialize binding config"),
+    )
+    .expect("persist local signer binding");
+    let expected_signer = service
         .oauth_config
         .local_signer
-        .clone()
-        .expect("node binding");
-    let private_store = service.key_service.private_key_repo().clone();
-    let path = std::env::temp_dir().join(format!("local-node-{}.redb", Id::now_v7()));
+        .as_ref()
+        .expect("prepared binding")
+        .key_id;
     {
         let engine = Arc::new(db::open_native_engine(&path).expect("persist Node identity"));
         up(&engine).await.expect("initialize local trust schema");
-        for table in ["devices", "idp_replica_members", "idp_replica_signers"] {
+        for table in [
+            "applications",
+            "clients",
+            "users",
+            "credentials",
+            "keys",
+            "devices",
+            "idp_replica_members",
+            "idp_replica_signers",
+            "oauth2_refresh_tokens",
+        ] {
             let rows = source
                 .translate_and_execute(&format!("SELECT * FROM {table}"), &db::SqlTranslator)
                 .await
-                .expect("read local fixture trust")
+                .expect("read local fixture state")
                 .remove(0)
                 .rows;
             for row in rows {
@@ -722,51 +743,39 @@ async fn approved_local_node_signer_survives_native_reopen_without_peer_or_trust
                         returning: None,
                     }))])
                     .await
-                    .expect("persist local trust");
+                    .expect("persist local state, not a transport import");
             }
         }
     }
-    {
-        let engine = Arc::new(db::open_native_engine(&path).expect("reopen offline Node trust"));
-        let keys = KeyService::new(
-            DbKeyRepo::new(Arc::clone(&engine)),
-            private_store,
-            "refresh-test",
-        );
-        let signing = keys
-            .load_node_signer(
-                &binding,
-                &service.oauth_config.issuer,
-                chrono::Utc::now().timestamp(),
-            )
-            .await
-            .expect("no live peer or lease needed");
-        let renewed = encode_jwt(
-            &signing,
-            &serde_json::json!({"sub": principal.user.id.to_string()}),
-        )
-        .expect("issue with restored local private signer");
-        let public = idp_model::contract::JwkPublic::from(signing);
-        crate::oauth2::verify_jwt::<StandardClaims>(&public, &token)
-            .expect("verify earlier token after reopen");
-        crate::oauth2::verify_jwt::<serde_json::Value>(&public, &renewed)
-            .expect("verify new offline issuance");
-        let peers = crate::replica::DbReplicaSignerRepo::new(engine);
+    drop(service);
+    drop(source);
+    let mut replacement = None;
+    for reopen in 0..2 {
+        let engine = Arc::new(db::open_native_engine(&path).expect("reopen offline Node"));
+        let config: OAuth2Config =
+            serde_json::from_slice(&std::fs::read(&config_path).expect("read binding config"))
+                .expect("restore persisted Node binding");
+        let binding = config
+            .local_signer
+            .as_ref()
+            .expect("binding survives reopen");
+        assert_eq!(binding.key_id, expected_signer);
+        let peers = crate::replica::DbReplicaSignerRepo::new(Arc::clone(&engine));
         assert!(
             peers
                 .is_trusted_peer(
-                    &service.oauth_config.issuer,
+                    &config.issuer,
                     binding.member_id,
                     &binding.endpoint_id,
                     chrono::Utc::now().timestamp()
                 )
                 .await
-                .expect("persistent peer trust")
+                .expect("persisted peer trust")
         );
         assert!(
             !peers
                 .is_trusted_peer(
-                    &service.oauth_config.issuer,
+                    &config.issuer,
                     binding.member_id,
                     "forged-endpoint",
                     chrono::Utc::now().timestamp()
@@ -774,6 +783,93 @@ async fn approved_local_node_signer_survives_native_reopen_without_peer_or_trust
                 .await
                 .expect("endpoint impersonation denial")
         );
+        let keys = Arc::new(KeyService::new(
+            DbKeyRepo::new(Arc::clone(&engine)),
+            private_store.clone(),
+            "refresh-test",
+        ));
+        let signing = keys
+            .load_node_signer(binding, &config.issuer, chrono::Utc::now().timestamp())
+            .await
+            .expect("matching private signer and persisted trust survive reopen");
+        assert_eq!(signing.kid, expected_signer.to_string());
+        assert_eq!(
+            keys.prepare_node_signer(binding)
+                .expect("exact preparation retry"),
+            idp_model::contract::JwkPublic::from(signing)
+        );
+        let missing_secret = KeyService::new(
+            DbKeyRepo::new(Arc::clone(&engine)),
+            TestPrivateKeyRepo::default(),
+            "refresh-test",
+        );
+        assert!(
+            missing_secret
+                .load_node_signer(binding, &config.issuer, chrono::Utc::now().timestamp())
+                .await
+                .is_err(),
+            "persisted public binding does not restore private capability"
+        );
+        let mut wrong_endpoint = binding.clone();
+        wrong_endpoint.endpoint_id = "forged-endpoint".into();
+        assert!(
+            keys.load_node_signer(
+                &wrong_endpoint,
+                &config.issuer,
+                chrono::Utc::now().timestamp()
+            )
+            .await
+            .is_err(),
+            "persisted endpoint binding is still enforced"
+        );
+        let reopened = OAuth2Service::new(
+            DbApplicationRepo::new(Arc::clone(&engine)),
+            DbClientRepo::new(Arc::clone(&engine), Arc::clone(&keys)),
+            DbOAuth2AuthorizationCodeRepo::new(Arc::clone(&engine)),
+            DbOAuth2RefreshTokenRepo::new(Arc::clone(&engine)),
+            DbUserRepo::new(Arc::clone(&engine), PasswordConfig::default()),
+            DbOAuth2UserConsentRepo::new(Arc::clone(&engine)),
+            keys,
+            config,
+        );
+        reopened
+            .validate_access_token(&token, &client.client_id)
+            .await
+            .expect("owner validates earlier token offline");
+        let previous = if reopen == 0 {
+            &refresh
+        } else {
+            assert!(
+                reopened
+                    .token(grant(&refresh, None), Some(auth(&client)))
+                    .await
+                    .is_err(),
+                "replay denial survives database reopen"
+            );
+            replacement
+                .as_ref()
+                .expect("persisted rotation replacement")
+        };
+        let renewed = reopened
+            .token(grant(previous, None), Some(auth(&client)))
+            .await
+            .expect("real offline refresh issuance after reopen");
+        let (header, claims) =
+            decode_jwt::<StandardClaims>(&renewed.access_token.0).expect("renewed claims");
+        assert_eq!(header.kid, expected_signer.to_string());
+        assert_eq!(claims.sub, principal.user.id.to_string());
+        reopened
+            .validate_access_token(&renewed.access_token.0, &client.client_id)
+            .await
+            .expect("validate renewed issuance locally");
+        assert!(
+            reopened
+                .token(grant(previous, None), Some(auth(&client)))
+                .await
+                .is_err(),
+            "one local consumption"
+        );
+        replacement = Some(renewed.refresh_token.expect("renewed grant").0);
     }
-    std::fs::remove_file(path).expect("remove trust fixture");
+    std::fs::remove_dir_all(root).expect("remove persisted Node fixture");
 }
