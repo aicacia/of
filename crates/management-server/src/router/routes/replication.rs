@@ -386,7 +386,7 @@ mod tests {
             std::env::temp_dir().join(format!("management-replication-auth-{}", Id::now_v7()));
         fs::create_dir_all(&root).expect("create test database directory");
         let engine = Arc::new(
-            db::open_native_engine(Path::new(&root).join("management.redb"))
+            db::Database::open(Path::new(&root).join("management.redb"))
                 .expect("open management test engine"),
         );
         let base_url = format!("http://{address}");
@@ -526,7 +526,7 @@ mod tests {
             std::env::temp_dir().join(format!("management-replication-rejected-{}", Id::now_v7()));
         fs::create_dir_all(&root).expect("create test database directory");
         let engine = Arc::new(
-            db::open_native_engine(Path::new(&root).join("management.redb"))
+            db::Database::open(Path::new(&root).join("management.redb"))
                 .expect("open management test engine"),
         );
         let base_url = format!("http://{address}");

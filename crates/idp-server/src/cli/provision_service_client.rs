@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use db::open_native_engine;
+use db::Database;
 use idp_model::contract::{
     ApplicationRegistration, ClientProfile, ClientRegistration, ClientType, EntityType, GrantType,
     TokenEndpointAuthMethod,
@@ -56,7 +56,7 @@ pub async fn run(
         ));
     }
 
-    let engine = Arc::new(open_native_engine(database_path).map_err(io::Error::other)?);
+    let engine = Arc::new(Database::open(database_path).map_err(io::Error::other)?);
 
     let key_service = Arc::new(KeyService::new(
         DbKeyRepo::new(Arc::clone(&engine)),
@@ -258,7 +258,7 @@ mod tests {
         sync::{Arc, Mutex},
     };
 
-    use db::open_native_engine;
+    use db::Database;
     use idp_model::contract::{
         ClientCredentialsGrantRequest, EntityType, IntrospectionRequest, OAuth2ClientAuth,
         TokenRequest,
@@ -433,9 +433,8 @@ mod tests {
                         fs::create_dir_all(&root).expect("create temporary test directory");
                         let database_path = root.join("idp.redb");
                         let credentials_path = root.join("credentials.json");
-                        let engine = Arc::new(
-                            open_native_engine(&database_path).expect("open test database"),
-                        );
+                        let engine =
+                            Arc::new(Database::open(&database_path).expect("open test database"));
                         idp_model::replica::up(&engine)
                             .await
                             .expect("initialize current IdP schema");
@@ -532,8 +531,7 @@ mod tests {
             idp_model::model::Id::now_v7()
         ));
         fs::create_dir_all(&root).expect("create temporary test directory");
-        let engine =
-            Arc::new(open_native_engine(root.join("idp.redb")).expect("open test database"));
+        let engine = Arc::new(Database::open(root.join("idp.redb")).expect("open test database"));
         idp_model::replica::up(&engine)
             .await
             .expect("initialize current IdP schema");
@@ -754,7 +752,7 @@ mod tests {
             .await
             .expect("persist live authorization code");
         let policy_engine = Arc::new(
-            open_native_engine(root.join("management.redb")).expect("open local policy store"),
+            Database::open(root.join("management.redb")).expect("open local policy store"),
         );
         management_service::replica::up(&policy_engine)
             .await
@@ -898,6 +896,7 @@ mod tests {
             "{signer_enrollment_denied}"
         );
         let signer_rows = engine
+            .client()
             .translate_and_execute(
                 "SELECT id FROM idp_replica_signers",
                 &ofdb_sql::SqlTranslator,
@@ -910,6 +909,7 @@ mod tests {
             "denied enrollment leaves only local signer"
         );
         let membership_rows = engine
+            .client()
             .translate_and_execute(
                 "SELECT id FROM idp_replica_members",
                 &ofdb_sql::SqlTranslator,
@@ -1013,6 +1013,7 @@ mod tests {
             "{revoked_signer}"
         );
         let active_signers = engine
+            .client()
             .translate_and_execute(
                 "SELECT key_id FROM idp_replica_signers WHERE active_member_id IS NOT NULL",
                 &ofdb_sql::SqlTranslator,
@@ -1026,6 +1027,7 @@ mod tests {
         );
         assert_eq!(
             engine
+                .client()
                 .translate_and_execute(
                     "SELECT id FROM idp_replica_members",
                     &ofdb_sql::SqlTranslator
@@ -1509,7 +1511,7 @@ mod tests {
                         let database_path = root.join("idp.redb");
                         let credentials_path = root.join("credentials.json");
                         let engine = Arc::new(
-                            open_native_engine(&database_path).expect("open test database"),
+                            Database::open(&database_path).expect("open test database"),
                         );
                         idp_model::replica::up(&engine)
                             .await

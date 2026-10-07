@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Timelike, Utc};
 use db::{
-    Engine, FromRow, FromRowError, Kernel, Query, QueryColumn, QueryDelete, QueryExpr,
-    QueryExprValue, QueryFrom, QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row,
-    RowCodec, Statement, Uuid, Value,
+    Database, FromRow, FromRowError, Query, QueryColumn, QueryDelete, QueryExpr, QueryExprValue,
+    QueryFrom, QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row, Statement, Uuid,
+    Value,
 };
 use idp_model::{
     contract::{EntityType, JwkPublic},
@@ -31,27 +31,20 @@ const COLUMNS: [&str; 13] = [
     "public_jwk",
 ];
 
-pub struct DbKeyRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
-    engine: Arc<Engine<K, R>>,
+pub struct DbKeyRepo {
+    engine: Arc<Database>,
 }
 
-impl<K, R> DbKeyRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
+impl DbKeyRepo {
     #[must_use]
-    pub const fn new(engine: Arc<Engine<K, R>>) -> Self {
+    pub const fn new(engine: Arc<Database>) -> Self {
         Self { engine }
     }
 
     async fn keys(&self) -> RepoResult<Vec<Key>> {
         let mut results = self
             .engine
+            .client()
             .execute(vec![Statement::Query(select(None))])
             .await
             .map_err(db_error)?;
@@ -77,11 +70,7 @@ where
     }
 }
 
-impl<K, R> KeyRepo for DbKeyRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
+impl KeyRepo for DbKeyRepo {
     async fn trusted_node_signers(
         &self,
         issuer: &str,
@@ -108,6 +97,7 @@ where
             serde_json::to_string(&jwk).map_err(|error| RepoError::Other(Box::new(error)))?;
         let results = self
             .engine
+            .client()
             .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                 from: from(),
                 assignments: vec![QueryUpdateAssignment {
@@ -209,6 +199,7 @@ where
         entity_id: Id,
     ) -> RepoResult<()> {
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Delete(QueryDelete {
                 from: from(),
                 predicate: Some(QueryExpr::And(
@@ -275,6 +266,7 @@ where
             updated_at: now,
         };
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Insert(QueryInsert {
                 table: TABLE.into(),
                 row: KeyRow::from(&key).into(),
@@ -412,7 +404,7 @@ fn timestamp(value: i64) -> RepoResult<DateTime<Utc>> {
         .ok_or_else(|| RepoError::InvalidInput("invalid key timestamp".into()))
 }
 
-fn db_error(error: db::EngineError) -> RepoError {
+fn db_error(error: db::QueryError) -> RepoError {
     RepoError::InvalidInput(error.to_string())
 }
 
@@ -458,14 +450,13 @@ fn select(predicate: Option<QueryExpr>) -> Query {
 mod tests {
     use std::sync::Arc;
 
-    use db::{AutomergeRowCodec, Engine, InMemoryKernel};
     use idp_model::replica::up;
 
     use super::*;
 
     #[tokio::test]
     async fn creates_uuid_keys_with_unique_sibling_paths() {
-        let engine = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
+        let engine = Arc::new(db::Database::in_memory());
         up(&engine).await.unwrap();
         let repo = DbKeyRepo::new(engine);
         let entity_id = Id::now_v7();

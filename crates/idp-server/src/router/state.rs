@@ -11,23 +11,22 @@ use idp_service::{
 };
 use iroh::{Endpoint, EndpointId, SecretKey};
 use management_service::{HostedControlPlane, LocalPermissions, replica::DbDeviceRepo};
-use ofdb_sql::{AutomergeRowCodec, RedbKernel};
 
 use super::PairingAcceptanceControllerSlot;
 
 pub(super) type NativeOAuth2Service = OAuth2Service<
-    DbApplicationRepo<RedbKernel, AutomergeRowCodec>,
-    DbClientRepo<RedbKernel, AutomergeRowCodec>,
-    DbOAuth2AuthorizationCodeRepo<RedbKernel, AutomergeRowCodec>,
-    DbOAuth2RefreshTokenRepo<RedbKernel, AutomergeRowCodec>,
-    DbUserRepo<RedbKernel, AutomergeRowCodec>,
-    DbOAuth2UserConsentRepo<RedbKernel, AutomergeRowCodec>,
-    DbKeyRepo<RedbKernel, AutomergeRowCodec>,
+    DbApplicationRepo,
+    DbClientRepo,
+    DbOAuth2AuthorizationCodeRepo,
+    DbOAuth2RefreshTokenRepo,
+    DbUserRepo,
+    DbOAuth2UserConsentRepo,
+    DbKeyRepo,
     PrivateKeyKeyringRepo,
 >;
 
-pub type NativeDeviceRepo = DbDeviceRepo<RedbKernel, AutomergeRowCodec>;
-pub type NativeReplicaSignerRepo = DbReplicaSignerRepo<RedbKernel, AutomergeRowCodec>;
+pub type NativeDeviceRepo = DbDeviceRepo;
+pub type NativeReplicaSignerRepo = DbReplicaSignerRepo;
 
 #[derive(Clone)]
 pub struct DeviceIdentity {
@@ -76,7 +75,7 @@ pub struct RouterState {
     pub ui_base_uri: String,
     pub api_base_uri: String,
     pub service_audience: String,
-    pub engine: Arc<db::NativeEngine>,
+    pub engine: Arc<db::Database>,
     pub oauth2_service: Arc<NativeOAuth2Service>,
     pub devices: Arc<NativeDeviceRepo>,
     pub replica_signers: Arc<NativeReplicaSignerRepo>,
@@ -90,7 +89,7 @@ impl RouterState {
     pub fn new(
         ui_base_uri: impl Into<String>,
         api_base_uri: impl Into<String>,
-        engine: Arc<db::NativeEngine>,
+        engine: Arc<db::Database>,
         oauth2_service: Arc<NativeOAuth2Service>,
         devices: Arc<NativeDeviceRepo>,
         device_identity: Arc<DeviceIdentity>,

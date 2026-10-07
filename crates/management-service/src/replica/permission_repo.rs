@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Timelike, Utc};
 use db::{
-    Engine, FromRow, FromRowError, Kernel, Query, QueryColumn, QueryDelete, QueryExpr,
-    QueryExprValue, QueryFrom, QueryInsert, QuerySelect, Row, RowCodec, Statement, Uuid, Value,
+    Database, FromRow, FromRowError, Query, QueryColumn, QueryDelete, QueryExpr, QueryExprValue,
+    QueryFrom, QueryInsert, QuerySelect, Row, Statement, Uuid, Value,
 };
 use idp_model::{
     model::{Id, Permission},
@@ -27,27 +27,20 @@ const PERMISSION_COLUMNS: [&str; 7] = [
 const ROLE_COLUMNS: [&str; 3] = ["id", "application_id", "revoked_at"];
 const ROLE_PERMISSION_COLUMNS: [&str; 4] = ["id", "role_id", "permission_id", "revoked_at"];
 
-pub struct DbPermissionRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
-    engine: Arc<Engine<K, R>>,
+pub struct DbPermissionRepo {
+    engine: Arc<Database>,
 }
 
-impl<K, R> DbPermissionRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
+impl DbPermissionRepo {
     #[must_use]
-    pub const fn new(engine: Arc<Engine<K, R>>) -> Self {
+    pub const fn new(engine: Arc<Database>) -> Self {
         Self { engine }
     }
 
     async fn rows<T: FromRow>(&self, query: Query) -> ManagementResult<Vec<T>> {
         let mut results = self
             .engine
+            .client()
             .execute(vec![Statement::Query(query)])
             .await
             .map_err(db_error)?;
@@ -135,11 +128,7 @@ where
     }
 }
 
-impl<K, R> PermissionRepo for DbPermissionRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
+impl PermissionRepo for DbPermissionRepo {
     async fn list_permissions(
         &self,
         application_id: Id,
@@ -196,6 +185,7 @@ where
             updated_at: now,
         };
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Insert(QueryInsert {
                 table: PERMISSIONS.into(),
                 row: PermissionRow::from(&permission).into(),
@@ -225,6 +215,7 @@ where
             .await?
             .ok_or_else(|| ManagementError::InvalidInput("permission not found".into()))?;
         self.engine
+            .client()
             .execute(vec![Statement::Query(delete(PERMISSIONS, permission_id))])
             .await
             .map_err(db_error)?;
@@ -261,6 +252,7 @@ where
         };
         let relation_id = relation.id;
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Insert(QueryInsert {
                 table: ROLE_PERMISSIONS.into(),
                 row: relation.into(),
@@ -289,6 +281,7 @@ where
             .await?
             .ok_or_else(|| ManagementError::InvalidInput("role permission not found".into()))?;
         self.engine
+            .client()
             .execute(vec![Statement::Query(delete(
                 ROLE_PERMISSIONS,
                 relation.id,
@@ -458,7 +451,7 @@ fn timestamp(value: i64) -> ManagementResult<DateTime<Utc>> {
     DateTime::from_timestamp(value, 0)
         .ok_or_else(|| ManagementError::InvalidInput("invalid permission timestamp".into()))
 }
-fn db_error(error: db::EngineError) -> ManagementError {
+fn db_error(error: db::QueryError) -> ManagementError {
     ManagementError::InvalidInput(error.to_string())
 }
 fn row_error(error: FromRowError) -> ManagementError {

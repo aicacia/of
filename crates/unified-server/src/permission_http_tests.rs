@@ -1,4 +1,4 @@
-use db::open_native_engine;
+use db::Database;
 use idp_model::{
     contract::{
         ApplicationRegistration, ClientProfile, ClientRegistration, ClientType, EntityType,
@@ -96,9 +96,9 @@ async fn run_separate_permission_acceptance(lifecycle_only: bool) {
     config.service_audience = Some("idp-services".into());
     config.server.prefix = Some("/idp".into());
     let idp_engine =
-        Arc::new(open_native_engine(root.join("idp/idp.redb")).expect("open IdP owner engine"));
+        Arc::new(Database::open(root.join("idp/idp.redb")).expect("open IdP owner engine"));
     let management_engine = Arc::new(
-        open_native_engine(root.join("management/management.redb"))
+        Database::open(root.join("management/management.redb"))
             .expect("open Management owner engine"),
     );
     let runtime = idp_server::build_runtime(
@@ -295,7 +295,7 @@ pub(crate) async fn seed_idp(
     let database_path = root.join("idp/idp.redb");
     fs::create_dir_all(database_path.parent().expect("IdP data directory"))
         .expect("create IdP data directory");
-    let engine = Arc::new(open_native_engine(database_path).expect("open IdP fixture database"));
+    let engine = Arc::new(Database::open(database_path).expect("open IdP fixture database"));
     up(&engine).await.expect("initialize IdP schema");
     let applications = DbApplicationRepo::new(Arc::clone(&engine));
     let application = applications
@@ -526,8 +526,7 @@ pub(crate) async fn seed_permissions(root: &std::path::Path, fixture: &mut Permi
     };
     fs::create_dir_all(root.join("management")).expect("create Management data directory");
     let engine = Arc::new(
-        open_native_engine(root.join("management/management.redb"))
-            .expect("open Management fixture"),
+        Database::open(root.join("management/management.redb")).expect("open Management fixture"),
     );
     management_service::replica::up(&engine)
         .await

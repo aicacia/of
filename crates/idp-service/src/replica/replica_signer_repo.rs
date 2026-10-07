@@ -1,25 +1,17 @@
 use std::sync::Arc;
 
-use db::{Engine, EngineError, Kernel, RowCodec, SqlTranslator, Value};
+use db::{Database, QueryError, SqlTranslator, Value};
 use idp_model::contract::{IdpSignerRecord, JwsAlgorithm, KeyUse, ReplicaMembership};
 
 use crate::repo::{RepoError, RepoResult};
 
-pub struct DbReplicaSignerRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
-    engine: Arc<Engine<K, R>>,
+pub struct DbReplicaSignerRepo {
+    engine: Arc<Database>,
 }
 
-impl<K, R> DbReplicaSignerRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
+impl DbReplicaSignerRepo {
     #[must_use]
-    pub const fn new(engine: Arc<Engine<K, R>>) -> Self {
+    pub const fn new(engine: Arc<Database>) -> Self {
         Self { engine }
     }
 
@@ -45,7 +37,7 @@ where
         issuer: &str,
         now: i64,
     ) -> RepoResult<Vec<(ReplicaMembership, IdpSignerRecord)>> {
-        let mut results = self.engine.translate_and_execute(
+        let mut results = self.engine.client().translate_and_execute(
             "SELECT id, installation_id, member_id, endpoint_id, issuer, approved_at, revoked_at FROM idp_replica_members; SELECT id, member_id, active_member_id, key_id, issuer, public_jwk, approved_at, revoked_at, expires_at FROM idp_replica_signers; SELECT id, public_key, state, revoked_at FROM devices", &SqlTranslator,
         ).await.map_err(db_error)?;
         if results.len() != 3 {
@@ -173,7 +165,7 @@ where
         signer: &IdpSignerRecord,
     ) -> RepoResult<bool> {
         validate(membership, signer)?;
-        let mut transaction = self.engine.transaction().await.map_err(db_error)?;
+        let mut transaction = self.engine.client().transaction().await.map_err(db_error)?;
         let operation = async {
             let member_query = format!(
                 "SELECT endpoint_id, issuer, approved_at, revoked_at FROM idp_replica_members WHERE installation_id = {} AND member_id = CAST('{}' AS UUID)",
@@ -277,7 +269,7 @@ where
         signer: &IdpSignerRecord,
     ) -> RepoResult<bool> {
         let approved_at = validate_signer(signer, member_id, issuer)?;
-        let mut transaction = self.engine.transaction().await.map_err(db_error)?;
+        let mut transaction = self.engine.client().transaction().await.map_err(db_error)?;
         let operation = async {
             let mut results = transaction
                 .translate_and_execute(
@@ -351,7 +343,7 @@ where
         issuer: &str,
         revoked_at: i64,
     ) -> RepoResult<bool> {
-        let mut transaction = self.engine.transaction().await.map_err(db_error)?;
+        let mut transaction = self.engine.client().transaction().await.map_err(db_error)?;
         let operation = async {
             let mut results = transaction
                 .translate_and_execute(
@@ -469,7 +461,7 @@ fn text(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
 
-fn db_error(error: EngineError) -> RepoError {
+fn db_error(error: QueryError) -> RepoError {
     RepoError::other(error)
 }
 
@@ -478,7 +470,7 @@ mod tests {
     use std::sync::Arc;
 
     use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
-    use db::{AutomergeRowCodec, Engine, InMemoryKernel, SqlTranslator, Value};
+    use db::{SqlTranslator, Value};
     use k256::ecdsa::SigningKey;
 
     use idp_model::{
@@ -530,7 +522,7 @@ mod tests {
 
     #[tokio::test]
     async fn enrollment_is_persistent_idempotent_and_rejects_conflicts() {
-        let engine = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
+        let engine = Arc::new(db::Database::in_memory());
         replica::up(&engine).await.expect("initialize IdP schema");
         let repo = DbReplicaSignerRepo::new(engine.clone());
         let (membership, signer) = records();
@@ -552,6 +544,7 @@ mod tests {
         );
         assert_eq!(
             engine
+                .client()
                 .translate_and_execute("SELECT id FROM idp_replica_members", &SqlTranslator,)
                 .await
                 .expect("read membership rows")[0]
@@ -561,6 +554,7 @@ mod tests {
         );
         assert_eq!(
             engine
+                .client()
                 .translate_and_execute("SELECT id FROM idp_replica_signers", &SqlTranslator,)
                 .await
                 .expect("read signer rows")[0]
@@ -596,6 +590,7 @@ mod tests {
                 .expect("accept matching rotation retry")
         );
         let signer_rows = engine
+            .client()
             .translate_and_execute(
                 "SELECT key_id, revoked_at FROM idp_replica_signers ORDER BY key_id",
                 &SqlTranslator,
@@ -622,6 +617,7 @@ mod tests {
                 .expect("accept repeated revocation")
         );
         let member_state = engine
+            .client()
             .translate_and_execute("SELECT revoked_at FROM idp_replica_members", &SqlTranslator)
             .await
             .expect("read revoked membership")[0]

@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use db::{
-    Engine, FromRow, FromRowError, Kernel, Query, QueryColumn, QueryExpr, QueryExprValue,
-    QueryFrom, QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row, RowCodec,
-    Statement, Uuid, Value,
+    Database, FromRow, FromRowError, Query, QueryColumn, QueryExpr, QueryExprValue, QueryFrom,
+    QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row, Statement, Uuid, Value,
 };
 use idp_model::contract::DeviceState;
 
@@ -85,26 +84,19 @@ impl FromRow for SelectionPolicy {
     }
 }
 
-pub struct DbSelectionPolicyRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
-    engine: Arc<Engine<K, R>>,
+pub struct DbSelectionPolicyRepo {
+    engine: Arc<Database>,
 }
 
-impl<K, R> DbSelectionPolicyRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
-    pub const fn new(engine: Arc<Engine<K, R>>) -> Self {
+impl DbSelectionPolicyRepo {
+    pub const fn new(engine: Arc<Database>) -> Self {
         Self { engine }
     }
 
     async fn clear(&self, device_id: Uuid) -> ManagementResult<()> {
         if self
             .engine
+            .client()
             .row_conflicts(TABLE, &key(device_id))
             .await
             .map_err(db_error)?
@@ -127,6 +119,7 @@ where
     async fn resolve_convergent_conflicts(&self, device_id: Uuid) -> ManagementResult<()> {
         let conflicts = self
             .engine
+            .client()
             .row_conflict_values(TABLE, &key(device_id))
             .await
             .map_err(db_error)?;
@@ -145,6 +138,7 @@ where
         }
         if !resolutions.is_empty() {
             self.engine
+                .client()
                 .resolve_row(TABLE, &key(device_id), resolutions)
                 .await
                 .map_err(db_error)?;
@@ -163,6 +157,7 @@ where
         let id = resource_selection_id(device_id, owner_subject, application_id, kind, resource_id);
         let conflicts = self
             .engine
+            .client()
             .row_conflict_values(RESOURCE_TABLE, &key(id))
             .await
             .map_err(db_error)?;
@@ -175,12 +170,14 @@ where
                 resolutions.push((column, Value::Bool(false)));
             }
             self.engine
+                .client()
                 .resolve_row(RESOURCE_TABLE, &key(id), resolutions)
                 .await
                 .map_err(db_error)?;
         }
         let mut results = self
             .engine
+            .client()
             .execute(vec![Statement::Query(Query::Select(QuerySelect {
                 from: resource_from(),
                 projection: [
@@ -252,6 +249,7 @@ where
         );
         let exists = !self
             .engine
+            .client()
             .row_conflicts(RESOURCE_TABLE, &key(id))
             .await
             .map_err(db_error)?
@@ -284,6 +282,7 @@ where
             })
         };
         self.engine
+            .client()
             .execute(vec![Statement::Query(query)])
             .await
             .map_err(db_error)?;
@@ -293,6 +292,7 @@ where
     async fn resource_selection_exists(&self, id: Uuid) -> ManagementResult<bool> {
         let mut results = self
             .engine
+            .client()
             .execute(vec![Statement::Query(Query::Select(QuerySelect {
                 from: resource_from(),
                 projection: [
@@ -329,6 +329,7 @@ where
     async fn raw_record(&self, device_id: Uuid) -> ManagementResult<Option<SelectionPolicy>> {
         let mut results = self
             .engine
+            .client()
             .execute(vec![Statement::Query(Query::Select(QuerySelect {
                 from: from(),
                 projection: COLUMNS.into_iter().map(column).collect(),
@@ -358,6 +359,7 @@ where
     ) -> ManagementResult<Vec<SelectedResource>> {
         let mut results = self
             .engine
+            .client()
             .execute(vec![Statement::Query(Query::Select(QuerySelect {
                 from: resource_from(),
                 projection: [
@@ -417,7 +419,7 @@ where
 
     pub async fn peers_selected_for_sync(
         &self,
-        devices: &DbDeviceRepo<K, R>,
+        devices: &DbDeviceRepo,
         local_public_key: &str,
         remote_public_key: &str,
         owner_subject: &str,
@@ -554,6 +556,7 @@ where
         };
         if let Some(query) = query {
             self.engine
+                .client()
                 .execute(vec![Statement::Query(query)])
                 .await
                 .map_err(db_error)?;
@@ -561,6 +564,7 @@ where
         self.clear(policy.device_id).await?;
         if policy.selected_id.is_none() {
             self.engine
+                .client()
                 .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                     from: resource_from(),
                     assignments: vec![assignment_for(
@@ -608,6 +612,7 @@ where
             return Ok(true);
         }
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                 from: from(),
                 assignments: vec![assignment("admin_allowed", Value::Bool(admin_allowed))],
@@ -642,6 +647,7 @@ where
         }
         let id = resource_selection_id(device_id, owner_subject, application_id, kind, resource_id);
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                 from: resource_from(),
                 assignments: vec![assignment_for(
@@ -664,6 +670,7 @@ where
     ) -> ManagementResult<bool> {
         let conflicts = self
             .engine
+            .client()
             .row_conflict_values(TABLE, &key(device_id))
             .await
             .map_err(db_error)?;
@@ -685,6 +692,7 @@ where
         }
         if !conflicts.is_empty() {
             self.engine
+                .client()
                 .resolve_row(
                     TABLE,
                     &key(device_id),
@@ -708,6 +716,7 @@ where
             return Ok(true);
         }
         self.engine
+            .client()
             .execute(vec![
                 Statement::Query(Query::Update(QueryUpdate {
                     from: resource_from(),
@@ -740,7 +749,7 @@ fn invalid(message: impl Into<String>) -> ManagementError {
     ManagementError::InvalidInput(message.into())
 }
 
-fn db_error(error: db::EngineError) -> ManagementError {
+fn db_error(error: db::QueryError) -> ManagementError {
     invalid(error.to_string())
 }
 
@@ -825,34 +834,128 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use db::{NativeEngine, Value, open_native_engine};
+    use db::{Database, Uuid, Value};
     use idp_model::contract::DeviceState;
-    use ofdb_sql::{apply_sync_state_batch_for, export_sync_state_for};
 
     use crate::{DeviceRepo, replica::DbDeviceRepo};
 
     use super::{DbSelectionPolicyRepo, SelectionPolicy, TABLE, assignment, from, key};
 
-    async fn sync_replica(
-        source: &db::Engine<db::InMemoryKernel, db::AutomergeRowCodec>,
-        destination: &db::Engine<db::InMemoryKernel, db::AutomergeRowCodec>,
-    ) {
-        apply_sync_state_batch_for(
-            destination,
-            export_sync_state_for(source)
+    struct Channel {
+        sender: tokio::sync::mpsc::UnboundedSender<Vec<u8>>,
+        receiver: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
+    }
+
+    impl ofdb_sql::SyncTransport for Channel {
+        type Error = &'static str;
+        async fn send(&mut self, frame: Vec<u8>) -> Result<(), Self::Error> {
+            self.sender.send(frame).map_err(|_| "closed")
+        }
+        async fn receive(&mut self) -> Result<Vec<u8>, Self::Error> {
+            self.receiver.recv().await.ok_or("closed")
+        }
+    }
+
+    async fn sync_replica(source: &db::Database, destination: &db::Database) {
+        let (a, ar) = tokio::sync::mpsc::unbounded_channel();
+        let (b, br) = tokio::sync::mpsc::unbounded_channel();
+        let mut left = Channel {
+            sender: a,
+            receiver: br,
+        };
+        let mut right = Channel {
+            sender: b,
+            receiver: ar,
+        };
+        let config = ofdb_sql::SessionConfig::default();
+        let (sent, received) = tokio::join!(
+            source.synchronize(&mut left, &config, ofdb_sql::SyncRole::Initiator),
+            destination.synchronize(&mut right, &config, ofdb_sql::SyncRole::Responder),
+        );
+        sent.expect("sync trusted domain fixture");
+        received.expect("receive trusted domain fixture");
+    }
+
+    #[tokio::test]
+    async fn public_facade_preserves_owner_denial_and_restrictive_resolution_after_reopen() {
+        let path =
+            std::env::temp_dir().join(format!("management-conflicts-{}.redb", Uuid::now_v7()));
+        let restricted = Uuid::now_v7();
+        let ambiguous = Uuid::now_v7();
+        let namespace = Uuid::now_v7();
+        {
+            let first = Arc::new(Database::open(&path).expect("open local policy"));
+            let second = db::Database::in_memory();
+            crate::replica::up(&first)
                 .await
-                .expect("export replica state"),
-        )
-        .await
-        .expect("apply replica state");
+                .expect("initialize management only");
+            let repo = DbSelectionPolicyRepo::new(Arc::clone(&first));
+            for device_id in [restricted, ambiguous] {
+                repo.set_prevalidated(SelectionPolicy {
+                    device_id,
+                    owner_subject: "owner".into(),
+                    application_id: None,
+                    selected_kind: None,
+                    selected_id: None,
+                    admin_allowed: true,
+                })
+                .await
+                .expect("persist unselected policy");
+            }
+            sync_replica(&first, &second).await;
+            for (database, updates) in [
+                (
+                    &*first,
+                    vec![
+                        (restricted, "admin_allowed", "false"),
+                        (ambiguous, "owner_subject", "'alice'"),
+                    ],
+                ),
+                (
+                    &second,
+                    vec![
+                        (restricted, "admin_allowed", "false"),
+                        (restricted, "admin_allowed", "true"),
+                        (ambiguous, "owner_subject", "'bob'"),
+                    ],
+                ),
+            ] {
+                for (device, column, value) in updates {
+                    database.client().translate_and_execute(
+                        &format!("UPDATE device_selection_policies SET {column} = {value} WHERE device_id = CAST('{device}' AS UUID)"),
+                        &db::SqlTranslator,
+                    ).await.expect("diverge trusted policy fixture");
+                }
+            }
+            sync_replica(&first, &second).await;
+            assert!(repo.get(ambiguous, "alice", namespace).await.is_err());
+            let policy = repo
+                .get(restricted, "owner", namespace)
+                .await
+                .expect("resolve only restrictive administrator conflict")
+                .expect("policy remains present");
+            assert!(!policy.admin_allowed);
+            assert_eq!(policy.selected_id, None);
+        }
+        {
+            let database = Arc::new(Database::open(&path).expect("reopen offline management"));
+            let repo = DbSelectionPolicyRepo::new(database);
+            assert!(repo.get(ambiguous, "alice", namespace).await.is_err());
+            assert!(
+                !repo
+                    .get(restricted, "owner", namespace)
+                    .await
+                    .expect("persisted restriction")
+                    .expect("policy remains present")
+                    .admin_allowed
+            );
+        }
+        std::fs::remove_file(path).expect("remove management conflict fixture");
     }
 
     #[tokio::test]
     async fn sync_requires_two_approved_matching_selected_devices() {
-        let engine = Arc::new(db::Engine::new(
-            db::InMemoryKernel::new(),
-            db::AutomergeRowCodec::new(),
-        ));
+        let engine = Arc::new(db::Database::in_memory());
         idp_model::replica::up(&engine)
             .await
             .expect("initialize replica");
@@ -1033,14 +1136,8 @@ mod tests {
 
     #[tokio::test]
     async fn replicated_revocation_blocks_previously_selected_peer() {
-        let source = Arc::new(db::Engine::new(
-            db::InMemoryKernel::new(),
-            db::AutomergeRowCodec::new(),
-        ));
-        let destination = Arc::new(db::Engine::new(
-            db::InMemoryKernel::new(),
-            db::AutomergeRowCodec::new(),
-        ));
+        let source = Arc::new(db::Database::in_memory());
+        let destination = Arc::new(db::Database::in_memory());
         idp_model::replica::up(&source)
             .await
             .expect("initialize source replica");
@@ -1147,14 +1244,8 @@ mod tests {
 
     #[tokio::test]
     async fn selection_cannot_lift_local_or_replicated_admin_restriction() {
-        let first = Arc::new(db::Engine::new(
-            db::InMemoryKernel::new(),
-            db::AutomergeRowCodec::new(),
-        ));
-        let second = Arc::new(db::Engine::new(
-            db::InMemoryKernel::new(),
-            db::AutomergeRowCodec::new(),
-        ));
+        let first = Arc::new(db::Database::in_memory());
+        let second = Arc::new(db::Database::in_memory());
         idp_model::replica::up(&first)
             .await
             .expect("initialize replica");
@@ -1210,6 +1301,7 @@ mod tests {
         for (engine, repo) in [(&first, &first_repo), (&second, &second_repo)] {
             assert!(
                 engine
+                    .client()
                     .row_conflicts(TABLE, &key(device_id))
                     .await
                     .expect("read conflicts")
@@ -1245,7 +1337,7 @@ mod tests {
         let device_id = db::Uuid::now_v7();
         let application_id = db::Uuid::now_v7();
         {
-            let engine = Arc::new(open_native_engine(&path).expect("open database"));
+            let engine = Arc::new(Database::open(&path).expect("open database"));
             idp_model::replica::up(&engine)
                 .await
                 .expect("create schema");
@@ -1265,7 +1357,7 @@ mod tests {
             );
         }
         {
-            let engine = Arc::new(open_native_engine(&path).expect("reopen database"));
+            let engine = Arc::new(Database::open(&path).expect("reopen database"));
             let repo = DbSelectionPolicyRepo::new(engine);
             assert!(
                 !repo
@@ -1306,14 +1398,8 @@ mod tests {
 
     #[tokio::test]
     async fn concurrent_reselection_and_deselection_resolves_to_deselected() {
-        let first = Arc::new(db::Engine::new(
-            db::InMemoryKernel::new(),
-            db::AutomergeRowCodec::new(),
-        ));
-        let second = Arc::new(db::Engine::new(
-            db::InMemoryKernel::new(),
-            db::AutomergeRowCodec::new(),
-        ));
+        let first = Arc::new(db::Database::in_memory());
+        let second = Arc::new(db::Database::in_memory());
         idp_model::replica::up(&first)
             .await
             .expect("initialize first replica");
@@ -1423,6 +1509,7 @@ mod tests {
             );
             assert!(
                 engine
+                    .client()
                     .row_conflicts(TABLE, &key(device_id))
                     .await
                     .expect("read conflicts after deterministic resolution")
@@ -1472,14 +1559,8 @@ mod tests {
 
     #[tokio::test]
     async fn owner_and_admin_conflicts_cannot_be_deselected() {
-        let first = Arc::new(db::Engine::new(
-            db::InMemoryKernel::new(),
-            db::AutomergeRowCodec::new(),
-        ));
-        let second = Arc::new(db::Engine::new(
-            db::InMemoryKernel::new(),
-            db::AutomergeRowCodec::new(),
-        ));
+        let first = Arc::new(db::Database::in_memory());
+        let second = Arc::new(db::Database::in_memory());
         idp_model::replica::up(&first)
             .await
             .expect("initialize replica");
@@ -1503,6 +1584,7 @@ mod tests {
 
         for (engine, owner) in [(&first, "other"), (&second, "third")] {
             engine
+                .client()
                 .execute(vec![db::Statement::Query(db::Query::Update(
                     db::QueryUpdate {
                         from: from(),
@@ -1518,6 +1600,7 @@ mod tests {
         sync_replica(&second, &first).await;
         assert!(
             first
+                .client()
                 .row_conflicts(TABLE, &key(device_id))
                 .await
                 .expect("owner conflicts")
@@ -1539,6 +1622,7 @@ mod tests {
         sync_replica(&first, &second).await;
         for (engine, allowed) in [(&first, false), (&second, false), (&second, true)] {
             engine
+                .client()
                 .execute(vec![db::Statement::Query(db::Query::Update(
                     db::QueryUpdate {
                         from: from(),
@@ -1554,6 +1638,7 @@ mod tests {
         sync_replica(&second, &first).await;
         assert!(
             first
+                .client()
                 .row_conflicts(TABLE, &key(other_device))
                 .await
                 .expect("admin conflicts")
@@ -1594,8 +1679,7 @@ mod tests {
             admin_allowed: false,
         };
         {
-            let engine: Arc<NativeEngine> =
-                Arc::new(open_native_engine(&path).expect("open database"));
+            let engine: Arc<Database> = Arc::new(Database::open(&path).expect("open database"));
             idp_model::replica::up(&engine)
                 .await
                 .expect("migrate database");
@@ -1605,8 +1689,7 @@ mod tests {
                 .expect("write validated selection");
         }
         {
-            let engine: Arc<NativeEngine> =
-                Arc::new(open_native_engine(&path).expect("reopen database"));
+            let engine: Arc<Database> = Arc::new(Database::open(&path).expect("reopen database"));
             let repo = DbSelectionPolicyRepo::new(engine);
             assert_eq!(
                 repo.get(device_id, "owner", application_id)
@@ -1621,10 +1704,7 @@ mod tests {
 
     #[tokio::test]
     async fn offline_deselection_keeps_admin_restriction_and_checks_owner() {
-        let engine = Arc::new(db::Engine::new(
-            db::InMemoryKernel::new(),
-            db::AutomergeRowCodec::new(),
-        ));
+        let engine = Arc::new(db::Database::in_memory());
         idp_model::replica::up(&engine)
             .await
             .expect("initialize replica schema");
@@ -1683,10 +1763,7 @@ mod tests {
 
     #[tokio::test]
     async fn admin_restriction_without_selection_and_switch_after_deselect() {
-        let engine = Arc::new(db::Engine::new(
-            db::InMemoryKernel::new(),
-            db::AutomergeRowCodec::new(),
-        ));
+        let engine = Arc::new(db::Database::in_memory());
         idp_model::replica::up(&engine)
             .await
             .expect("initialize replica schema");

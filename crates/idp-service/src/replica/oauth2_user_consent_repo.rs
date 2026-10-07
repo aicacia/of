@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Timelike, Utc};
 use db::{
-    Engine, FromRow, FromRowError, Kernel, Query, QueryColumn, QueryDelete, QueryExpr,
-    QueryExprValue, QueryFrom, QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row,
-    RowCodec, Statement, Uuid, Value,
+    Database, FromRow, FromRowError, Query, QueryColumn, QueryDelete, QueryExpr, QueryExprValue,
+    QueryFrom, QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row, Statement, Uuid,
+    Value,
 };
 use idp_model::{
     model::{Id, OAuth2UserConsent},
@@ -24,27 +24,20 @@ const COLUMNS: [&str; 7] = [
     "updated_at",
 ];
 
-pub struct DbOAuth2UserConsentRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
-    engine: Arc<Engine<K, R>>,
+pub struct DbOAuth2UserConsentRepo {
+    engine: Arc<Database>,
 }
 
-impl<K, R> DbOAuth2UserConsentRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
+impl DbOAuth2UserConsentRepo {
     #[must_use]
-    pub const fn new(engine: Arc<Engine<K, R>>) -> Self {
+    pub const fn new(engine: Arc<Database>) -> Self {
         Self { engine }
     }
 
     async fn rows(&self, query: Query) -> RepoResult<Vec<ConsentRow>> {
         let mut results = self
             .engine
+            .client()
             .execute(vec![Statement::Query(query)])
             .await
             .map_err(db_error)?;
@@ -84,11 +77,7 @@ where
     }
 }
 
-impl<K, R> OAuth2UserConsentRepo for DbOAuth2UserConsentRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
+impl OAuth2UserConsentRepo for DbOAuth2UserConsentRepo {
     async fn upsert_user_consent(
         &self,
         user_id: Id,
@@ -138,6 +127,7 @@ where
             })
         };
         self.engine
+            .client()
             .execute(vec![Statement::Query(statement)])
             .await
             .map_err(db_error)?;
@@ -189,6 +179,7 @@ where
     async fn delete_user_consent_by_id(&self, consent_id: Id) -> RepoResult<()> {
         self.ensure_clear(consent_id).await?;
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Delete(QueryDelete {
                 from: from(),
                 predicate: Some(equals("id", Value::Uuid(consent_id))),
@@ -274,7 +265,7 @@ fn timestamp(value: i64) -> RepoResult<DateTime<Utc>> {
     DateTime::from_timestamp(value, 0)
         .ok_or_else(|| RepoError::InvalidInput("invalid user consent timestamp".into()))
 }
-fn db_error(error: db::EngineError) -> RepoError {
+fn db_error(error: db::QueryError) -> RepoError {
     RepoError::InvalidInput(error.to_string())
 }
 fn row_error(error: FromRowError) -> RepoError {
@@ -332,12 +323,11 @@ fn select(predicate: Option<QueryExpr>) -> Query {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use db::{AutomergeRowCodec, Engine, InMemoryKernel};
     use idp_model::replica::up;
     use std::sync::Arc;
     #[tokio::test]
     async fn upserts_and_deletes_uuid_consents() {
-        let engine = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
+        let engine = Arc::new(db::Database::in_memory());
         up(&engine).await.unwrap();
         let repo = DbOAuth2UserConsentRepo::new(engine);
         let user_id = Id::now_v7();

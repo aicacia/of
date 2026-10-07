@@ -1,7 +1,7 @@
 use std::{io, sync::Arc, time::Duration};
 
 use axum::Router;
-use db::NativeEngine;
+use db::Database;
 use idp_model::contract::DeviceState;
 use idp_service::{
     oauth2::OAuth2Service,
@@ -60,7 +60,7 @@ impl IdpRuntime {
 
 pub async fn build_runtime(
     config: &AppConfig,
-    engine: Arc<NativeEngine>,
+    engine: Arc<Database>,
     device_identity: Arc<DeviceIdentity>,
     server: Server,
     local_permissions: Option<LocalPermissions>,
@@ -148,7 +148,7 @@ pub async fn build_runtime(
                     ));
                 }
                 let engine = Arc::new(
-                    db::open_native_engine(std::path::Path::new(directory).join("management.redb"))
+                    db::Database::open(std::path::Path::new(directory).join("management.redb"))
                         .map_err(io::Error::other)?,
                 );
                 management_service::replica::up(&engine)

@@ -350,10 +350,8 @@ mod tests {
 
     #[cfg(feature = "replica")]
     #[tokio::test]
-    async fn projections_match_actual_schema_columns_and_types() {
-        use db::{AutomergeRowCodec, Engine, InMemoryKernel, ValueType};
-        let engine =
-            alloc::sync::Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
+    async fn projections_match_query_columns_and_validate_record_types() {
+        let engine = alloc::sync::Arc::new(db::Database::in_memory());
         idp_model::replica::up(&engine)
             .await
             .expect("initialize actual schema");
@@ -361,9 +359,14 @@ mod tests {
             "x": "eb5mfvncu6xVoGKVzocLBwKb/NstzijZWfKBWxb4F5g", "y": "SDradyajxGVdpPv8DhEIqP0XtEimhVQZnEfQj/sQ1Lg"});
         for table in public_security_tables() {
             let schema = engine
-                .table_schema(table.name())
+                .client()
+                .translate_and_execute(
+                    &format!("SELECT * FROM {}", table.name()),
+                    &db::SqlTranslator,
+                )
                 .await
-                .expect("public table schema");
+                .expect("public table query")
+                .remove(0);
             let mut record = serde_json::Map::new();
             for column in &schema.columns {
                 if [
@@ -381,11 +384,30 @@ mod tests {
                     "{table:?} missing actual column {}",
                     column.name
                 );
-                let value = match column.r#type {
-                    ValueType::Uuid => serde_json::json!(idp_model::model::Id::now_v7()),
-                    ValueType::Integer => serde_json::json!(1),
-                    ValueType::Text => serde_json::json!("fixture"),
-                    _ => panic!("unexpected public column type"),
+                let value = if column.name == "id"
+                    || column.name.ends_with("_id")
+                        && !["installation_id", "endpoint_id", "software_id"]
+                            .contains(&column.name.as_str())
+                        && !(column.name == "client_id" && table == PublicSecurityTable::Clients)
+                {
+                    serde_json::json!(idp_model::model::Id::now_v7())
+                } else if column.name.ends_with("_at")
+                    || [
+                        "sex",
+                        "entity_type",
+                        "derivation_index",
+                        "hardened",
+                        "state",
+                        "client_type",
+                        "token_endpoint_auth_method",
+                        "code_challenge_method",
+                    ]
+                    .contains(&column.name.as_str())
+                    || (table == PublicSecurityTable::Clients && column.name == "profile")
+                {
+                    serde_json::json!(1)
+                } else {
+                    serde_json::json!("fixture")
                 };
                 record.insert(column.name.clone(), value);
             }

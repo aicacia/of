@@ -3,23 +3,18 @@ use std::io;
 use idp_model::model::Id;
 use idp_service::{replica::DbReplicaSignerRepo, security_sync::PublicSecurityTable};
 use iroh::endpoint::Connection;
-use ofdb_sql::{Kernel, RowCodec};
 
 /// Preflight a public projection from an authenticated peer. This is not apply
 /// authorization or permission to exchange opaque CRDT documents/history.
-pub async fn validate_public_security_record<K, R>(
-    trusted_local: &DbReplicaSignerRepo<K, R>,
+pub async fn validate_public_security_record(
+    trusted_local: &DbReplicaSignerRepo,
     connection: &Connection,
     local_installation: &str,
     claimed_member: Id,
     table: PublicSecurityTable,
     record: &serde_json::Map<String, serde_json::Value>,
     now: i64,
-) -> io::Result<()>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
+) -> io::Result<()> {
     if !trusted_local
         .is_trusted_peer(
             local_installation,
@@ -112,8 +107,7 @@ mod tests {
 
         let root = std::env::temp_dir().join(format!("of-security-source-{}", Id::now_v7()));
         std::fs::create_dir_all(&root).expect("create isolated IdP store");
-        let engine =
-            Arc::new(db::open_native_engine(root.join("idp.redb")).expect("open IdP store"));
+        let engine = Arc::new(db::Database::open(root.join("idp.redb")).expect("open IdP store"));
         idp_model::replica::up(&engine)
             .await
             .expect("initialize IdP");
@@ -241,9 +235,8 @@ mod tests {
         drop(repo);
         drop(devices);
         drop(engine);
-        let engine = Arc::new(
-            db::open_native_engine(root.join("idp.redb")).expect("reopen isolated IdP store"),
-        );
+        let engine =
+            Arc::new(db::Database::open(root.join("idp.redb")).expect("reopen isolated IdP store"));
         let repo = DbReplicaSignerRepo::new(engine);
         validate_public_security_record(
             &repo,

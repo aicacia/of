@@ -373,7 +373,6 @@ where
 mod tests {
     use std::sync::Arc;
 
-    use db::{AutomergeRowCodec, Engine, InMemoryKernel};
     use idp_model::{contract::INSTALLATION_POLICY_ID, model::Id};
 
     use crate::{
@@ -383,7 +382,7 @@ mod tests {
 
     #[tokio::test]
     async fn ensure_rbac_records_retry_by_stable_id_and_reject_conflicts() {
-        let engine = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
+        let engine = Arc::new(db::Database::in_memory());
         up(&engine).await.expect("initialize management schema");
         let service = ManagementService::new(
             DbPermissionRepo::new(Arc::clone(&engine)),

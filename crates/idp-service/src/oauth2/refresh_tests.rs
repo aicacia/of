@@ -4,10 +4,7 @@ use std::{
 };
 
 use base64::{Engine as Base64Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use db::{
-    AutomergeRowCodec, Engine, InMemoryKernel, Query, QueryColumn, QueryFrom, QuerySelect,
-    Statement, Value,
-};
+use db::{Query, QueryColumn, QueryFrom, QuerySelect, Statement, Value};
 use idp_model::{
     contract::{
         ApplicationRegistration, ClientProfile, ClientRegistration, ClientType, EntityType,
@@ -64,20 +61,20 @@ impl PrivateKeyRepo for TestPrivateKeyRepo {
     }
 }
 
-type TestEngine = Engine<InMemoryKernel, AutomergeRowCodec>;
+type TestEngine = db::Database;
 type TestService = OAuth2Service<
-    DbApplicationRepo<InMemoryKernel, AutomergeRowCodec>,
-    DbClientRepo<InMemoryKernel, AutomergeRowCodec, TestPrivateKeyRepo>,
-    DbOAuth2AuthorizationCodeRepo<InMemoryKernel, AutomergeRowCodec>,
-    DbOAuth2RefreshTokenRepo<InMemoryKernel, AutomergeRowCodec>,
-    DbUserRepo<InMemoryKernel, AutomergeRowCodec>,
-    DbOAuth2UserConsentRepo<InMemoryKernel, AutomergeRowCodec>,
-    DbKeyRepo<InMemoryKernel, AutomergeRowCodec>,
+    DbApplicationRepo,
+    DbClientRepo<TestPrivateKeyRepo>,
+    DbOAuth2AuthorizationCodeRepo,
+    DbOAuth2RefreshTokenRepo,
+    DbUserRepo,
+    DbOAuth2UserConsentRepo,
+    DbKeyRepo,
     TestPrivateKeyRepo,
 >;
 
 async fn setup() -> (Arc<TestEngine>, TestService, Client, UserPrincipal) {
-    let engine = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
+    let engine = Arc::new(db::Database::in_memory());
     up(&engine).await.expect("initialize IdP schema");
     let keys = Arc::new(KeyService::new(
         DbKeyRepo::new(Arc::clone(&engine)),
@@ -103,7 +100,7 @@ async fn setup() -> (Arc<TestEngine>, TestService, Client, UserPrincipal) {
         .key_service
         .prepare_node_signer(&binding)
         .expect("prepare independent local signer");
-    engine.translate_and_execute(&format!("INSERT INTO devices (id, public_key, owner_subject, state, approved_at, revoked_at) VALUES (CAST('{}' AS UUID), 'node-endpoint', 'node-owner', 1, 1, NULL)", binding.member_id), &db::SqlTranslator).await.expect("approved local Device");
+    engine.client().translate_and_execute(&format!("INSERT INTO devices (id, public_key, owner_subject, state, approved_at, revoked_at) VALUES (CAST('{}' AS UUID), 'node-endpoint', 'node-owner', 1, 1, NULL)", binding.member_id), &db::SqlTranslator).await.expect("approved local Device");
     let member = idp_model::contract::ReplicaMembership {
         installation_id: service.oauth_config.issuer.clone(),
         issuer: service.oauth_config.issuer.clone(),
@@ -312,6 +309,7 @@ async fn issue(service: &TestService, client: &Client, principal: &UserPrincipal
 }
 async fn states(engine: &TestEngine) -> Vec<db::Row> {
     engine
+        .client()
         .execute(vec![Statement::Query(Query::Select(QuerySelect {
             from: QueryFrom {
                 table: "oauth2_refresh_tokens".into(),
@@ -716,7 +714,7 @@ async fn persisted_node_binding_reopens_for_real_offline_issuance_and_rotation()
         .expect("prepared binding")
         .key_id;
     {
-        let engine = Arc::new(db::open_native_engine(&path).expect("persist Node identity"));
+        let engine = Arc::new(db::Database::open(&path).expect("persist Node identity"));
         up(&engine).await.expect("initialize local trust schema");
         for table in [
             "applications",
@@ -730,6 +728,7 @@ async fn persisted_node_binding_reopens_for_real_offline_issuance_and_rotation()
             "oauth2_refresh_tokens",
         ] {
             let rows = source
+                .client()
                 .translate_and_execute(&format!("SELECT * FROM {table}"), &db::SqlTranslator)
                 .await
                 .expect("read local fixture state")
@@ -737,6 +736,7 @@ async fn persisted_node_binding_reopens_for_real_offline_issuance_and_rotation()
                 .rows;
             for row in rows {
                 engine
+                    .client()
                     .execute(vec![Statement::Query(Query::Insert(db::QueryInsert {
                         table: table.into(),
                         row,
@@ -751,7 +751,7 @@ async fn persisted_node_binding_reopens_for_real_offline_issuance_and_rotation()
     drop(source);
     let mut replacement = None;
     for reopen in 0..2 {
-        let engine = Arc::new(db::open_native_engine(&path).expect("reopen offline Node"));
+        let engine = Arc::new(db::Database::open(&path).expect("reopen offline Node"));
         let config: OAuth2Config =
             serde_json::from_slice(&std::fs::read(&config_path).expect("read binding config"))
                 .expect("restore persisted Node binding");

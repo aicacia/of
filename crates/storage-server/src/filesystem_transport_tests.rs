@@ -37,6 +37,205 @@ where
 }
 
 #[tokio::test]
+async fn delivered_read_chunk_then_channel_closure_is_not_successful_eof() {
+    tokio::time::timeout(Duration::from_secs(20), async {
+        let lookup = MemoryLookup::new();
+        let server = Endpoint::builder(presets::Minimal)
+            .alpns(vec![b"filesystem-truncated-read".to_vec()])
+            .address_lookup(lookup.clone())
+            .bind()
+            .await
+            .expect("bind server");
+        let client = Endpoint::builder(presets::Minimal)
+            .address_lookup(lookup.clone())
+            .bind()
+            .await
+            .expect("bind client");
+        lookup.add_endpoint_info(server.addr());
+        let (outgoing, incoming) = tokio::join!(
+            client.connect(server.id(), b"filesystem-truncated-read"),
+            async {
+                server
+                    .accept()
+                    .await
+                    .expect("incoming connection")
+                    .accept()
+                    .expect("accept connection")
+                    .await
+            }
+        );
+        let outgoing = outgoing.expect("connect client");
+        let incoming = incoming.expect("accept client");
+        let resource = IrohResourceDescriptor {
+            owner_subject: "owner".into(),
+            application_id: Uuid::now_v7().to_string(),
+            filesystem_id: Uuid::now_v7().to_string(),
+        };
+        let transport =
+            IrohFileTransport::open_authorized(&outgoing, resource.clone(), |_| async { true })
+                .await
+                .expect("open file transport");
+        let (mut send, mut recv) = incoming.accept_bi().await.expect("accept file stream");
+        let mut marker = [0];
+        recv.read_exact(&mut marker)
+            .await
+            .expect("read stream marker");
+        assert_eq!(marker[0], FILESYSTEM_STREAM_KIND);
+        assert!(matches!(
+            super::read_message::<iroh::EndpointId>(&mut recv)
+                .await
+                .expect("read hello"),
+            super::WireMessage::Hello { .. }
+        ));
+        let directory = root();
+        let filesystem = FileSystem::open(&directory, server.id()).expect("open peer filesystem");
+        filesystem
+            .set_residency("", Residency::Full)
+            .await
+            .expect("enable local peer content");
+        filesystem
+            .write("file", b"complete content")
+            .await
+            .expect("write peer file");
+        let entry = filesystem.entry("file").await.expect("read peer entry");
+        let (close_tx, close_rx) = tokio::sync::oneshot::channel();
+        let peer = tokio::spawn(async move {
+            async fn send_message(
+                send: &mut iroh::endpoint::SendStream,
+                message: super::WireMessage<iroh::EndpointId>,
+            ) {
+                super::write_frame(send, &super::encode(&message).expect("encode peer frame"))
+                    .await
+                    .expect("send peer frame");
+            }
+            send_message(
+                &mut send,
+                super::WireMessage::Hello {
+                    version: super::IROH_FILE_PROTOCOL_VERSION,
+                    resource,
+                    deleted: false,
+                },
+            )
+            .await;
+            let super::WireMessage::Request {
+                id,
+                operation: file_system::FileOperation::Open(_),
+            } = super::read_message::<iroh::EndpointId>(&mut recv)
+                .await
+                .expect("receive open")
+            else {
+                panic!("expected open");
+            };
+            send_message(
+                &mut send,
+                super::WireMessage::Response {
+                    id,
+                    response: file_system::FileResponse::Opened {
+                        handle: file_system::FileHandleId(Uuid::now_v7()),
+                        revision: entry.meta.revision,
+                        entry: entry.clone(),
+                    },
+                },
+            )
+            .await;
+            let super::WireMessage::Request {
+                id,
+                operation: file_system::FileOperation::Read { .. },
+            } = super::read_message::<iroh::EndpointId>(&mut recv)
+                .await
+                .expect("receive read")
+            else {
+                panic!("expected read");
+            };
+            send_message(
+                &mut send,
+                super::WireMessage::Response {
+                    id,
+                    response: file_system::FileResponse::ReadChunk(Bytes::from_static(b"partial")),
+                },
+            )
+            .await;
+            let super::WireMessage::Request {
+                id,
+                operation: file_system::FileOperation::Open(_),
+            } = super::read_message::<iroh::EndpointId>(&mut recv)
+                .await
+                .expect("receive delivery barrier")
+            else {
+                panic!("expected barrier open");
+            };
+            send_message(
+                &mut send,
+                super::WireMessage::Response {
+                    id,
+                    response: file_system::FileResponse::Opened {
+                        handle: file_system::FileHandleId(Uuid::now_v7()),
+                        revision: entry.meta.revision,
+                        entry,
+                    },
+                },
+            )
+            .await;
+            close_rx
+                .await
+                .expect("client consumed chunk before stream closure");
+            send.finish().expect("close peer stream without ReadEnd");
+        });
+        let mut handle = transport
+            .open(
+                server.id(),
+                OpenRequest {
+                    path: "file".into(),
+                    revision: None,
+                },
+            )
+            .await
+            .expect("open remote file");
+        let mut read = handle.read(0, 32);
+        core::future::poll_fn(|cx| {
+            assert!(core::future::Future::poll(read.as_mut(), cx).is_pending());
+            core::task::Poll::Ready(())
+        })
+        .await;
+        let barrier = transport
+            .open(
+                server.id(),
+                OpenRequest {
+                    path: "file".into(),
+                    revision: None,
+                },
+            )
+            .await
+            .expect("ordered response proves the earlier chunk was dispatched");
+        core::future::poll_fn(|cx| {
+            assert!(
+                core::future::Future::poll(read.as_mut(), cx).is_pending(),
+                "consume delivered chunk while EOF is held back"
+            );
+            core::task::Poll::Ready(())
+        })
+        .await;
+        close_tx
+            .send(())
+            .expect("release EOF after chunk consumption");
+        let error = read
+            .await
+            .expect_err("delivered chunks without ReadEnd must not become successful data");
+        assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe);
+        peer.await.expect("peer task joins");
+        drop(barrier);
+        drop(handle);
+        transport.close();
+        drop(filesystem);
+        client.close().await;
+        server.close().await;
+        std::fs::remove_dir_all(directory).expect("remove peer store");
+    })
+    .await
+    .expect("truncated-read regression finishes");
+}
+
+#[tokio::test]
 async fn cancelled_sync_closes_its_peer_stream_and_releases_local_filesystem() {
     tokio::time::timeout(Duration::from_secs(20), async {
         let lookup = MemoryLookup::new();

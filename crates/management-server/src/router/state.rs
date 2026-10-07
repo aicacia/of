@@ -4,11 +4,10 @@ use management_service::{
     HostedControlPlane, ManagementService,
     replica::{DbPermissionRepo, DbRoleRepo, DbSelectionPolicyRepo},
 };
-use ofdb_sql::{AutomergeRowCodec, RedbKernel};
 
-type DbPermission = DbPermissionRepo<RedbKernel, AutomergeRowCodec>;
-type DbRole = DbRoleRepo<RedbKernel, AutomergeRowCodec>;
-type DbSelectionPolicy = DbSelectionPolicyRepo<RedbKernel, AutomergeRowCodec>;
+type DbPermission = DbPermissionRepo;
+type DbRole = DbRoleRepo;
+type DbSelectionPolicy = DbSelectionPolicyRepo;
 
 pub(crate) type ManagementRouterService = ManagementService<DbPermission, DbRole>;
 

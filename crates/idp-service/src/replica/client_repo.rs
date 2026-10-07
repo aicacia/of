@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Timelike, Utc};
 use db::{
-    Engine, FromRow, FromRowError, Kernel, Query, QueryColumn, QueryDelete, QueryExpr,
-    QueryExprValue, QueryFrom, QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row,
-    RowCodec, Statement, Uuid, Value,
+    Database, FromRow, FromRowError, Query, QueryColumn, QueryDelete, QueryExpr, QueryExprValue,
+    QueryFrom, QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row, Statement, Uuid,
+    Value,
 };
 use idp_model::{
     contract::{
@@ -49,27 +49,20 @@ const COLUMNS: [&str; 25] = [
     "updated_at",
 ];
 
-pub struct DbClientRepo<K, R, P = crate::repo::PrivateKeyKeyringRepo>
+pub struct DbClientRepo<P = crate::repo::PrivateKeyKeyringRepo>
 where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
     P: PrivateKeyRepo + Send + Sync,
 {
-    engine: Arc<Engine<K, R>>,
-    key_service: Arc<KeyService<DbKeyRepo<K, R>, P>>,
+    engine: Arc<Database>,
+    key_service: Arc<KeyService<DbKeyRepo, P>>,
 }
 
-impl<K, R, P> DbClientRepo<K, R, P>
+impl<P> DbClientRepo<P>
 where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
     P: PrivateKeyRepo + Send + Sync,
 {
     #[must_use]
-    pub const fn new(
-        engine: Arc<Engine<K, R>>,
-        key_service: Arc<KeyService<DbKeyRepo<K, R>, P>>,
-    ) -> Self {
+    pub const fn new(engine: Arc<Database>, key_service: Arc<KeyService<DbKeyRepo, P>>) -> Self {
         Self {
             engine,
             key_service,
@@ -93,6 +86,7 @@ where
         });
         let mut results = self
             .engine
+            .client()
             .execute(vec![Statement::Query(select(predicate))])
             .await
             .map_err(db_error)?;
@@ -120,6 +114,7 @@ where
     async fn application_id(&self, registration: &ClientRegistration) -> RepoResult<Id> {
         let mut results = self
             .engine
+            .client()
             .execute(vec![Statement::Query(Query::Select(QuerySelect {
                 from: QueryFrom {
                     table: "applications".into(),
@@ -156,6 +151,7 @@ where
             .expect("zero nanoseconds is valid");
         let id = Id::now_v7();
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Insert(QueryInsert {
                 table: "applications".into(),
                 row: Row::new(vec![
@@ -184,10 +180,8 @@ where
     }
 }
 
-impl<K, R, P> ClientRepo for DbClientRepo<K, R, P>
+impl<P> ClientRepo for DbClientRepo<P>
 where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
     P: PrivateKeyRepo + Send + Sync,
 {
     async fn find_client_by_id(&self, id: Id) -> RepoResult<Option<Client>> {
@@ -290,6 +284,7 @@ where
             updated_at: now,
         };
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Insert(QueryInsert {
                 table: TABLE.into(),
                 row: ClientRow::from(&client).into(),
@@ -319,6 +314,7 @@ where
             .with_nanosecond(0)
             .expect("zero nanoseconds is valid");
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                 from: from(),
                 assignments: ClientRow::from(&client).assignments(updated_at.timestamp()),
@@ -339,6 +335,7 @@ where
             .await?
             .ok_or_else(|| RepoError::InvalidInput("client not found".into()))?;
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Delete(QueryDelete {
                 from: from(),
                 predicate: Some(equals("id", Value::Uuid(client.id))),
@@ -653,7 +650,7 @@ fn token_endpoint_auth_method(value: i64) -> RepoResult<TokenEndpointAuthMethod>
         )),
     }
 }
-fn db_error(error: db::EngineError) -> RepoError {
+fn db_error(error: db::QueryError) -> RepoError {
     RepoError::InvalidInput(error.to_string())
 }
 fn row_error(error: FromRowError) -> RepoError {
@@ -709,7 +706,6 @@ mod tests {
         sync::{Arc, Mutex},
     };
 
-    use db::{AutomergeRowCodec, Engine, InMemoryKernel};
     use idp_model::{
         contract::{ApplicationRegistration, ClientProfile, GrantType, ResponseType},
         replica::up,
@@ -794,7 +790,7 @@ mod tests {
 
     #[tokio::test]
     async fn client_secrets_are_disclosed_only_on_creation_and_rotation() {
-        let engine = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
+        let engine = Arc::new(db::Database::in_memory());
         up(&engine).await.expect("initialize current IdP schema");
         let key_service = Arc::new(KeyService::new(
             DbKeyRepo::new(Arc::clone(&engine)),
@@ -880,7 +876,7 @@ mod tests {
 
     #[tokio::test]
     async fn creates_public_and_confidential_clients_with_root_keys() {
-        let engine = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
+        let engine = Arc::new(db::Database::in_memory());
         up(&engine).await.unwrap();
         let key_service = Arc::new(KeyService::new(
             DbKeyRepo::new(Arc::clone(&engine)),

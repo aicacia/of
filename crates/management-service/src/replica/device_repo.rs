@@ -2,9 +2,8 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Timelike, Utc};
 use db::{
-    Engine, FromRow, FromRowError, Kernel, Query, QueryColumn, QueryExpr, QueryExprValue,
-    QueryFrom, QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row, RowCodec,
-    Statement, Uuid, Value,
+    Database, FromRow, FromRowError, Query, QueryColumn, QueryExpr, QueryExprValue, QueryFrom,
+    QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row, Statement, Uuid, Value,
 };
 use idp_model::{
     contract::{DeviceState, TrustedDevice},
@@ -31,27 +30,20 @@ const COLUMNS: [&str; 13] = [
     "updated_at",
 ];
 
-pub struct DbDeviceRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
-    engine: Arc<Engine<K, R>>,
+pub struct DbDeviceRepo {
+    engine: Arc<Database>,
 }
 
-impl<K, R> DbDeviceRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
+impl DbDeviceRepo {
     #[must_use]
-    pub const fn new(engine: Arc<Engine<K, R>>) -> Self {
+    pub const fn new(engine: Arc<Database>) -> Self {
         Self { engine }
     }
 
     async fn records(&self) -> ManagementResult<Vec<DeviceRow>> {
         let mut results = self
             .engine
+            .client()
             .execute(vec![Statement::Query(select())])
             .await
             .map_err(db_error)?;
@@ -89,6 +81,7 @@ where
         assignments: Vec<QueryUpdateAssignment>,
     ) -> ManagementResult<()> {
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                 from: from(),
                 assignments,
@@ -101,11 +94,7 @@ where
     }
 }
 
-impl<K, R> DeviceRepo for DbDeviceRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
+impl DeviceRepo for DbDeviceRepo {
     async fn create(
         &self,
         owner_subject: String,
@@ -142,6 +131,7 @@ where
             updated_at: now.timestamp(),
         };
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Insert(QueryInsert {
                 table: TABLE.into(),
                 row: row.clone().into(),
@@ -187,6 +177,7 @@ where
             updated_at: now.timestamp(),
         };
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Insert(QueryInsert {
                 table: TABLE.into(),
                 row: row.clone().into(),
@@ -567,7 +558,7 @@ fn timestamp(value: i64) -> ManagementResult<DateTime<Utc>> {
         .ok_or_else(|| ManagementError::InvalidInput("invalid device timestamp".into()))
 }
 
-fn db_error(error: db::EngineError) -> ManagementError {
+fn db_error(error: db::QueryError) -> ManagementError {
     ManagementError::InvalidInput(error.to_string())
 }
 
@@ -623,13 +614,13 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use db::{AutomergeRowCodec, Engine, InMemoryKernel, NativeEngine, open_native_engine};
+    use db::Database;
     use idp_model::contract::DeviceState;
 
     use crate::{DeviceRepo, replica::DbDeviceRepo};
 
-    async fn repo() -> DbDeviceRepo<InMemoryKernel, AutomergeRowCodec> {
-        let engine = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
+    async fn repo() -> DbDeviceRepo {
+        let engine = Arc::new(db::Database::in_memory());
         idp_model::replica::up(&engine)
             .await
             .expect("initialize replica schema");
@@ -831,8 +822,8 @@ mod tests {
         let enrolled_id;
         let paired_id;
         {
-            let engine: Arc<NativeEngine> =
-                Arc::new(open_native_engine(&path).expect("open durable test database"));
+            let engine: Arc<Database> =
+                Arc::new(Database::open(&path).expect("open durable test database"));
             idp_model::replica::up(&engine)
                 .await
                 .expect("initialize replica schema");
@@ -866,8 +857,8 @@ mod tests {
         }
 
         {
-            let engine: Arc<NativeEngine> =
-                Arc::new(open_native_engine(&path).expect("reopen durable test database"));
+            let engine: Arc<Database> =
+                Arc::new(Database::open(&path).expect("reopen durable test database"));
             let repo = DbDeviceRepo::new(engine);
             let devices = repo.list().await.expect("load devices after reopen");
             let enrolled = devices

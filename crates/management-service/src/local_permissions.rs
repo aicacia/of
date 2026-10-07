@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use db::NativeEngine;
+use db::Database;
 use idp_model::contract::PermissionEvaluationRequest;
 
 use crate::{
@@ -10,12 +10,12 @@ use crate::{
 
 #[derive(Clone)]
 pub struct LocalPermissions {
-    engine: Arc<NativeEngine>,
+    engine: Arc<Database>,
 }
 
 impl LocalPermissions {
     #[must_use]
-    pub fn new(engine: Arc<NativeEngine>) -> Self {
+    pub fn new(engine: Arc<Database>) -> Self {
         Self { engine }
     }
 
@@ -36,7 +36,7 @@ mod tests {
         ManagementService,
         replica::{DbPermissionRepo, DbRoleRepo, up},
     };
-    use db::open_native_engine;
+    use db::Database;
     use idp_model::{
         contract::{
             IdentityAction, IdentityResource, PermissionEvaluationRequest, PermissionSubject,
@@ -59,7 +59,7 @@ mod tests {
             },
         };
         {
-            let engine = Arc::new(open_native_engine(&path).expect("open local policy"));
+            let engine = Arc::new(Database::open(&path).expect("open local policy"));
             up(&engine).await.expect("initialize policy only");
             let local = LocalPermissions::new(Arc::clone(&engine));
             assert!(!local.evaluate(&request).await.expect("missing grants deny"));
@@ -85,7 +85,7 @@ mod tests {
             );
         }
         {
-            let engine = Arc::new(open_native_engine(&path).expect("reopen offline policy"));
+            let engine = Arc::new(Database::open(&path).expect("reopen offline policy"));
             let local = LocalPermissions::new(engine);
             assert!(
                 local

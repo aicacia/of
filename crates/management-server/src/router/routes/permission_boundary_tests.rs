@@ -27,7 +27,7 @@ async fn typed_evaluation_separates_application_and_installation_assignments() {
     let root = std::env::temp_dir().join(format!("management-evaluation-{}", Id::now_v7()));
     std::fs::create_dir_all(&root).expect("create isolated test directory");
     let engine =
-        Arc::new(db::open_native_engine(root.join("management.redb")).expect("open test engine"));
+        Arc::new(db::Database::open(root.join("management.redb")).expect("open test engine"));
     up(&engine).await.expect("initialize policy schema");
     let state = state(Arc::clone(&engine));
     let service = &state.management_service;
@@ -150,7 +150,7 @@ async fn typed_evaluation_separates_application_and_installation_assignments() {
     std::fs::remove_dir_all(root).expect("remove test database");
 }
 
-fn state(engine: Arc<db::NativeEngine>) -> RouterState {
+fn state(engine: Arc<db::Database>) -> RouterState {
     RouterState::new(
         "http://127.0.0.1",
         Arc::new(ManagementService::new(
@@ -175,7 +175,7 @@ async fn all_rbac_routes_reject_cross_application_before_repository_access() {
     let root = std::env::temp_dir().join(format!("management-scope-{}", Id::now_v7()));
     std::fs::create_dir_all(&root).expect("create isolated test directory");
     let engine =
-        Arc::new(db::open_native_engine(root.join("management.redb")).expect("open empty engine"));
+        Arc::new(db::Database::open(root.join("management.redb")).expect("open empty engine"));
     let state = state(Arc::clone(&engine));
     let caller_app = Id::now_v7();
     let target_app = Id::now_v7();
@@ -315,8 +315,7 @@ async fn all_rbac_routes_reject_cross_application_before_repository_access() {
 async fn application_permission_requires_live_assignment_and_does_not_expose_other_roles() {
     let root = std::env::temp_dir().join(format!("management-permission-{}", Id::now_v7()));
     std::fs::create_dir_all(&root).expect("create isolated test directory");
-    let engine =
-        Arc::new(db::open_native_engine(root.join("management.redb")).expect("open engine"));
+    let engine = Arc::new(db::Database::open(root.join("management.redb")).expect("open engine"));
     up(&engine).await.expect("initialize Management schema");
     let state = state(Arc::clone(&engine));
     let service = state.management_service.as_ref();

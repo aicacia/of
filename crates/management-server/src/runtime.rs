@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::Router;
-use db::NativeEngine;
+use db::Database;
 use management_service::{
     HostedControlPlane, ManagementService,
     replica::{DbPermissionRepo, DbRoleRepo, DbSelectionPolicyRepo, up},
@@ -10,12 +10,12 @@ use management_service::{
 use crate::{RouterState, router::openapi_router};
 
 pub async fn build_router(
-    engine: Arc<NativeEngine>,
+    engine: Arc<Database>,
     api_base_uri: &str,
     prefix: &str,
     storage_audience: &str,
     control_plane: Arc<HostedControlPlane>,
-) -> Result<Router, db::EngineError> {
+) -> Result<Router, db::QueryError> {
     up(&engine).await?;
 
     let management_service = Arc::new(ManagementService::new(

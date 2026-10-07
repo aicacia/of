@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Timelike, Utc};
 use db::{
-    Engine, FromRow, FromRowError, Kernel, Query, QueryColumn, QueryDelete, QueryExpr,
-    QueryExprValue, QueryFrom, QueryInsert, QuerySelect, Row, RowCodec, Statement, Uuid, Value,
+    Database, FromRow, FromRowError, Query, QueryColumn, QueryDelete, QueryExpr, QueryExprValue,
+    QueryFrom, QueryInsert, QuerySelect, Row, Statement, Uuid, Value,
 };
 use idp_model::{
     model::{Id, Permission, Role},
@@ -45,27 +45,20 @@ const USER_ROLE_COLUMNS: [&str; 7] = [
     "updated_at",
 ];
 
-pub struct DbRoleRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
-    engine: Arc<Engine<K, R>>,
+pub struct DbRoleRepo {
+    engine: Arc<Database>,
 }
 
-impl<K, R> DbRoleRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
+impl DbRoleRepo {
     #[must_use]
-    pub const fn new(engine: Arc<Engine<K, R>>) -> Self {
+    pub const fn new(engine: Arc<Database>) -> Self {
         Self { engine }
     }
 
     async fn rows<T: FromRow>(&self, table: &str, columns: &[&str]) -> ManagementResult<Vec<T>> {
         let mut results = self
             .engine
+            .client()
             .execute(vec![Statement::Query(select(table, columns))])
             .await
             .map_err(db_error)?;
@@ -148,11 +141,7 @@ where
     }
 }
 
-impl<K, R> RoleRepo for DbRoleRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
+impl RoleRepo for DbRoleRepo {
     async fn list_roles(
         &self,
         application_id: Id,
@@ -210,6 +199,7 @@ where
             updated_at: now,
         };
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Insert(QueryInsert {
                 table: ROLES.into(),
                 row: RoleRow::from(&role).into(),
@@ -253,6 +243,7 @@ where
         );
         self.ensure_clear(&relationships).await?;
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Delete(QueryDelete {
                 from: from(ROLES),
                 predicate: Some(equals(ROLES, "id", Value::Uuid(role.id))),
@@ -281,6 +272,7 @@ where
         }
         let now = now();
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Insert(QueryInsert {
                 table: USER_ROLES.into(),
                 row: UserRoleRow {
@@ -314,6 +306,7 @@ where
             .await?
             .ok_or_else(|| ManagementError::InvalidInput("user role not found".into()))?;
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Delete(QueryDelete {
                 from: from(USER_ROLES),
                 predicate: Some(equals(USER_ROLES, "id", Value::Uuid(user_role.id))),
@@ -614,7 +607,7 @@ fn now() -> DateTime<Utc> {
         .expect("zero nanoseconds is valid")
 }
 
-fn db_error(error: db::EngineError) -> ManagementError {
+fn db_error(error: db::QueryError) -> ManagementError {
     ManagementError::InvalidInput(error.to_string())
 }
 

@@ -10,7 +10,7 @@ use std::{
 use api::serve;
 use clap::Parser;
 use cli::{CliArgs, CliServerCommand, shutdown_signal};
-use db::open_native_engine;
+use db::Database;
 use env_logger::Env;
 
 use management_service::HostedControlPlane;
@@ -78,10 +78,12 @@ pub async fn run() -> io::Result<()> {
                 idp_service_audience,
             )
         })
-        .and_then(|control_plane| match app_config.idp_permission_evaluator_client_id.as_deref() {
-            Some(client_id) => control_plane.with_permission_evaluator(client_id),
-            None => Ok(control_plane),
-        })
+        .and_then(
+            |control_plane| match app_config.idp_permission_evaluator_client_id.as_deref() {
+                Some(client_id) => control_plane.with_permission_evaluator(client_id),
+                None => Ok(control_plane),
+            },
+        )
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?,
     );
 
@@ -89,7 +91,7 @@ pub async fn run() -> io::Result<()> {
 
     create_dir_all(&app_config.data_dir)?;
     let engine = Arc::new(
-        open_native_engine(Path::new(&app_config.data_dir).join("management.redb"))
+        Database::open(Path::new(&app_config.data_dir).join("management.redb"))
             .map_err(io::Error::other)?,
     );
     let router = build_router(

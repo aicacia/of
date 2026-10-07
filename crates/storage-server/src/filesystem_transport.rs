@@ -323,6 +323,7 @@ impl IrohFileTransport {
         let (id, mut rx, _permit) = self.request(operation).await?;
         let mut responses = Vec::new();
         let mut read_bytes = 0_usize;
+        let mut complete = false;
         while let Some(response) = rx.recv().await {
             if let (Some(limit), FileResponse::ReadChunk(bytes)) = (read_limit, &response) {
                 let Some(total) = read_bytes.checked_add(bytes.len()) else {
@@ -344,14 +345,15 @@ impl IrohFileTransport {
             let done = !matches!(response, FileResponse::ReadChunk(_));
             responses.push(response);
             if done {
+                complete = true;
                 break;
             }
         }
         self.inner.pending.lock().await.remove(&id);
-        if responses.is_empty() {
+        if !complete {
             return Err(Error::new(
                 ErrorKind::BrokenPipe,
-                "Iroh file session closed",
+                "Iroh file session closed before the response completed",
             ));
         }
         Ok(responses)

@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Timelike, Utc};
 use db::{
-    Engine, FromRow, FromRowError, Kernel, Query, QueryColumn, QueryDelete, QueryExpr,
-    QueryExprValue, QueryFrom, QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row,
-    RowCodec, Statement, Uuid, Value,
+    Database, FromRow, FromRowError, Query, QueryColumn, QueryDelete, QueryExpr, QueryExprValue,
+    QueryFrom, QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row, Statement, Uuid,
+    Value,
 };
 use idp_model::{
     model::{Application, Id},
@@ -23,21 +23,13 @@ const COLUMNS: [&str; 6] = [
     "updated_at",
 ];
 
-pub struct DbApplicationRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
-    engine: Arc<Engine<K, R>>,
+pub struct DbApplicationRepo {
+    engine: Arc<Database>,
 }
 
-impl<K, R> DbApplicationRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
+impl DbApplicationRepo {
     #[must_use]
-    pub const fn new(engine: Arc<Engine<K, R>>) -> Self {
+    pub const fn new(engine: Arc<Database>) -> Self {
         Self { engine }
     }
 
@@ -45,6 +37,7 @@ where
         let query = select(Some(equals(column, value)));
         let mut rows = self
             .engine
+            .client()
             .execute(vec![Statement::Query(query)])
             .await
             .map_err(db_error)?;
@@ -79,11 +72,7 @@ where
     }
 }
 
-impl<K, R> ApplicationRepo for DbApplicationRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
+impl ApplicationRepo for DbApplicationRepo {
     async fn find_by_id(&self, application_id: Id) -> RepoResult<Option<Application>> {
         self.find("id", Value::Uuid(application_id)).await
     }
@@ -95,6 +84,7 @@ where
     async fn list_applications(&self, offset: u32, limit: u32) -> RepoResult<Vec<Application>> {
         let mut rows = self
             .engine
+            .client()
             .execute(vec![Statement::Query(select(None))])
             .await
             .map_err(db_error)?;
@@ -132,6 +122,7 @@ where
             updated_at: now,
         };
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Insert(QueryInsert {
                 table: TABLE.into(),
                 row: ApplicationRow::from(&application).into(),
@@ -148,6 +139,7 @@ where
             .with_nanosecond(0)
             .expect("zero nanoseconds is valid");
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                 from: from(),
                 assignments: vec![
@@ -179,6 +171,7 @@ where
             return Err(RepoError::InvalidInput("application not found".into()));
         }
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Delete(QueryDelete {
                 from: from(),
                 predicate: Some(equals("id", Value::Uuid(application_id))),
@@ -259,7 +252,7 @@ fn timestamp(value: i64) -> RepoResult<DateTime<Utc>> {
         .ok_or_else(|| RepoError::InvalidInput("invalid application timestamp".into()))
 }
 
-fn db_error(error: db::EngineError) -> RepoError {
+fn db_error(error: db::QueryError) -> RepoError {
     RepoError::InvalidInput(error.to_string())
 }
 
@@ -314,14 +307,13 @@ fn select(predicate: Option<QueryExpr>) -> Query {
 mod tests {
     use std::sync::Arc;
 
-    use db::{AutomergeRowCodec, Engine, InMemoryKernel};
     use idp_model::replica::up;
 
     use super::*;
 
     #[tokio::test]
     async fn creates_updates_and_deletes_uuid_applications() {
-        let engine = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
+        let engine = Arc::new(db::Database::in_memory());
         up(&engine).await.unwrap();
         let repo = DbApplicationRepo::new(Arc::clone(&engine));
 

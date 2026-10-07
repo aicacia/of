@@ -1,6 +1,6 @@
 use std::{fs, io, path::Path, sync::Arc};
 
-use db::open_native_engine;
+use db::Database;
 use idp_model::{
     contract::{ClientRegistration, ErrorResponse},
     model::Id,
@@ -13,7 +13,6 @@ use idp_service::{
     },
     repo::{KeyService, PrivateKeyKeyringRepo},
 };
-use ofdb_sql::{AutomergeRowCodec, RedbKernel};
 
 use crate::AppConfig;
 
@@ -26,13 +25,13 @@ fn to_io_error(error: ErrorResponse) -> io::Error {
 }
 
 type NativeOAuth2Service = OAuth2Service<
-    DbApplicationRepo<RedbKernel, AutomergeRowCodec>,
-    DbClientRepo<RedbKernel, AutomergeRowCodec>,
-    DbOAuth2AuthorizationCodeRepo<RedbKernel, AutomergeRowCodec>,
-    DbOAuth2RefreshTokenRepo<RedbKernel, AutomergeRowCodec>,
-    DbUserRepo<RedbKernel, AutomergeRowCodec>,
-    DbOAuth2UserConsentRepo<RedbKernel, AutomergeRowCodec>,
-    DbKeyRepo<RedbKernel, AutomergeRowCodec>,
+    DbApplicationRepo,
+    DbClientRepo,
+    DbOAuth2AuthorizationCodeRepo,
+    DbOAuth2RefreshTokenRepo,
+    DbUserRepo,
+    DbOAuth2UserConsentRepo,
+    DbKeyRepo,
     PrivateKeyKeyringRepo,
 >;
 
@@ -44,8 +43,7 @@ impl OwnerProvisioner {
     pub async fn open(config: &AppConfig) -> io::Result<Self> {
         let data_dir = Path::new(&config.data_dir);
         fs::create_dir_all(data_dir)?;
-        let engine =
-            Arc::new(open_native_engine(data_dir.join("idp.redb")).map_err(io::Error::other)?);
+        let engine = Arc::new(Database::open(data_dir.join("idp.redb")).map_err(io::Error::other)?);
         idp_model::replica::up(&engine)
             .await
             .map_err(io::Error::other)?;

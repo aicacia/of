@@ -13,7 +13,7 @@ use clap::Parser;
 #[cfg(feature = "completions")]
 use cli::Shell;
 use cli::{CliArgs, shutdown_signal};
-use db::open_native_engine;
+use db::Database;
 use env_logger::Env;
 use iroh_chain::EndpointIdStore;
 
@@ -91,7 +91,7 @@ pub async fn run() -> io::Result<()> {
 
     std::fs::create_dir_all(&app_config.data_dir)?;
     let engine = Arc::new(
-        open_native_engine(Path::new(&app_config.data_dir).join("idp.redb"))
+        Database::open(Path::new(&app_config.data_dir).join("idp.redb"))
             .map_err(io::Error::other)?,
     );
     let allowed_peers = EndpointIdStore::default();

@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Timelike, Utc};
 use db::{
-    Engine, FromRow, FromRowError, Kernel, Query, QueryColumn, QueryDelete, QueryExpr,
-    QueryExprValue, QueryFrom, QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row,
-    RowCodec, Statement, Uuid, Value,
+    Database, FromRow, FromRowError, Query, QueryColumn, QueryDelete, QueryExpr, QueryExprValue,
+    QueryFrom, QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row, Statement, Uuid,
+    Value,
 };
 use idp_model::{
     contract::Sex,
@@ -79,22 +79,14 @@ const CREDENTIAL_COLUMNS: [&str; 8] = [
     "updated_at",
 ];
 
-pub struct DbUserRepo<K, R>
-where
-    K: Kernel + Send + Sync,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
-    engine: Arc<Engine<K, R>>,
+pub struct DbUserRepo {
+    engine: Arc<Database>,
     password_config: PasswordConfig,
 }
 
-impl<K, R> DbUserRepo<K, R>
-where
-    K: Kernel + Send + Sync,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
+impl DbUserRepo {
     #[must_use]
-    pub const fn new(engine: Arc<Engine<K, R>>, password_config: PasswordConfig) -> Self {
+    pub const fn new(engine: Arc<Database>, password_config: PasswordConfig) -> Self {
         Self {
             engine,
             password_config,
@@ -104,6 +96,7 @@ where
     async fn rows<T: FromRow>(&self, query: Query, missing: &str) -> RepoResult<Vec<T>> {
         let mut results = self
             .engine
+            .client()
             .execute(vec![Statement::Query(query)])
             .await
             .map_err(db_error)?;
@@ -198,11 +191,7 @@ where
     }
 }
 
-impl<K, R> UserRepo for DbUserRepo<K, R>
-where
-    K: Kernel + Send + Sync,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
+impl UserRepo for DbUserRepo {
     async fn find_user_by_id(&self, id: Id) -> RepoResult<Option<User>> {
         Ok(self
             .users(Some(equals(USERS, "id", Value::Uuid(id))))
@@ -327,6 +316,7 @@ where
             updated_at: now.timestamp(),
         };
         self.engine
+            .client()
             .execute(vec![
                 Statement::Query(Query::Insert(QueryInsert {
                     table: USERS.into(),
@@ -350,6 +340,7 @@ where
         }
         let updated_at = now();
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                 from: from(USERS),
                 assignments: UserRow::assignments(&user, updated_at),
@@ -372,6 +363,7 @@ where
         let email_row = emails.iter_mut().find(|existing| existing.email == email);
         if let Some(existing) = email_row {
             self.engine
+                .client()
                 .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                     from: from(EMAILS),
                     assignments: vec![
@@ -395,6 +387,7 @@ where
                 updated_at: now,
             };
             self.engine
+                .client()
                 .execute(vec![Statement::Query(Query::Insert(QueryInsert {
                     table: EMAILS.into(),
                     row: row.into(),
@@ -408,6 +401,7 @@ where
             .filter(|existing| existing.email != email)
         {
             self.engine
+                .client()
                 .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                     from: from(EMAILS),
                     assignments: vec![
@@ -436,6 +430,7 @@ where
             .find(|existing| existing.phone_number == phone_number)
         {
             self.engine
+                .client()
                 .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                     from: from(PHONES),
                     assignments: vec![
@@ -459,6 +454,7 @@ where
                 updated_at: now,
             };
             self.engine
+                .client()
                 .execute(vec![Statement::Query(Query::Insert(QueryInsert {
                     table: PHONES.into(),
                     row: row.into(),
@@ -472,6 +468,7 @@ where
             .filter(|existing| existing.phone_number != phone_number)
         {
             self.engine
+                .client()
                 .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                     from: from(PHONES),
                     assignments: vec![
@@ -498,6 +495,7 @@ where
         }
         for credential in self.credentials(user_id).await? {
             self.engine
+                .client()
                 .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                     from: from(CREDENTIALS),
                     assignments: vec![
@@ -511,6 +509,7 @@ where
                 .map_err(db_error)?;
         }
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Insert(QueryInsert {
                 table: CREDENTIALS.into(),
                 row: CredentialRow {
@@ -533,6 +532,7 @@ where
 
     async fn delete_user_by_id(&self, user_id: Id) -> RepoResult<()> {
         self.engine
+            .client()
             .execute(vec![Statement::Query(Query::Delete(QueryDelete {
                 from: from(USERS),
                 predicate: Some(equals(USERS, "id", Value::Uuid(user_id))),
@@ -848,7 +848,7 @@ fn sex(value: i64) -> RepoResult<Sex> {
         _ => Err(RepoError::InvalidInput("invalid user sex".into())),
     }
 }
-fn db_error(error: db::EngineError) -> RepoError {
+fn db_error(error: db::QueryError) -> RepoError {
     RepoError::InvalidInput(error.to_string())
 }
 fn row_error(error: FromRowError) -> RepoError {
@@ -914,14 +914,13 @@ fn select(table: &str, columns: &[&str], predicate: Option<QueryExpr>) -> Query 
 mod tests {
     use std::sync::Arc;
 
-    use db::{AutomergeRowCodec, Engine, InMemoryKernel};
     use idp_model::replica::up;
 
     use super::*;
 
     #[tokio::test]
     async fn manages_uuid_users_and_password_credentials() {
-        let engine = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
+        let engine = Arc::new(db::Database::in_memory());
         up(&engine).await.unwrap();
         let repo = DbUserRepo::new(engine, PasswordConfig::default());
         let user = repo

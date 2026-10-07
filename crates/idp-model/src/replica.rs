@@ -1,14 +1,10 @@
 use include_dir::{Dir, include_dir};
 
-use db::{Engine, EngineResult, Kernel, Row, RowCodec, SqlTranslator, Uuid, Value};
+use db::{Database, Row, SqlTranslator, Uuid, Value};
 
 static MIGRATIONS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/replica_migrations");
 
-pub async fn up<K, R>(engine: &Engine<K, R>) -> EngineResult<()>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
+pub async fn up(engine: &Database) -> Result<(), db::QueryError> {
     for file in MIGRATIONS.files() {
         for statement in file
             .contents_utf8()
@@ -18,6 +14,7 @@ where
             .filter(|statement| !statement.is_empty())
         {
             engine
+                .client()
                 .translate_and_execute(statement, &SqlTranslator)
                 .await?;
         }
@@ -97,15 +94,11 @@ pub struct ResolutionAudit {
     pub created_at: i64,
 }
 
-pub async fn allows_authentication<K, R>(
-    engine: &Engine<K, R>,
+pub async fn allows_authentication(
+    engine: &Database,
     credentials: &[Uuid],
     keys: &[Uuid],
-) -> EngineResult<bool>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
+) -> Result<bool, db::QueryError> {
     let mut rows = Vec::with_capacity(credentials.len() + keys.len());
     rows.extend(
         credentials
@@ -121,36 +114,24 @@ where
     clear(engine, &rows).await
 }
 
-pub async fn allows_authorization<K, R>(
-    engine: &Engine<K, R>,
+pub async fn allows_authorization(
+    engine: &Database,
     rows: &[SecurityRow],
-) -> EngineResult<bool>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
+) -> Result<bool, db::QueryError> {
     clear(engine, rows).await
 }
 
-pub async fn allows_token_issuance<K, R>(
-    engine: &Engine<K, R>,
+pub async fn allows_token_issuance(
+    engine: &Database,
     rows: &[SecurityRow],
-) -> EngineResult<bool>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
+) -> Result<bool, db::QueryError> {
     clear(engine, rows).await
 }
 
-pub async fn allows_tunnel_access<K, R>(
-    engine: &Engine<K, R>,
+pub async fn allows_tunnel_access(
+    engine: &Database,
     devices: &[Uuid],
-) -> EngineResult<bool>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
+) -> Result<bool, db::QueryError> {
     let rows = devices
         .iter()
         .copied()
@@ -159,18 +140,17 @@ where
     clear(engine, &rows).await
 }
 
-pub async fn resolve<K, R>(
-    engine: &Engine<K, R>,
+pub async fn resolve(
+    engine: &Database,
     administrator_id: Uuid,
     row: SecurityRow,
     values: Vec<(String, Value)>,
     created_at: i64,
-) -> EngineResult<Option<ResolutionAudit>>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
-    let conflicts = engine.row_conflicts(row.table.name(), &row.key()).await?;
+) -> Result<Option<ResolutionAudit>, db::QueryError> {
+    let conflicts = engine
+        .client()
+        .row_conflicts(row.table.name(), &row.key())
+        .await?;
     let unsafe_lifecycle = ["revoked_at", "consumed_at"].iter().any(|column| {
         let monotonic = *column == "revoked_at" || row.table.is_token_state();
         monotonic
@@ -195,21 +175,20 @@ where
         created_at,
     };
     engine
+        .client()
         .resolve_row(row.table.name(), &row.key(), values)
         .await?;
     engine
+        .client()
         .translate_and_execute(&resolution_insert(&audit), &SqlTranslator)
         .await?;
     Ok(Some(audit))
 }
 
-async fn clear<K, R>(engine: &Engine<K, R>, rows: &[SecurityRow]) -> EngineResult<bool>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
+async fn clear(engine: &Database, rows: &[SecurityRow]) -> Result<bool, db::QueryError> {
     for &row in rows {
         if !engine
+            .client()
             .row_conflicts(row.table.name(), &row.key())
             .await?
             .is_empty()
@@ -234,9 +213,7 @@ fn resolution_insert(audit: &ResolutionAudit) -> String {
 
 #[cfg(test)]
 mod tests {
-    use db::{AutomergeRowCodec, Engine, InMemoryKernel};
     use futures::executor::block_on;
-    use ofdb_sql::{apply_sync_state_batch_for, export_sync_state_for};
 
     use super::{
         SecurityRow, SecurityTable, allows_authentication, allows_authorization,
@@ -253,13 +230,18 @@ mod tests {
     const REFRESH: u128 = 7;
 
     #[test]
-    fn initializes_idempotently_with_uuid_primary_keys_and_unique_devices() {
+    fn identity_schema_initializes_idempotently_and_rejects_duplicate_device_bindings() {
         block_on(async {
-            let engine = Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new());
+            let engine = db::Database::in_memory();
             up(&engine).await.unwrap();
             up(&engine).await.unwrap();
 
-            let clients_schema = engine.table_schema("clients").await.unwrap();
+            let clients_schema = engine
+                .client()
+                .translate_and_execute("SELECT * FROM clients", &db::SqlTranslator)
+                .await
+                .expect("query clients")
+                .remove(0);
             assert!(
                 clients_schema
                     .columns
@@ -287,50 +269,47 @@ mod tests {
                 "idp_replica_members",
                 "idp_replica_signers",
             ] {
-                let schema = engine.table_schema(table).await.unwrap();
-                assert_eq!(schema.columns[0].name, "id");
-                assert_eq!(
-                    schema
-                        .columns
-                        .iter()
-                        .filter(|column| column.primary_key)
-                        .count(),
-                    1
-                );
+                let result = engine
+                    .client()
+                    .translate_and_execute(&format!("SELECT * FROM {table}"), &db::SqlTranslator)
+                    .await
+                    .expect("query identity table")
+                    .remove(0);
+                assert_eq!(result.columns[0].name, "id");
             }
 
-            engine
+            engine.client()
                 .translate_and_execute(
-                    "INSERT INTO devices (id, public_key) VALUES (CAST('00000000-0000-0000-0000-000000000001' AS UUID), 'key')",
+                    "INSERT INTO devices (id, public_key) VALUES (CAST('00000000-0000-7000-8000-000000000001' AS UUID), 'key')",
                     &db::SqlTranslator,
                 )
                 .await
                 .unwrap();
-            assert!(engine
+            assert!(engine.client()
                 .translate_and_execute(
-                    "INSERT INTO devices (id, public_key) VALUES (CAST('00000000-0000-0000-0000-000000000002' AS UUID), 'key')",
+                    "INSERT INTO devices (id, public_key) VALUES (CAST('00000000-0000-7000-8000-000000000002' AS UUID), 'key')",
                     &db::SqlTranslator,
                 )
                 .await
                 .is_err());
 
-            engine
+            engine.client()
                 .translate_and_execute(
-                    "INSERT INTO idp_replica_members (id, installation_id, member_id, endpoint_id, issuer, approved_at) VALUES (CAST('00000000-0000-0000-0000-000000000010' AS UUID), 'installation-a', CAST('00000000-0000-0000-0000-000000000011' AS UUID), 'endpoint-a', 'https://issuer.example', 1)",
+                    "INSERT INTO idp_replica_members (id, installation_id, member_id, endpoint_id, issuer, approved_at) VALUES (CAST('00000000-0000-7000-8000-000000000010' AS UUID), 'installation-a', CAST('00000000-0000-7000-8000-000000000011' AS UUID), 'endpoint-a', 'https://issuer.example', 1)",
                     &db::SqlTranslator,
                 )
                 .await
                 .expect("insert first replica membership");
-            assert!(engine
+            assert!(engine.client()
                 .translate_and_execute(
-                    "INSERT INTO idp_replica_members (id, installation_id, member_id, endpoint_id, issuer, approved_at) VALUES (CAST('00000000-0000-0000-0000-000000000012' AS UUID), 'installation-a', CAST('00000000-0000-0000-0000-000000000011' AS UUID), 'endpoint-b', 'https://issuer.example', 1)",
+                    "INSERT INTO idp_replica_members (id, installation_id, member_id, endpoint_id, issuer, approved_at) VALUES (CAST('00000000-0000-7000-8000-000000000012' AS UUID), 'installation-a', CAST('00000000-0000-7000-8000-000000000011' AS UUID), 'endpoint-b', 'https://issuer.example', 1)",
                     &db::SqlTranslator,
                 )
                 .await
                 .is_err());
-            assert!(engine
+            assert!(engine.client()
                 .translate_and_execute(
-                    "INSERT INTO idp_replica_members (id, installation_id, member_id, endpoint_id, issuer, approved_at) VALUES (CAST('00000000-0000-0000-0000-000000000013' AS UUID), 'installation-a', CAST('00000000-0000-0000-0000-000000000014' AS UUID), 'endpoint-a', 'https://issuer.example', 1)",
+                    "INSERT INTO idp_replica_members (id, installation_id, member_id, endpoint_id, issuer, approved_at) VALUES (CAST('00000000-0000-7000-8000-000000000013' AS UUID), 'installation-a', CAST('00000000-0000-7000-8000-000000000014' AS UUID), 'endpoint-a', 'https://issuer.example', 1)",
                     &db::SqlTranslator,
                 )
                 .await
@@ -341,8 +320,8 @@ mod tests {
     #[test]
     fn reconnect_conflict_resolution_cannot_resurrect_revoked_refresh_grants() {
         block_on(async {
-            let source = Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new());
-            let destination = Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new());
+            let source = db::Database::in_memory();
+            let destination = db::Database::in_memory();
             up(&source).await.expect("initialize grant source");
             seed(&source).await;
             synchronize(&source, &destination).await;
@@ -393,13 +372,11 @@ mod tests {
     #[test]
     fn security_decisions_fail_closed_until_an_administrator_resolves_the_selected_state() {
         block_on(async {
-            let source = Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new());
-            let destination = Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new());
+            let source = db::Database::in_memory();
+            let destination = db::Database::in_memory();
             up(&source).await.unwrap();
             seed(&source).await;
-            apply_sync_state_batch_for(&destination, export_sync_state_for(&source).await.unwrap())
-                .await
-                .unwrap();
+            synchronize(&source, &destination).await;
 
             for (table, id, column) in [
                 ("devices", DEVICE, "state"),
@@ -480,6 +457,7 @@ mod tests {
             assert_eq!(audit.row_id, uuid(CODE));
             assert_eq!(
                 source
+                    .client()
                     .translate_and_execute(
                         "SELECT id FROM idp_conflict_resolutions",
                         &db::SqlTranslator,
@@ -494,7 +472,7 @@ mod tests {
         });
     }
 
-    async fn seed(engine: &Engine<InMemoryKernel, AutomergeRowCodec>) {
+    async fn seed(engine: &db::Database) {
         for (table, id, column, value) in [
             ("devices", DEVICE, "state", "0"),
             ("clients", CLIENT, "client_name", "'client'"),
@@ -505,6 +483,7 @@ mod tests {
             ("oauth2_refresh_tokens", REFRESH, "consumed_at", "NULL"),
         ] {
             engine
+                .client()
                 .translate_and_execute(
                     &format!(
                         "INSERT INTO {table} (id, {column}) VALUES (CAST('{}' AS UUID), {value})",
@@ -517,23 +496,46 @@ mod tests {
         }
     }
 
-    async fn synchronize(
-        source: &Engine<InMemoryKernel, AutomergeRowCodec>,
-        destination: &Engine<InMemoryKernel, AutomergeRowCodec>,
-    ) {
-        apply_sync_state_batch_for(destination, export_sync_state_for(source).await.unwrap())
-            .await
-            .unwrap();
+    struct Channel {
+        sender: futures::channel::mpsc::UnboundedSender<Vec<u8>>,
+        receiver: futures::channel::mpsc::UnboundedReceiver<Vec<u8>>,
     }
 
-    async fn update(
-        engine: &Engine<InMemoryKernel, AutomergeRowCodec>,
-        table: &str,
-        id: u128,
-        column: &str,
-        value: &str,
-    ) {
+    impl ofdb_sql::SyncTransport for Channel {
+        type Error = &'static str;
+        async fn send(&mut self, frame: Vec<u8>) -> Result<(), Self::Error> {
+            self.sender.unbounded_send(frame).map_err(|_| "closed")
+        }
+        async fn receive(&mut self) -> Result<Vec<u8>, Self::Error> {
+            use futures::StreamExt;
+            self.receiver.next().await.ok_or("closed")
+        }
+    }
+
+    async fn synchronize(source: &db::Database, destination: &db::Database) {
+        let (a, ar) = futures::channel::mpsc::unbounded();
+        let (b, br) = futures::channel::mpsc::unbounded();
+        let mut left = Channel {
+            sender: a,
+            receiver: br,
+        };
+        let mut right = Channel {
+            sender: b,
+            receiver: ar,
+        };
+        let config = ofdb_sql::SessionConfig::default();
+        let (sent, received) = futures::future::join(
+            source.synchronize(&mut left, &config, ofdb_sql::SyncRole::Initiator),
+            destination.synchronize(&mut right, &config, ofdb_sql::SyncRole::Responder),
+        )
+        .await;
+        sent.expect("sync trusted domain fixture");
+        received.expect("receive trusted domain fixture");
+    }
+
+    async fn update(engine: &db::Database, table: &str, id: u128, column: &str, value: &str) {
         let result = engine
+            .client()
             .translate_and_execute(
                 &format!(
                     "UPDATE {table} SET {column} = {value} WHERE id = CAST('{}' AS UUID)",

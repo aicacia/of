@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use db::{
-    Engine, Kernel, Query, QueryColumn, QueryExpr, QueryExprValue, QueryFrom, QueryInsert,
-    QuerySelect, QueryUpdate, QueryUpdateAssignment, Row, RowCodec, Statement, Value,
+    Database, Query, QueryColumn, QueryExpr, QueryExprValue, QueryFrom, QueryInsert, QuerySelect,
+    QueryUpdate, QueryUpdateAssignment, Row, Statement, Value,
 };
 use idp_model::{
     model::Id,
@@ -14,21 +14,13 @@ use crate::repo::{OAuth2RefreshToken, OAuth2RefreshTokenRepo, RepoError, RepoRes
 
 const TABLE: &str = "oauth2_refresh_tokens";
 
-pub struct DbOAuth2RefreshTokenRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
-    engine: Arc<Engine<K, R>>,
+pub struct DbOAuth2RefreshTokenRepo {
+    engine: Arc<Database>,
 }
 
-impl<K, R> DbOAuth2RefreshTokenRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
+impl DbOAuth2RefreshTokenRepo {
     #[must_use]
-    pub const fn new(engine: Arc<Engine<K, R>>) -> Self {
+    pub const fn new(engine: Arc<Database>) -> Self {
         Self { engine }
     }
 
@@ -47,11 +39,7 @@ where
     }
 }
 
-impl<K, R> OAuth2RefreshTokenRepo for DbOAuth2RefreshTokenRepo<K, R>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction> + Send + Sync,
-{
+impl OAuth2RefreshTokenRepo for DbOAuth2RefreshTokenRepo {
     async fn issue_refresh_token(
         &self,
         token: OAuth2RefreshToken,
@@ -60,6 +48,7 @@ where
         let previous_id = if let Some(previous) = previous {
             let results = self
                 .engine
+                .client()
                 .execute(vec![select(
                     &["id"],
                     Some(equals("token_hash", Value::Text(token_hash(previous)))),
@@ -94,7 +83,7 @@ where
             Value::Integer(token.created_at),
             Value::Integer(token.created_at),
         ]);
-        let mut transaction = self.engine.transaction().await.map_err(db_error)?;
+        let mut transaction = self.engine.client().transaction().await.map_err(db_error)?;
         if let Some(id) = previous_id {
             let predicate = and(
                 and(
@@ -152,6 +141,7 @@ where
         revoked_at: i64,
     ) -> RepoResult<()> {
         self.engine
+            .client()
             .execute(vec![update(
                 "revoked_at",
                 revoked_at,
@@ -235,7 +225,7 @@ fn token_hash(token: &str) -> String {
 fn invalid_grant() -> RepoError {
     RepoError::InvalidInput("refresh token is expired, revoked, consumed, or not found".into())
 }
-fn db_error(error: db::EngineError) -> RepoError {
+fn db_error(error: db::QueryError) -> RepoError {
     RepoError::InvalidInput(error.to_string())
 }
 fn json_error(error: serde_json::Error) -> RepoError {

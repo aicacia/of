@@ -2,7 +2,7 @@ use std::{fs, io, path::Path, sync::Arc, time::Duration};
 
 use api::serve_listener;
 use axum::Router;
-use db::{NativeEngine, open_native_engine};
+use db::Database;
 use idp_server::{IdpRuntime, build_runtime as build_idp_runtime};
 use iroh::protocol::Router as IrohRouter;
 use management_service::{HostedControlPlane, LocalPermissions};
@@ -392,10 +392,9 @@ fn validate_data_dirs(config: &UnifiedConfig) -> io::Result<()> {
     Ok(())
 }
 
-fn open_service_engine(data_dir: &str, file_name: &str) -> io::Result<Arc<NativeEngine>> {
+fn open_service_engine(data_dir: &str, file_name: &str) -> io::Result<Arc<Database>> {
     fs::create_dir_all(data_dir)?;
-    let engine =
-        open_native_engine(Path::new(data_dir).join(file_name)).map_err(io::Error::other)?;
+    let engine = Database::open(Path::new(data_dir).join(file_name)).map_err(io::Error::other)?;
     Ok(Arc::new(engine))
 }
 

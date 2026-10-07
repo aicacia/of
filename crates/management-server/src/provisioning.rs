@@ -1,6 +1,6 @@
 use std::{fs, io, path::Path, sync::Arc};
 
-use db::open_native_engine;
+use db::Database;
 use idp_model::{
     contract::IdentityAction,
     model::{Id, Role},
@@ -21,7 +21,7 @@ pub async fn provision_initial_administrator(
     let data_dir = Path::new(&config.data_dir);
     fs::create_dir_all(data_dir)?;
     let engine =
-        Arc::new(open_native_engine(data_dir.join("management.redb")).map_err(io::Error::other)?);
+        Arc::new(Database::open(data_dir.join("management.redb")).map_err(io::Error::other)?);
     up(&engine).await.map_err(io::Error::other)?;
     let service = ManagementService::new(
         DbPermissionRepo::new(Arc::clone(&engine)),

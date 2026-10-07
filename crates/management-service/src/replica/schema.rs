@@ -1,4 +1,4 @@
-use db::{Engine, EngineResult, Kernel, RowCodec, SqlTranslator};
+use db::{Database, SqlTranslator};
 
 const MIGRATIONS: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS roles (id UUID PRIMARY KEY, application_id UUID, name TEXT, description TEXT, revoked_at INTEGER, created_at INTEGER, updated_at INTEGER)",
@@ -13,13 +13,10 @@ const MIGRATIONS: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS device_resource_selections (id UUID PRIMARY KEY, device_id UUID NOT NULL, owner_subject TEXT NOT NULL, application_id UUID NOT NULL, selected_kind TEXT NOT NULL, selected_id UUID NOT NULL, selected BOOLEAN NOT NULL)",
 ];
 
-pub async fn up<K, R>(engine: &Engine<K, R>) -> EngineResult<()>
-where
-    K: Kernel,
-    R: RowCodec<K::Transaction>,
-{
+pub async fn up(engine: &Database) -> Result<(), db::QueryError> {
     for statement in MIGRATIONS {
         engine
+            .client()
             .translate_and_execute(statement, &SqlTranslator)
             .await?;
     }
@@ -28,24 +25,30 @@ where
 
 #[cfg(test)]
 mod tests {
-    use db::{AutomergeRowCodec, Engine, InMemoryKernel};
 
     use super::up;
 
     #[tokio::test]
     async fn initializes_management_tables_without_identity_tables() {
-        let engine = Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new());
+        let engine = db::Database::in_memory();
 
         up(&engine).await.expect("initialize management schema");
 
         for table in ["roles", "permissions", "device_selection_policies"] {
             engine
-                .table_schema(table)
+                .client()
+                .translate_and_execute(&format!("SELECT * FROM {table}"), &db::SqlTranslator)
                 .await
                 .expect("management-owned table exists");
         }
         for table in ["users", "applications", "clients", "devices", "keys"] {
-            assert!(engine.table_schema(table).await.is_err());
+            assert!(
+                engine
+                    .client()
+                    .translate_and_execute(&format!("SELECT * FROM {table}"), &db::SqlTranslator)
+                    .await
+                    .is_err()
+            );
         }
     }
 }

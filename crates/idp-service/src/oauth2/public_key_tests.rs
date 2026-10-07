@@ -1,8 +1,8 @@
 use super::{
-    AutomergeRowCodec, DbApplicationRepo, DbClientRepo, DbKeyRepo, DbOAuth2AuthorizationCodeRepo,
-    DbOAuth2RefreshTokenRepo, DbOAuth2UserConsentRepo, DbUserRepo, Engine, InMemoryKernel,
-    KeyService, OAuth2Config, OAuth2Service, PasswordConfig, TestEngine, TestPrivateKeyRepo,
-    TestService, auth, grant, issue, setup, up,
+    DbApplicationRepo, DbClientRepo, DbKeyRepo, DbOAuth2AuthorizationCodeRepo,
+    DbOAuth2RefreshTokenRepo, DbOAuth2UserConsentRepo, DbUserRepo, KeyService, OAuth2Config,
+    OAuth2Service, PasswordConfig, TestEngine, TestPrivateKeyRepo, TestService, auth, grant, issue,
+    setup, up,
 };
 use crate::{
     oauth2::{NodeSignerBinding, decode_jwt, encode_jwt, verify_jwt},
@@ -20,7 +20,7 @@ use model::contract::StandardClaims;
 use std::sync::Arc;
 
 async fn public_verifier(source: &TestEngine) -> (Arc<TestEngine>, TestService) {
-    let engine = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
+    let engine = Arc::new(db::Database::in_memory());
     up(&engine).await.expect("initialize independent schema");
     for table in [
         "applications",
@@ -34,6 +34,7 @@ async fn public_verifier(source: &TestEngine) -> (Arc<TestEngine>, TestService) 
         "oauth2_authorization_codes",
     ] {
         let rows = source
+            .client()
             .translate_and_execute(&format!("SELECT * FROM {table}"), &SqlTranslator)
             .await
             .expect("copy trusted fixture records")
@@ -41,6 +42,7 @@ async fn public_verifier(source: &TestEngine) -> (Arc<TestEngine>, TestService) 
             .rows;
         for row in rows {
             engine
+                .client()
                 .execute(vec![Statement::Query(Query::Insert(db::QueryInsert {
                     table: table.into(),
                     row,
@@ -71,6 +73,7 @@ async fn public_verifier(source: &TestEngine) -> (Arc<TestEngine>, TestService) 
 async fn set(engine: &TestEngine, table: &str, id: Id, name: &str, value: Value) {
     let column = |name: &str| QueryColumn::new(table.into(), name.into());
     engine
+        .client()
         .execute(vec![Statement::Query(Query::Update(QueryUpdate {
             from: QueryFrom {
                 table: table.into(),
@@ -100,7 +103,7 @@ async fn approve_independent_signer(engine: &Arc<TestEngine>, service: &mut Test
         .key_service
         .prepare_node_signer(&binding)
         .expect("prepare independent private signer");
-    engine.translate_and_execute(&format!("INSERT INTO devices (id, public_key, owner_subject, state, approved_at, revoked_at) VALUES (CAST('{}' AS UUID), 'independent-endpoint', 'owner', 1, 1, NULL)", binding.member_id), &SqlTranslator).await.expect("approve Device fixture");
+    engine.client().translate_and_execute(&format!("INSERT INTO devices (id, public_key, owner_subject, state, approved_at, revoked_at) VALUES (CAST('{}' AS UUID), 'independent-endpoint', 'owner', 1, 1, NULL)", binding.member_id), &SqlTranslator).await.expect("approve Device fixture");
     let member = ReplicaMembership {
         installation_id: service.oauth_config.issuer.clone(),
         issuer: service.oauth_config.issuer.clone(),
@@ -295,6 +298,7 @@ async fn learned_device_signer_client_and_principal_revocations_deny_locally() {
             }
             "signer" => {
                 let row = engine
+                    .client()
                     .translate_and_execute("SELECT id FROM idp_replica_signers", &SqlTranslator)
                     .await
                     .expect("signer rows")
@@ -391,7 +395,7 @@ async fn public_keys_survive_native_reopen_without_secret_store() {
     let path = std::env::temp_dir().join(format!("of-public-key-{}.redb", Id::now_v7()));
     let entity_id = Id::now_v7();
     let (id, public, token) = {
-        let engine = Arc::new(db::open_native_engine(&path).expect("open temporary database"));
+        let engine = Arc::new(db::Database::open(&path).expect("open temporary database"));
         up(&engine).await.expect("initialize current schema");
         let keys = KeyService::new(
             DbKeyRepo::new(engine),
@@ -420,7 +424,7 @@ async fn public_keys_survive_native_reopen_without_secret_store() {
     };
     {
         let engine =
-            Arc::new(db::open_native_engine(&path).expect("reopen database without private store"));
+            Arc::new(db::Database::open(&path).expect("reopen database without private store"));
         let repo = DbKeyRepo::new(engine);
         let key = repo
             .find_by_id(id)
