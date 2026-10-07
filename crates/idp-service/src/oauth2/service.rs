@@ -1,5 +1,6 @@
 #[cfg(not(feature = "std"))]
 use alloc::{
+    borrow::ToOwned,
     boxed::Box,
     format,
     string::{String, ToString},
@@ -23,10 +24,10 @@ use idp_model::{
         AuthorizationRequest, AuthorizationServerMetadata, ClientCredentialsGrantRequest,
         ClientRegistration, ClientType, DeviceAuthorization, DeviceAuthorizationRequest,
         EntityType, ErrorCode, ErrorResponse, ErrorResponseResult, GrantType, IdTokenClaims,
-        IdpRole, IsAllowedForUserRequest, IsAllowedForUserResponse, JwkPrivate, JwkPublic,
-        JwkPublicParameters, Jwks, JwsAlgorithm, KeyUse, OAuth2ClientAuth, PasswordGrantRequest,
-        RefreshTokenGrantRequest, RevocationRequest, SubjectTokenType, TokenEndpointAuthMethod,
-        TokenExchangeGrantRequest, TokenPrincipalBinding, TokenRequest, UserInfo,
+        IsAllowedForUserRequest, IsAllowedForUserResponse, JwkPrivate, JwkPublic, Jwks,
+        OAuth2ClientAuth, PasswordGrantRequest, RefreshTokenGrantRequest, RevocationRequest,
+        SubjectTokenType, TokenEndpointAuthMethod, TokenExchangeGrantRequest,
+        TokenPrincipalBinding, TokenRequest, UserInfo,
     },
     model::User,
 };
@@ -42,7 +43,7 @@ use crate::{
 };
 
 use super::{
-    OAuth2Config, intersect_scopes, jwt::verifing_key_from_jwt, parse_scopes, resolve_redirect_uri,
+    OAuth2Config, intersect_scopes, parse_scopes, resolve_redirect_uri,
     validate_authorization_code_grant, validate_authorization_details,
     validate_authorization_request, validate_dynamic_client_grants, validate_scopes,
     verify_code_challenge,
@@ -61,8 +62,6 @@ pub struct OAuth2Service<A, C, AC, RT, U, G, K, P> {
     pub oauth2_user_consent_repo: G,
     pub key_service: Arc<KeyService<K, P>>,
     pub oauth_config: OAuth2Config,
-    role: IdpRole,
-    replica_readiness: super::readiness::ReplicaReadiness,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
@@ -115,32 +114,8 @@ where
             user_repo,
             oauth2_user_consent_repo,
             key_service,
-            role: oauth_config.role,
-            replica_readiness: super::readiness::ReplicaReadiness::default(),
             oauth_config,
         }
-    }
-
-    #[must_use]
-    pub fn is_authority(&self) -> bool {
-        self.role == IdpRole::Authority
-    }
-
-    /// Deny replica security operations until trusted authority synchronization exists.
-    pub fn require_security_ready(&self) -> ErrorResponseResult<()> {
-        if self.role == IdpRole::Replica && !self.replica_readiness.is_fresh() {
-            return Err(ErrorResponse::new(ErrorCode::AccessDenied)
-                .with_description("replica requires fresh approved authority state"));
-        }
-        Ok(())
-    }
-
-    fn require_authority(&self) -> ErrorResponseResult<()> {
-        if self.role != IdpRole::Authority {
-            return Err(ErrorResponse::new(ErrorCode::AccessDenied)
-                .with_description("operation requires the designated IdP authority"));
-        }
-        Ok(())
     }
 
     pub async fn ensure_initial_user(
@@ -150,7 +125,6 @@ where
         name: &str,
         password: &str,
     ) -> ErrorResponseResult<User> {
-        self.require_authority()?;
         if user_id == Id::nil() || credential_id == Id::nil() || name.trim().is_empty() {
             return Err(ErrorResponse::new(ErrorCode::InvalidRequest)
                 .with_description("stable user and credential IDs and a name are required"));
@@ -200,7 +174,6 @@ where
         &self,
         request: ClientRegistration,
     ) -> ErrorResponseResult<ClientRegistration> {
-        self.require_authority()?;
         validate_dynamic_client_grants(&request.allowed_grant_types)?;
         self.register_owned_client(request).await
     }
@@ -209,7 +182,6 @@ where
         &self,
         request: ClientRegistration,
     ) -> ErrorResponseResult<ClientRegistration> {
-        self.require_authority()?;
         if request.client_type != ClientType::Confidential
             || request.allowed_grant_types != [GrantType::ClientCredentials]
         {
@@ -222,7 +194,6 @@ where
         &self,
         request: ClientRegistration,
     ) -> ErrorResponseResult<ClientRegistration> {
-        self.require_authority()?;
         if request.client_type != ClientType::Confidential
             || request.allowed_grant_types != [GrantType::ClientCredentials]
         {
@@ -385,7 +356,6 @@ where
         uri: String,
         description: Option<String>,
     ) -> ErrorResponseResult<Application> {
-        self.require_authority()?;
         self.application_repo
             .create_application(name, uri, description)
             .await
@@ -396,7 +366,6 @@ where
         &self,
         application: Application,
     ) -> ErrorResponseResult<Application> {
-        self.require_authority()?;
         self.application_repo
             .update_application(application)
             .await
@@ -404,7 +373,6 @@ where
     }
 
     pub async fn delete_application(&self, id: Id) -> ErrorResponseResult<()> {
-        self.require_authority()?;
         self.application_repo
             .delete_application_by_id(id)
             .await
@@ -422,7 +390,6 @@ where
 
     /// Checks live client registration for already verified access-token claims.
     pub async fn validate_bearer_client(&self, claims: &StandardClaims) -> ErrorResponseResult<()> {
-        self.require_security_ready()?;
         let client = self
             .client_repo
             .find_client_by_client_id(&claims.client_id)
@@ -473,7 +440,6 @@ where
         client_id: &str,
         request: ClientRegistration,
     ) -> ErrorResponseResult<ClientRegistration> {
-        self.require_authority()?;
         validate_dynamic_client_grants(&request.allowed_grant_types)?;
         self.update_owned_client(client_id, request).await
     }
@@ -483,7 +449,6 @@ where
         client_id: &str,
         request: ClientRegistration,
     ) -> ErrorResponseResult<ClientRegistration> {
-        self.require_authority()?;
         if request.client_type != ClientType::Confidential
             || request.allowed_grant_types != [GrantType::ClientCredentials]
         {
@@ -571,7 +536,6 @@ where
     }
 
     pub async fn delete_client(&self, client_id: &str) -> ErrorResponseResult<()> {
-        self.require_authority()?;
         self.client_repo
             .delete_client_by_client_id(client_id)
             .await
@@ -583,7 +547,6 @@ where
         request: AuthorizationRequest,
         principal: &PT,
     ) -> ErrorResponseResult<AuthorizationCodeResponse> {
-        self.require_authority()?;
         let client = self
             .client_repo
             .find_client_by_client_id(&request.client_id)
@@ -653,7 +616,6 @@ where
         request: ApproveForUserRequest,
         principal: &PT,
     ) -> ErrorResponseResult<IsAllowedForUserResponse> {
-        self.require_authority()?;
         if principal.get_entity_type() != EntityType::User {
             return Err(ErrorResponse::new(ErrorCode::AccessDenied)
                 .with_description("only users can approve clients"));
@@ -740,10 +702,6 @@ where
         request: TokenRequest,
         client_auth: Option<OAuth2ClientAuth>,
     ) -> ErrorResponseResult<TokenResponse> {
-        self.require_security_ready()?;
-        if !matches!(&request, TokenRequest::ClientCredentials(_)) {
-            self.require_authority()?;
-        }
         match request {
             TokenRequest::Password(request) => self.password(request, client_auth.as_ref()).await,
             TokenRequest::AuthorizationCode(request) => {
@@ -862,7 +820,7 @@ where
                 .with_description("authorization code already consumed"));
         }
 
-        if authorization_code.expires_at < now {
+        if authorization_code.expires_at <= now {
             return Err(ErrorResponse::new(ErrorCode::InvalidGrant)
                 .with_description("authorization code expired"));
         }
@@ -904,6 +862,9 @@ where
             )?;
         }
 
+        self.validate_issuance_inputs(&client, principal.as_ref(), &authorization_code.scopes)
+            .await?;
+        self.local_signing_jwk().await?;
         self.authorization_code_repo
             .consume_authorization_code(authorization_code.id, now)
             .await
@@ -1019,22 +980,13 @@ where
     ) -> ErrorResponseResult<TokenResponse> {
         let now = Utc::now();
 
-        let (unverified_header, _) = decode_jwt::<StandardClaims>(&request.refresh_token.0)?;
-        let key_id = Id::parse_str(&unverified_header.kid).map_err(|_| {
-            ErrorResponse::new(ErrorCode::InvalidGrant)
-                .with_description("invalid refresh token signing key")
-        })?;
-        let verification_key = self.find_public_jwk(key_id).await.map_err(|_| {
-            ErrorResponse::new(ErrorCode::InvalidGrant)
-                .with_description("refresh token signing key is not available")
-        })?;
-        let (_, refresh_token) =
-            verify_jwt::<StandardClaims>(&verification_key, &request.refresh_token.0).map_err(
-                |_| {
-                    ErrorResponse::new(ErrorCode::InvalidGrant)
-                        .with_description("refresh token signature is invalid")
-                },
-            )?;
+        let (refresh_token, principal) = self
+            .verify_token_principal(&request.refresh_token.0)
+            .await
+            .map_err(|_| {
+                ErrorResponse::new(ErrorCode::InvalidGrant)
+                    .with_description("refresh token signature or Principal binding is invalid")
+            })?;
 
         if refresh_token.r#type != TokenType::Bearer
             || refresh_token.r#use != TokenUse::Refresh
@@ -1068,7 +1020,7 @@ where
             .map(parse_scopes)
             .unwrap_or_default();
         let scopes = if requested_scopes.is_empty() {
-            refresh_token.scope
+            refresh_token.scope.clone()
         } else {
             let scopes = intersect_scopes(&requested_scopes, &refresh_token.scope);
             if scopes.len() != requested_scopes.len() {
@@ -1078,15 +1030,11 @@ where
             scopes
         };
 
-        let principal = self.find_principal(key_id).await?.ok_or_else(|| {
-            ErrorResponse::new(ErrorCode::InvalidGrant)
-                .with_description("principal not found for refresh token")
-        })?;
-
         if principal.get_entity_id().to_string() != refresh_token.sub {
             return Err(ErrorResponse::new(ErrorCode::InvalidGrant)
                 .with_description("refresh token subject does not match principal"));
         }
+        validate_scopes(&scopes, &client.allowed_scopes)?;
         self.issue_tokens_with_refresh(
             &client,
             principal.as_ref(),
@@ -1109,36 +1057,22 @@ where
                 .with_description("subject_token_type must be access_token"));
         }
 
-        let (jwt_header, _) = decode_jwt::<StandardClaims>(&request.subject_token)?;
-        let key_id = Id::parse_str(&jwt_header.kid).map_err(|_| {
-            ErrorResponse::new(ErrorCode::InvalidGrant)
-                .with_description("invalid subject token signing key")
-        })?;
-        let jwk = self.find_public_jwk(key_id).await?;
-        let (_, subject_token) = verify_jwt::<StandardClaims>(&jwk, &request.subject_token)?;
+        let (subject_token, principal) =
+            self.verify_token_principal(&request.subject_token).await?;
         let now = Utc::now().timestamp();
         if subject_token.r#type != TokenType::Bearer
             || subject_token.r#use != TokenUse::Access
             || subject_token.iss != self.oauth_config.issuer
             || subject_token.exp <= now
             || subject_token.nbf > now
+            || subject_token.iat > now
             || subject_token.aud.is_empty()
         {
             return Err(ErrorResponse::new(ErrorCode::InvalidGrant)
                 .with_description("invalid subject access token"));
         }
 
-        let key = self
-            .key_service
-            .key_repo()
-            .find_by_id(key_id)
-            .await?
-            .ok_or_else(|| {
-                ErrorResponse::new(ErrorCode::InvalidGrant)
-                    .with_description("subject token signing key not found")
-            })?;
-
-        // TODO: get a derevided key from the key ring store to validate token.
+        self.validate_bearer_client(&subject_token).await?;
 
         let client = self
             .client_repo
@@ -1157,7 +1091,7 @@ where
             .map(parse_scopes)
             .unwrap_or_default();
         let scopes = if requested_scopes.is_empty() {
-            subject_token.scope
+            subject_token.scope.clone()
         } else {
             intersect_scopes(&requested_scopes, &subject_token.scope)
         };
@@ -1166,10 +1100,6 @@ where
             validate_authorization_details(details)?;
         }
 
-        let principal = self.find_principal(key.id).await?.ok_or_else(|| {
-            ErrorResponse::new(ErrorCode::InvalidGrant)
-                .with_description("principal not found for subject_token")
-        })?;
         let resource = request
             .resource
             .as_deref()
@@ -1265,7 +1195,6 @@ where
         request: RevocationRequest,
         client_auth: Option<OAuth2ClientAuth>,
     ) -> ErrorResponseResult<()> {
-        self.require_authority()?;
         if request.token.trim().is_empty() {
             return Err(
                 ErrorResponse::new(ErrorCode::InvalidRequest).with_description("token is required")
@@ -1308,26 +1237,20 @@ where
     }
 
     pub async fn list_jwks(&self) -> ErrorResponseResult<Jwks> {
-        self.require_security_ready()?;
-        let keys = self
+        let records = self
             .key_service
             .key_repo()
-            .list_active()
-            .await
-            .map_err(ErrorResponse::from)?;
-
-        let mut jwks = Vec::new();
-        for key in keys {
-            if let Ok(jwk) = self.find_public_jwk(key.id).await {
-                jwks.push(jwk);
-            }
-        }
-
-        Ok(Jwks { keys: jwks })
+            .trusted_node_signers(&self.oauth_config.issuer, Utc::now().timestamp())
+            .await?;
+        Ok(Jwks {
+            keys: records
+                .into_iter()
+                .map(|(_, signer)| signer.public_jwk)
+                .collect(),
+        })
     }
 
     pub async fn rotate_client_key(&self, client_id: &str) -> ErrorResponseResult<Key> {
-        self.require_authority()?;
         let client = self
             .client_repo
             .find_client_by_client_id(client_id)
@@ -1348,7 +1271,6 @@ where
     }
 
     pub async fn revoke_client_keys(&self, client_id: &str) -> ErrorResponseResult<()> {
-        self.require_authority()?;
         let client = self
             .client_repo
             .find_client_by_client_id(client_id)
@@ -1386,57 +1308,159 @@ where
     }
 
     pub async fn find_public_jwk(&self, key_id: Id) -> ErrorResponseResult<JwkPublic> {
-        self.require_security_ready()?;
-        let principal = self.find_principal(key_id).await?.ok_or_else(|| {
-            ErrorResponse::new(ErrorCode::InvalidGrant)
-                .with_description("active signing principal not found")
+        let records = self
+            .key_service
+            .key_repo()
+            .trusted_node_signers(&self.oauth_config.issuer, Utc::now().timestamp())
+            .await?;
+        let mut matching = records
+            .into_iter()
+            .filter(|(_, signer)| signer.key_id == key_id);
+        let signer = matching
+            .next()
+            .ok_or_else(|| {
+                ErrorResponse::new(ErrorCode::InvalidGrant)
+                    .with_description("approved active node signer not found")
+            })?
+            .1;
+        if matching.next().is_some() {
+            return Err(ErrorResponse::new(ErrorCode::InvalidGrant)
+                .with_description("ambiguous node signer"));
+        }
+        Ok(signer.public_jwk)
+    }
+
+    async fn validate_issuance_inputs(
+        &self,
+        client: &Client,
+        principal: &dyn Principal,
+        scopes: &[String],
+    ) -> ErrorResponseResult<()> {
+        let live_client = self
+            .client_repo
+            .find_client_by_client_id(&client.client_id)
+            .await?
+            .ok_or_else(|| ErrorResponse::new(ErrorCode::InvalidClient))?;
+        if live_client != *client {
+            return Err(ErrorResponse::new(ErrorCode::InvalidClient));
+        }
+        validate_scopes(scopes, &live_client.allowed_scopes)?;
+        let live = self
+            .find_principal(principal.get_key().id)
+            .await?
+            .ok_or_else(|| ErrorResponse::new(ErrorCode::InvalidGrant))?;
+        if live.get_entity_id() != principal.get_entity_id()
+            || live.get_entity_type() != principal.get_entity_type()
+        {
+            return Err(ErrorResponse::new(ErrorCode::InvalidGrant));
+        }
+        Ok(())
+    }
+
+    async fn local_signing_jwk(&self) -> ErrorResponseResult<JwkPrivate> {
+        let binding = self.oauth_config.local_signer.as_ref().ok_or_else(|| {
+            ErrorResponse::new(ErrorCode::AccessDenied)
+                .with_description("local node signer is not configured")
         })?;
-        let jwk = principal.get_key().public_jwk.clone().ok_or_else(|| {
-            ErrorResponse::new(ErrorCode::InvalidGrant)
-                .with_description("public verification material not found")
-        })?;
-        if jwk.kid != key_id.to_string()
-            || jwk.r#use != KeyUse::Signature
-            || jwk.alg != JwsAlgorithm::EdDSA
-            || !matches!(&jwk.params,
-                JwkPublicParameters::Ec { crv, .. } if crv == "secp256k1")
+        self.key_service
+            .load_node_signer(binding, &self.oauth_config.issuer, Utc::now().timestamp())
+            .await
+            .map_err(ErrorResponse::from)
+    }
+
+    async fn principal_for_claims(
+        &self,
+        claims: &StandardClaims,
+    ) -> ErrorResponseResult<Box<dyn Principal>> {
+        let id =
+            Id::parse_str(&claims.sub).map_err(|_| ErrorResponse::new(ErrorCode::InvalidGrant))?;
+        let entity_type = match claims.principal_type {
+            PrincipalType::User => EntityType::User,
+            PrincipalType::Client => EntityType::Client,
+        };
+        let key = self
+            .key_service
+            .key_repo()
+            .find_active_entity_root_key(entity_type, id)
+            .await?
+            .ok_or_else(|| ErrorResponse::new(ErrorCode::InvalidGrant))?;
+        let principal = self
+            .find_principal(key.id)
+            .await?
+            .ok_or_else(|| ErrorResponse::new(ErrorCode::InvalidGrant))?;
+        if principal.get_entity_id() != id || principal.get_entity_type() != entity_type {
+            return Err(ErrorResponse::new(ErrorCode::InvalidGrant));
+        }
+        if entity_type == EntityType::Client {
+            let client = self
+                .client_repo
+                .find_client_by_client_id(&claims.client_id)
+                .await?
+                .ok_or_else(|| ErrorResponse::new(ErrorCode::InvalidClient))?;
+            if client.id != id {
+                return Err(ErrorResponse::new(ErrorCode::InvalidClient));
+            }
+        }
+        Ok(principal)
+    }
+
+    pub async fn verify_token_principal(
+        &self,
+        token: &str,
+    ) -> ErrorResponseResult<(StandardClaims, Box<dyn Principal>)> {
+        let (header, _) = decode_jwt::<StandardClaims>(token)?;
+        let key_id =
+            Id::parse_str(&header.kid).map_err(|_| ErrorResponse::new(ErrorCode::InvalidGrant))?;
+        let public = self.find_public_jwk(key_id).await?;
+        let (_, bound) = verify_jwt::<super::token::PrincipalBoundClaims>(&public, token)?;
+        let claims = bound.standard_claims;
+        let now = Utc::now().timestamp();
+        if claims.iss != self.oauth_config.issuer
+            || claims.exp <= now
+            || claims.nbf > now
+            || claims.iat > now
+        {
+            return Err(ErrorResponse::new(ErrorCode::InvalidGrant));
+        }
+        let principal = self.principal_for_claims(&claims).await?;
+        if bound.principal_key_id != principal.get_key().id {
+            return Err(ErrorResponse::new(ErrorCode::InvalidGrant)
+                .with_description("token Principal key is not the locally active root"));
+        }
+        Ok((claims, principal))
+    }
+
+    pub async fn validate_access_token(
+        &self,
+        token: &str,
+        audience: &str,
+    ) -> ErrorResponseResult<StandardClaims> {
+        let (claims, _) = self.verify_token_principal(token).await?;
+        let now = Utc::now().timestamp();
+        if audience.is_empty()
+            || claims.aud != audience
+            || claims.iss != self.oauth_config.issuer
+            || claims.r#type != TokenType::Bearer
+            || claims.r#use != TokenUse::Access
+            || claims.exp <= now
+            || claims.nbf > now
+            || claims.iat > now
         {
             return Err(ErrorResponse::new(ErrorCode::InvalidGrant)
-                .with_description("public verification material does not match signing key"));
+                .with_description("invalid access token claims"));
         }
-        verifing_key_from_jwt(&jwk)?;
-        Ok(jwk)
+        self.validate_bearer_client(&claims).await?;
+        Ok(claims)
     }
 
     pub fn metadata(&self) -> AuthorizationServerMetadata {
         self.oauth_config.to_metadata()
     }
 
-    async fn load_signing_jwk(&self, key: &Key) -> ErrorResponseResult<JwkPrivate> {
-        let public_jwk = self.find_public_jwk(key.id).await?;
-        if let Some(private_key) = self.key_service.private_key_repo().load(
-            &self
-                .key_service
-                .scoped_namespace(key.entity_type, key.entity_id),
-            &key.derivation_path()?,
-        )? {
-            let signing_jwk = key.to_jwk_private(&private_key)?;
-            if JwkPublic::from(signing_jwk.clone()) != public_jwk {
-                return Err(ErrorResponse::new(ErrorCode::ServerError).with_description(
-                    "local signing key does not match public verification material",
-                ));
-            }
-            return Ok(signing_jwk);
-        }
-        Err(ErrorResponse::new(ErrorCode::ServerError)
-            .with_description("signing key not found in private key repository"))
-    }
-
     pub fn device_authorization(
         &self,
         request: DeviceAuthorizationRequest,
     ) -> ErrorResponseResult<DeviceAuthorization> {
-        self.require_authority()?;
         if request.client_id.as_deref().is_some_and(str::is_empty) {
             return Err(ErrorResponse::new(ErrorCode::InvalidRequest)
                 .with_description("client_id cannot be empty"));
@@ -1488,14 +1512,15 @@ where
         audience: Option<&str>,
         previous: Option<&str>,
     ) -> ErrorResponseResult<TokenResponse> {
-        self.require_authority()?;
         if principal.get_entity_type() != EntityType::User {
             return Err(ErrorResponse::new(ErrorCode::AccessDenied)
                 .with_description("this grant cannot issue user tokens to a client principal"));
         }
 
         let now = Utc::now();
-        let signing_jwk = self.load_signing_jwk(principal.get_key()).await?;
+        self.validate_issuance_inputs(client, principal, scopes)
+            .await?;
+        let signing_jwk = self.local_signing_jwk().await?;
         let scope = if scopes.is_empty() {
             None
         } else {
@@ -1522,7 +1547,13 @@ where
                 .map(<[model::contract::AuthorizationDetail]>::to_vec),
         };
 
-        let access_token_value = encode_jwt(&signing_jwk, &access_claims)?;
+        let access_token_value = encode_jwt(
+            &signing_jwk,
+            &super::token::PrincipalBoundClaims {
+                standard_claims: access_claims.clone(),
+                principal_key_id: principal.get_key().id,
+            },
+        )?;
 
         let user_info = match principal.get_entity_type() {
             EntityType::User => principal
@@ -1555,6 +1586,7 @@ where
             &signing_jwk,
             &super::token::RefreshClaims {
                 standard_claims: refresh_claims.clone(),
+                principal_key_id: principal.get_key().id,
                 jti: generate_random_string::<32>(),
             },
         )?;
@@ -1601,13 +1633,6 @@ where
         audience: &str,
         resource: Option<&str>,
     ) -> ErrorResponseResult<TokenResponse> {
-        if self.role == IdpRole::Replica {
-            return Err(
-                ErrorResponse::new(ErrorCode::AccessDenied).with_description(
-                    "replica issuance requires approved local signer and fresh authority state",
-                ),
-            );
-        }
         if principal.get_entity_type() != EntityType::Client
             || principal.get_entity_id() != client.id
         {
@@ -1616,7 +1641,9 @@ where
         }
 
         let now = Utc::now();
-        let signing_jwk = self.load_signing_jwk(principal.get_key()).await?;
+        self.validate_issuance_inputs(client, principal, scopes)
+            .await?;
+        let signing_jwk = self.local_signing_jwk().await?;
         let claims = StandardClaims {
             r#type: TokenType::Bearer,
             r#use: TokenUse::Access,
@@ -1632,7 +1659,13 @@ where
             resource: resource.map(str::to_string),
             authorization_details: None,
         };
-        let access_token = AccessToken(encode_jwt(&signing_jwk, &claims)?);
+        let access_token = AccessToken(encode_jwt(
+            &signing_jwk,
+            &super::token::PrincipalBoundClaims {
+                standard_claims: claims,
+                principal_key_id: principal.get_key().id,
+            },
+        )?);
 
         Ok(TokenResponse {
             id_token: None,
@@ -1684,7 +1717,6 @@ where
         user_id: Id,
         request: UpdateUserInfoRequest,
     ) -> ErrorResponseResult<UserInfo> {
-        self.require_authority()?;
         let existing = self
             .user_repo
             .find_user_by_id(user_id)
@@ -1767,7 +1799,6 @@ where
         user_id: Id,
         password: &str,
     ) -> ErrorResponseResult<()> {
-        self.require_authority()?;
         if self
             .user_repo
             .find_user_by_id(user_id)
@@ -1786,7 +1817,6 @@ where
     }
 
     pub async fn delete_user(&self, user_id: Id) -> ErrorResponseResult<()> {
-        self.require_authority()?;
         if self
             .user_repo
             .find_user_by_id(user_id)
@@ -1832,7 +1862,6 @@ where
         user_id: Id,
         consent_id: Id,
     ) -> ErrorResponseResult<()> {
-        self.require_authority()?;
         if self
             .user_repo
             .find_user_by_id(user_id)
@@ -1896,7 +1925,6 @@ where
         &self,
         key_id: Id,
     ) -> ErrorResponseResult<Option<Box<dyn Principal>>> {
-        self.require_security_ready()?;
         let key = if let Some(key) = self.key_service.key_repo().find_by_id(key_id).await? {
             key
         } else {

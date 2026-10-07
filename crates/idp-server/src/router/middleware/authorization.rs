@@ -2,9 +2,9 @@ use std::marker::PhantomData;
 
 use axum::extract::{FromRef, FromRequestParts};
 use http::{HeaderValue, header::AUTHORIZATION, request::Parts};
+use idp_model::contract::EntityType;
 use idp_model::contract::{ErrorCode, ErrorResponse};
-use idp_model::{contract::EntityType, model::Id};
-use idp_service::oauth2::{Principal, decode_jwt, verify_jwt};
+use idp_service::oauth2::Principal;
 use model::contract::{PrincipalType, StandardClaims, TokenType, TokenUse};
 use serde::de::DeserializeOwned;
 
@@ -84,22 +84,11 @@ async fn authorize_bearer_with_principal(
     authorization_string: &str,
     expected_principal: Option<PrincipalType>,
 ) -> Result<Authorization<StandardClaims>, ErrorResponse> {
-    router_state.oauth2_service.require_security_ready()?;
-    let (jwt_header, _) = decode_jwt::<StandardClaims>(authorization_string)?;
-    let key_id = jwt_header
-        .kid
-        .parse::<Id>()
-        .map_err(|_| ErrorResponse::new(ErrorCode::NotAuthorized))?;
-    let principal = router_state
+    let (claims, principal) = router_state
         .oauth2_service
-        .find_principal(key_id)
-        .await?
-        .ok_or_else(|| {
-            ErrorResponse::new(ErrorCode::NotAuthorized)
-                .with_description("principal not found for key id")
-        })?;
-    let jwk = router_state.oauth2_service.find_public_jwk(key_id).await?;
-    let (_, claims) = verify_jwt::<StandardClaims>(&jwk, authorization_string)?;
+        .verify_token_principal(authorization_string)
+        .await
+        .map_err(|_| ErrorResponse::new(ErrorCode::NotAuthorized))?;
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

@@ -12,8 +12,6 @@ mod device_repo;
 mod error;
 #[cfg(feature = "std")]
 mod hosted_control_plane;
-#[cfg(feature = "std")]
-mod permission_client;
 mod permission_repo;
 
 mod role_repo;
@@ -25,9 +23,15 @@ pub use device_repo::DeviceRepo;
 pub use error::{ManagementError, ManagementResult};
 #[cfg(feature = "std")]
 pub use hosted_control_plane::HostedControlPlane;
-#[cfg(feature = "std")]
-pub use permission_client::PermissionClient;
 pub use permission_repo::PermissionRepo;
 
 pub use role_repo::RoleRepo;
 pub use service::{MANAGEMENT_APPLICATION_URI, ManagementService};
+
+#[cfg(feature = "replica")]
+mod local_permissions;
+#[cfg(feature = "replica")]
+pub use local_permissions::LocalPermissions;
+
+mod security_sync;
+pub use security_sync::{PUBLIC_POLICY_TABLES, permits_policy_table};

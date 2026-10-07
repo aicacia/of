@@ -14,7 +14,7 @@ use idp_service::{
 use iroh::EndpointId;
 use iroh::protocol::{ProtocolHandler, Router as IrohRouter};
 use iroh_chain::Server;
-use management_service::{DeviceRepo, HostedControlPlane, PermissionClient, replica::DbDeviceRepo};
+use management_service::{DeviceRepo, HostedControlPlane, LocalPermissions, replica::DbDeviceRepo};
 
 use crate::{
     AppConfig, BootstrapProtocolHandler, DeviceIdentity, RouterState,
@@ -63,12 +63,24 @@ pub async fn build_runtime(
     engine: Arc<NativeEngine>,
     device_identity: Arc<DeviceIdentity>,
     server: Server,
-    permission_client: Option<PermissionClient>,
+    local_permissions: Option<LocalPermissions>,
 ) -> io::Result<IdpRuntime> {
     if device_identity.endpoint_id() != server.endpoint().id() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "device identity does not match the injected Iroh server",
+        ));
+    }
+
+    if config
+        .oauth2
+        .local_signer
+        .as_ref()
+        .is_some_and(|binding| binding.endpoint_id != device_identity.endpoint_id().to_string())
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "local signer endpoint does not match the injected Node endpoint",
         ));
     }
 
@@ -125,41 +137,31 @@ pub async fn build_runtime(
         None => router_state,
     };
 
-    let router_state = if let Some(client) = permission_client {
-        router_state.with_permission_client(client)
-    } else {
-        match (
-            config.management_api_base.as_deref(),
-            config.permission_idp_api_base.as_deref(),
-            config.management_oauth_client_id.as_deref(),
-        ) {
-            (None, None, None) => router_state,
-            (Some(management), Some(idp), Some(client_id)) => {
-                let secret =
-                    std::env::var("LIDP_MANAGEMENT_OAUTH_CLIENT_SECRET").map_err(|_| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            "LIDP_MANAGEMENT_OAUTH_CLIENT_SECRET is required",
-                        )
-                    })?;
-                router_state.with_permission_client(
-                    PermissionClient::new(
-                        management,
-                        idp,
-                        &config.oauth2.issuer,
-                        client_id,
-                        &secret,
-                    )
-                    .map_err(io::Error::other)?,
-                )
+    let local_permissions = match local_permissions {
+        Some(local) => Some(local),
+        None => match config.management_data_dir.as_deref() {
+            Some(directory) => {
+                if std::path::Path::new(directory) == std::path::Path::new(&config.data_dir) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "IdP and Management data directories must be separate",
+                    ));
+                }
+                let engine = Arc::new(
+                    db::open_native_engine(std::path::Path::new(directory).join("management.redb"))
+                        .map_err(io::Error::other)?,
+                );
+                management_service::replica::up(&engine)
+                    .await
+                    .map_err(io::Error::other)?;
+                Some(LocalPermissions::new(engine))
             }
-            _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "management_api_base, permission_idp_api_base and management_oauth_client_id must be configured together",
-                ));
-            }
-        }
+            None => None,
+        },
+    };
+    let router_state = match local_permissions {
+        Some(local) => router_state.with_local_permissions(local),
+        None => router_state,
     };
 
     router_state

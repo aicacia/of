@@ -5,7 +5,7 @@ use axum::Router;
 use db::{NativeEngine, open_native_engine};
 use idp_server::{IdpRuntime, build_runtime as build_idp_runtime};
 use iroh::protocol::Router as IrohRouter;
-use management_service::{HostedControlPlane, PermissionClient};
+use management_service::{HostedControlPlane, LocalPermissions};
 use storage_server::{
     IdpClient, ManagementClient, RouterState as StorageRouterState, StorageRuntime,
     build_runtime as build_storage_runtime,
@@ -63,25 +63,12 @@ impl UnifiedRuntime {
         let endpoint = Arc::new(UnifiedEndpoint::open(&config.endpoint_data_dir).await?);
         let server = endpoint.server().clone();
 
-        let idp_api_base = format!("{api_base}{IDP_PREFIX}/");
-        let management_api_base = format!("{api_base}{MANAGEMENT_PREFIX}/");
-        let permission_client = config
-            .idp_management_client
-            .as_ref()
-            .map(|credentials| {
-                if credentials.audience != management_service::MANAGEMENT_APPLICATION_URI {
-                    return Err("IdP permission audience must be idp-management".to_owned());
-                }
-                PermissionClient::new(
-                    &management_api_base,
-                    &idp_api_base,
-                    &config.idp.oauth2.issuer,
-                    &credentials.client_id,
-                    &credentials.client_secret,
-                )
-            })
-            .transpose()
-            .map_err(invalid_config)?;
+        let management_engine =
+            open_service_engine(&config.management.data_dir, "management.redb")?;
+        management_service::replica::up(&management_engine)
+            .await
+            .map_err(io::Error::other)?;
+        let local_permissions = LocalPermissions::new(Arc::clone(&management_engine));
         let idp_engine = open_service_engine(&config.idp.data_dir, "idp.redb")?;
         let mut idp_config = config.idp;
         idp_config.server.prefix = Some(IDP_PREFIX.to_owned());
@@ -92,7 +79,7 @@ impl UnifiedRuntime {
                 idp_engine,
                 Arc::new(endpoint.identity()?),
                 server.clone(),
-                permission_client,
+                Some(local_permissions),
             )
             .await?,
         );
@@ -113,8 +100,6 @@ impl UnifiedRuntime {
             None => management_control_plane,
         });
 
-        let management_engine =
-            open_service_engine(&config.management.data_dir, "management.redb")?;
         let mut management_config = config.management;
         management_config.server.prefix = Some(MANAGEMENT_PREFIX.to_owned());
         let management_router = management_server::build_router(
@@ -621,6 +606,7 @@ mod tests {
             &approved_peer_id.to_string(),
         )
         .await;
+        config.idp.oauth2.local_signer = Some(fixture.local_signer.clone());
         seed_permissions(&root, &mut fixture).await;
         endpoint.close().await;
 

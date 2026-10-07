@@ -2,10 +2,18 @@ use idp_model::contract::{
     AuthorizationCodeGrantRequest, ErrorCode, ErrorResponse, ErrorResponseResult,
 };
 
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(super) struct PrincipalBoundClaims {
+    #[serde(flatten)]
+    pub standard_claims: model::contract::StandardClaims,
+    pub principal_key_id: idp_model::model::Id,
+}
+
 #[derive(serde::Serialize)]
 pub(super) struct RefreshClaims {
     #[serde(flatten)]
     pub standard_claims: model::contract::StandardClaims,
+    pub principal_key_id: idp_model::model::Id,
     pub jti: alloc::string::String,
 }
 

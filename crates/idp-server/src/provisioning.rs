@@ -2,7 +2,7 @@ use std::{fs, io, path::Path, sync::Arc};
 
 use db::open_native_engine;
 use idp_model::{
-    contract::{ClientRegistration, ErrorResponse, IdpRole},
+    contract::{ClientRegistration, ErrorResponse},
     model::Id,
 };
 use idp_service::{
@@ -42,12 +42,6 @@ pub struct OwnerProvisioner {
 
 impl OwnerProvisioner {
     pub async fn open(config: &AppConfig) -> io::Result<Self> {
-        if config.oauth2.role != IdpRole::Authority {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "initial provisioning requires the designated IdP authority",
-            ));
-        }
         let data_dir = Path::new(&config.data_dir);
         fs::create_dir_all(data_dir)?;
         let engine =
@@ -95,27 +89,5 @@ impl OwnerProvisioner {
             .ensure_infrastructure_client(request)
             .await
             .map_err(to_io_error)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use idp_model::{contract::IdpRole, model::Id};
-
-    use crate::{AppConfig, OwnerProvisioner};
-
-    #[tokio::test]
-    async fn replica_cannot_open_owner_provisioner_or_create_state() {
-        let data_dir = std::env::temp_dir().join(format!("idp-replica-{}", Id::now_v7()));
-        let mut config = AppConfig::default();
-        config.data_dir = data_dir.to_string_lossy().into_owned();
-        config.oauth2.role = IdpRole::Replica;
-
-        let error = match OwnerProvisioner::open(&config).await {
-            Ok(_) => panic!("replica must not open owner provisioning"),
-            Err(error) => error,
-        };
-        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
-        assert!(!data_dir.exists());
     }
 }

@@ -8,7 +8,7 @@ use super::{
     KeyUse,
 };
 
-/// Public enrollment state. Only the designated authority may approve this record.
+/// Public enrollment state. Approval is checked against the executing Node's trusted local policy.
 /// Deserialization, configuration, and JWK possession do not establish its provenance.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct IdpSignerRecord {
@@ -22,10 +22,12 @@ pub struct IdpSignerRecord {
 }
 
 impl IdpSignerRecord {
-    /// Check metadata binding on an authority-sourced snapshot, not approval provenance
+    /// Check metadata binding on a locally trusted snapshot, not approval provenance
     /// or cryptographic validity. Verification must validate the public point and signature.
     pub fn matches(&self, member_id: Id, key_id: Id, issuer: &str, now: i64) -> bool {
-        self.member_id == member_id
+        !member_id.is_nil()
+            && !key_id.is_nil()
+            && self.member_id == member_id
             && self.key_id == key_id
             && !issuer.is_empty()
             && issuer.trim() == issuer
@@ -33,9 +35,11 @@ impl IdpSignerRecord {
             && self.issuer == issuer
             && self.public_jwk.kid == key_id.to_string()
             && self.public_jwk.r#use == KeyUse::Signature
-            && self.public_jwk.alg == JwsAlgorithm::EdDSA
+            && self.public_jwk.alg == JwsAlgorithm::ES256K
             && matches!(&self.public_jwk.params, JwkPublicParameters::Ec { crv, .. } if crv == "secp256k1")
-            && self.approved_at.is_some_and(|approved| approved <= now)
+            && self
+                .approved_at
+                .is_some_and(|approved| approved >= 0 && approved <= now)
             && self.revoked_at.is_none()
             && self.expires_at.is_none_or(|expires| expires > now)
     }
@@ -50,7 +54,7 @@ impl IdpSignerRecord {
     }
 }
 
-/// Authority-approved Installation membership binds a replica identity and transport endpoint.
+/// Approved Installation membership binds a Node identity and transport endpoint.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ReplicaMembership {
     pub installation_id: String,
@@ -121,7 +125,7 @@ mod tests {
             public_jwk: JwkPublic {
                 kid: key_id.to_string(),
                 r#use: KeyUse::Signature,
-                alg: JwsAlgorithm::EdDSA,
+                alg: JwsAlgorithm::ES256K,
                 params: JwkPublicParameters::Ec {
                     crv: "secp256k1".to_string(),
                     x: "not-a-point".to_string(),
@@ -172,7 +176,7 @@ mod tests {
         let mut private = JwkPrivate {
             kid: record.key_id.to_string(),
             r#use: KeyUse::Signature,
-            alg: JwsAlgorithm::EdDSA,
+            alg: JwsAlgorithm::ES256K,
             params: JwkPrivateParameters::Ec {
                 crv: "secp256k1".to_string(),
                 x: "not-a-point".to_string(),

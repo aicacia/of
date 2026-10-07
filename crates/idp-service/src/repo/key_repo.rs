@@ -2,13 +2,19 @@ use alloc::{string::String, vec::Vec};
 
 use chrono::{DateTime, Utc};
 use idp_model::{
-    contract::{EntityType, JwkPublic},
+    contract::{EntityType, IdpSignerRecord, JwkPublic, ReplicaMembership},
     model::{Id, Key},
 };
 
 use crate::repo::RepoResult;
 
 pub trait KeyRepo {
+    fn trusted_node_signers(
+        &self,
+        issuer: &str,
+        now: i64,
+    ) -> impl Future<Output = RepoResult<Vec<(ReplicaMembership, IdpSignerRecord)>>>;
+
     /// Initialize public material once. This does not approve a replica signer.
     fn set_public_jwk(&self, id: Id, jwk: JwkPublic) -> impl Future<Output = RepoResult<Key>>;
 

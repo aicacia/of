@@ -438,4 +438,49 @@ mod tests {
                 .is_some()
         );
     }
+    #[tokio::test]
+    async fn code_consumption_survives_database_reopen_and_denies_replay() {
+        let path = std::env::temp_dir().join(format!("local-code-{}.redb", Id::now_v7()));
+        let code = {
+            let engine = Arc::new(db::open_native_engine(&path).expect("open code store"));
+            up(&engine).await.expect("initialize local code store");
+            let repo = DbOAuth2AuthorizationCodeRepo::new(engine);
+            let code = repo
+                .create_authorization_code(
+                    "client".into(),
+                    Id::now_v7(),
+                    "https://client.example/callback".into(),
+                    vec!["openid".into()],
+                    None,
+                    None,
+                    None,
+                    None,
+                    now() + Duration::minutes(5),
+                )
+                .await
+                .expect("persist code hash");
+            repo.consume_authorization_code(code.id, now())
+                .await
+                .expect("consume code locally");
+            code
+        };
+        {
+            let engine = Arc::new(db::open_native_engine(&path).expect("reopen local code store"));
+            let repo = DbOAuth2AuthorizationCodeRepo::new(engine);
+            assert!(
+                repo.find_authorization_code_by_code(&code.code)
+                    .await
+                    .expect("find persisted code")
+                    .expect("code survives")
+                    .consumed_at
+                    .is_some()
+            );
+            assert!(
+                repo.consume_authorization_code(code.id, now())
+                    .await
+                    .is_err()
+            );
+        }
+        std::fs::remove_file(path).expect("remove code fixture");
+    }
 }

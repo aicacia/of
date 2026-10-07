@@ -10,7 +10,7 @@ use base64::{
 };
 use idp_model::contract::{
     ErrorCode, ErrorResponse, ErrorResponseResult, JwkPrivate, JwkPrivateParameters, JwkPublic,
-    JwkPublicParameters,
+    JwkPublicParameters, JwsAlgorithm, KeyUse,
 };
 use k256::ecdsa::{
     Signature, SigningKey, VerifyingKey,
@@ -34,6 +34,10 @@ pub fn encode_jwt<T>(jwk: &JwkPrivate, claims: &T) -> ErrorResponseResult<String
 where
     T: Serialize,
 {
+    if jwk.alg != JwsAlgorithm::ES256K || jwk.r#use != KeyUse::Signature {
+        return Err(ErrorResponse::new(ErrorCode::InvalidClient)
+            .with_description("unsupported signing key algorithm or use"));
+    }
     let header = JwtHeader {
         alg: JWT_HEADER_ALG.to_string(),
         typ: JWT_HEADER_TYP.to_string(),
@@ -70,6 +74,10 @@ where
         ErrorResponse::new(ErrorCode::InvalidRequest).with_description("invalid JWT format")
     })?;
 
+    if token.split('.').count() != 3 {
+        return Err(ErrorResponse::new(ErrorCode::InvalidRequest)
+            .with_description("JWT must have exactly three parts"));
+    }
     let header_bytes = URL_SAFE_NO_PAD.decode(header_encoded).map_err(|error| {
         ErrorResponse::new(ErrorCode::InvalidRequest)
             .with_description(format!("invalid JWT header encoding: {error}"))
@@ -107,6 +115,10 @@ where
         ErrorResponse::new(ErrorCode::InvalidRequest).with_description("invalid JWT format")
     })?;
 
+    if token.split('.').count() != 3 {
+        return Err(ErrorResponse::new(ErrorCode::InvalidRequest)
+            .with_description("JWT must have exactly three parts"));
+    }
     let header_bytes = URL_SAFE_NO_PAD.decode(header_encoded).map_err(|error| {
         ErrorResponse::new(ErrorCode::InvalidRequest)
             .with_description(format!("invalid JWT header encoding: {error}"))
@@ -153,7 +165,7 @@ where
 
 fn signing_key_from_jwk(jwk: &JwkPrivate) -> ErrorResponseResult<SigningKey> {
     match &jwk.params {
-        JwkPrivateParameters::Ec { d, .. } => {
+        JwkPrivateParameters::Ec { crv, d, .. } if crv == "secp256k1" => {
             let private_key_bytes = STANDARD_NO_PAD.decode(d).map_err(|error| {
                 ErrorResponse::new(ErrorCode::InvalidClient)
                     .with_description(format!("invalid client private key encoding: {error}"))
@@ -170,8 +182,12 @@ fn signing_key_from_jwk(jwk: &JwkPrivate) -> ErrorResponseResult<SigningKey> {
 }
 
 pub(crate) fn verifing_key_from_jwt(jwk: &JwkPublic) -> ErrorResponseResult<VerifyingKey> {
+    if jwk.alg != JwsAlgorithm::ES256K || jwk.r#use != KeyUse::Signature {
+        return Err(ErrorResponse::new(ErrorCode::InvalidClient)
+            .with_description("unsupported verification key algorithm or use"));
+    }
     match &jwk.params {
-        JwkPublicParameters::Ec { x, y, .. } => {
+        JwkPublicParameters::Ec { crv, x, y } if crv == "secp256k1" => {
             let x_bytes = STANDARD_NO_PAD.decode(x).map_err(|error| {
                 ErrorResponse::new(ErrorCode::InvalidClient)
                     .with_description(format!("invalid client public key encoding: {error}"))
@@ -196,6 +212,11 @@ pub(crate) fn verifing_key_from_jwt(jwk: &JwkPublic) -> ErrorResponseResult<Veri
 
 #[cfg(test)]
 mod tests {
+    use alloc::{
+        format,
+        string::{String, ToString},
+    };
+
     use base64::{
         Engine,
         engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD},
@@ -220,7 +241,7 @@ mod tests {
         let jwk = JwkPrivate {
             r#use: KeyUse::Signature,
             kid: "test-key".to_string(),
-            alg: JwsAlgorithm::ES256,
+            alg: JwsAlgorithm::ES256K,
             params: JwkPrivateParameters::Ec {
                 crv: "secp256k1".to_string(),
                 x: STANDARD_NO_PAD.encode(point.x().expect("public point has x coordinate")),
@@ -237,6 +258,7 @@ mod tests {
         let (_, verified) =
             verify_jwt::<Claims>(&public_jwk, &token).expect("valid token signature should verify");
         assert_eq!(verified, claims);
+        assert!(verify_jwt::<Claims>(&public_jwk, &format!("{token}.extra")).is_err());
 
         let mut parts = token.split('.');
         let header = parts.next().expect("token has a header");

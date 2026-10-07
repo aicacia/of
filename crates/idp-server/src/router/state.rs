@@ -10,7 +10,7 @@ use idp_service::{
     repo::PrivateKeyKeyringRepo,
 };
 use iroh::{Endpoint, EndpointId, SecretKey};
-use management_service::{HostedControlPlane, PermissionClient, replica::DbDeviceRepo};
+use management_service::{HostedControlPlane, LocalPermissions, replica::DbDeviceRepo};
 use ofdb_sql::{AutomergeRowCodec, RedbKernel};
 
 use super::PairingAcceptanceControllerSlot;
@@ -83,7 +83,7 @@ pub struct RouterState {
     pub device_identity: Arc<DeviceIdentity>,
     pub pairing_acceptance: Arc<PairingAcceptanceControllerSlot>,
     pub hosted_control_plane: Option<Arc<HostedControlPlane>>,
-    pub permission_client: Option<Arc<PermissionClient>>,
+    pub local_permissions: Option<Arc<LocalPermissions>>,
 }
 
 impl RouterState {
@@ -108,12 +108,12 @@ impl RouterState {
             device_identity,
             pairing_acceptance: Arc::new(PairingAcceptanceControllerSlot::new()),
             hosted_control_plane: None,
-            permission_client: None,
+            local_permissions: None,
         }
     }
 
-    pub fn with_permission_client(mut self, client: PermissionClient) -> Self {
-        self.permission_client = Some(Arc::new(client));
+    pub fn with_local_permissions(mut self, client: LocalPermissions) -> Self {
+        self.local_permissions = Some(Arc::new(client));
         self
     }
 

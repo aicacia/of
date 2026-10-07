@@ -24,6 +24,8 @@ pub enum JwsAlgorithm {
     RS512,
     #[serde(rename = "ES256")]
     ES256,
+    #[serde(rename = "ES256K")]
+    ES256K,
     #[serde(rename = "ES384")]
     ES384,
     #[serde(rename = "ES512")]

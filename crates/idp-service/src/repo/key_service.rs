@@ -40,6 +40,10 @@ where
         }
     }
 
+    pub(crate) fn namespace(&self) -> &str {
+        &self.namespace
+    }
+
     pub fn key_repo(&self) -> &R {
         &self.key_repo
     }

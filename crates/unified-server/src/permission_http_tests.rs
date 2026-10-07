@@ -92,10 +92,15 @@ async fn run_separate_permission_acceptance(lifecycle_only: bool) {
     .expect("bind test endpoint");
     let mut config = idp_server::AppConfig::default();
     config.oauth2.issuer = issuer.clone();
+    config.oauth2.local_signer = Some(fixture.local_signer.clone());
     config.service_audience = Some("idp-services".into());
     config.server.prefix = Some("/idp".into());
     let idp_engine =
         Arc::new(open_native_engine(root.join("idp/idp.redb")).expect("open IdP owner engine"));
+    let management_engine = Arc::new(
+        open_native_engine(root.join("management/management.redb"))
+            .expect("open Management owner engine"),
+    );
     let runtime = idp_server::build_runtime(
         &config,
         Arc::clone(&idp_engine),
@@ -104,16 +109,9 @@ async fn run_separate_permission_acceptance(lifecycle_only: bool) {
                 .expect("create local identity"),
         ),
         server.clone(),
-        Some(
-            management_service::PermissionClient::new(
-                &format!("{management_base}/management"),
-                &format!("{idp_base}/idp"),
-                &issuer,
-                "idp-evaluator",
-                "idp-evaluator-secret",
-            )
-            .expect("normal IdP permission client"),
-        ),
+        Some(management_service::LocalPermissions::new(Arc::clone(
+            &management_engine,
+        ))),
     )
     .await
     .expect("build independent IdP runtime");
@@ -127,10 +125,6 @@ async fn run_separate_permission_acceptance(lifecycle_only: bool) {
     .expect("configure introspection relationship")
     .with_permission_evaluator("idp-evaluator")
     .expect("pin distinct assertion client");
-    let management_engine = Arc::new(
-        open_native_engine(root.join("management/management.redb"))
-            .expect("open Management owner engine"),
-    );
     let router = management_server::build_router(
         management_engine,
         &management_base,
@@ -237,8 +231,8 @@ async fn run_separate_permission_acceptance(lifecycle_only: bool) {
             .bearer_auth(&admin)
             .send()
             .await
-            .expect("Management outage request"),
-        http::StatusCode::SERVICE_UNAVAILABLE,
+            .expect("Management listener outage does not revoke local policy"),
+        http::StatusCode::OK,
     )
     .await;
     let fresh_user = user_token(&client, &idp_base, "administrator", "idp-services").await;
@@ -282,6 +276,7 @@ async fn run_separate_permission_acceptance(lifecycle_only: bool) {
 }
 
 pub(crate) struct PermissionFixture {
+    pub(crate) local_signer: idp_service::oauth2::NodeSignerBinding,
     application_id: idp_model::model::Id,
     other_application_id: idp_model::model::Id,
     administrator: idp_model::model::Id,
@@ -451,8 +446,8 @@ pub(crate) async fn seed_idp(
         )
         .await
         .expect("seed owner consent");
-    let devices = DbDeviceRepo::new(engine);
-    devices
+    let devices = DbDeviceRepo::new(Arc::clone(&engine));
+    let local_device = devices
         .create(
             "unified-test-owner".to_owned(),
             "unified-host".to_owned(),
@@ -463,6 +458,35 @@ pub(crate) async fn seed_idp(
         )
         .await
         .expect("approve unified endpoint identity");
+    let local_signer = idp_service::oauth2::NodeSignerBinding {
+        member_id: local_device.id,
+        key_id: idp_model::model::Id::now_v7(),
+        endpoint_id: endpoint_id.into(),
+    };
+    let public_jwk = key_service
+        .prepare_node_signer(&local_signer)
+        .expect("prepare local Node signer");
+    let member = idp_model::contract::ReplicaMembership {
+        installation_id: issuer.into(),
+        issuer: issuer.into(),
+        member_id: local_signer.member_id,
+        endpoint_id: endpoint_id.into(),
+        approved_at: 1,
+        revoked_at: None,
+    };
+    let signer = idp_model::contract::IdpSignerRecord {
+        member_id: member.member_id,
+        key_id: local_signer.key_id,
+        issuer: issuer.into(),
+        public_jwk,
+        approved_at: Some(1),
+        revoked_at: None,
+        expires_at: None,
+    };
+    idp_service::replica::DbReplicaSignerRepo::new(engine)
+        .enroll(&member, &signer)
+        .await
+        .expect("approve local Node signer");
     let pending_peer = devices
         .create(
             "unified-test-owner".to_owned(),
@@ -484,6 +508,7 @@ pub(crate) async fn seed_idp(
         .expect("approve test peer")
         .expect("pending test peer exists");
     PermissionFixture {
+        local_signer,
         application_id: application.id,
         other_application_id: other_application.id,
         administrator: user_ids[0],
@@ -1000,8 +1025,8 @@ async fn run_lifecycle_http_checks(
             .bearer_auth(&admin)
             .send()
             .await
-            .expect("cached service bearer cannot retain removed capability"),
-        http::StatusCode::SERVICE_UNAVAILABLE,
+            .expect("local policy does not depend on evaluator-client capability"),
+        http::StatusCode::OK,
     )
     .await;
 }

@@ -36,8 +36,8 @@ use crate::{
 #[path = "public_key_tests.rs"]
 mod public_key_tests;
 
-#[derive(Default)]
-struct TestPrivateKeyRepo(Mutex<HashMap<(String, String), DerivedKey>>);
+#[derive(Clone, Default)]
+struct TestPrivateKeyRepo(Arc<Mutex<HashMap<(String, String), DerivedKey>>>);
 
 impl PrivateKeyRepo for TestPrivateKeyRepo {
     fn load(&self, namespace: &str, path: &DerivationPath) -> RepoResult<Option<DerivedKey>> {
@@ -84,7 +84,7 @@ async fn setup() -> (Arc<TestEngine>, TestService, Client, UserPrincipal) {
         TestPrivateKeyRepo::default(),
         "refresh-test",
     ));
-    let service = OAuth2Service::new(
+    let mut service = OAuth2Service::new(
         DbApplicationRepo::new(Arc::clone(&engine)),
         DbClientRepo::new(Arc::clone(&engine), Arc::clone(&keys)),
         DbOAuth2AuthorizationCodeRepo::new(Arc::clone(&engine)),
@@ -94,6 +94,38 @@ async fn setup() -> (Arc<TestEngine>, TestService, Client, UserPrincipal) {
         keys,
         OAuth2Config::default(),
     );
+    let binding = crate::oauth2::NodeSignerBinding {
+        member_id: Id::now_v7(),
+        key_id: Id::now_v7(),
+        endpoint_id: "node-endpoint".into(),
+    };
+    let public_jwk = service
+        .key_service
+        .prepare_node_signer(&binding)
+        .expect("prepare independent local signer");
+    engine.translate_and_execute(&format!("INSERT INTO devices (id, public_key, owner_subject, state, approved_at, revoked_at) VALUES (CAST('{}' AS UUID), 'node-endpoint', 'node-owner', 1, 1, NULL)", binding.member_id), &db::SqlTranslator).await.expect("approved local Device");
+    let member = idp_model::contract::ReplicaMembership {
+        installation_id: service.oauth_config.issuer.clone(),
+        issuer: service.oauth_config.issuer.clone(),
+        member_id: binding.member_id,
+        endpoint_id: binding.endpoint_id.clone(),
+        approved_at: 1,
+        revoked_at: None,
+    };
+    let signer = idp_model::contract::IdpSignerRecord {
+        member_id: binding.member_id,
+        key_id: binding.key_id,
+        issuer: member.issuer.clone(),
+        public_jwk,
+        approved_at: Some(1),
+        revoked_at: None,
+        expires_at: None,
+    };
+    crate::replica::DbReplicaSignerRepo::new(Arc::clone(&engine))
+        .enroll(&member, &signer)
+        .await
+        .expect("approve local node signer");
+    service.oauth_config.local_signer = Some(binding);
     let client = service
         .client_repo
         .create_client(ClientRegistration {
@@ -151,10 +183,10 @@ async fn setup() -> (Arc<TestEngine>, TestService, Client, UserPrincipal) {
 }
 
 #[tokio::test]
-async fn initial_user_provisioning_is_stable_authority_only_and_conflict_safe() {
+async fn initial_user_provisioning_is_stable_and_conflict_safe() {
     let (engine, authority, _, _) = setup().await;
-    let user_id = Id::from_u128(101);
-    let credential_id = Id::from_u128(102);
+    let user_id = Id::now_v7();
+    let credential_id = Id::now_v7();
     let created = authority
         .ensure_initial_user(user_id, credential_id, "administrator", "strong-password")
         .await
@@ -184,20 +216,11 @@ async fn initial_user_provisioning_is_stable_authority_only_and_conflict_safe() 
             .is_err()
     );
 
-    let replica = replica_service(&engine, &authority);
-    assert_eq!(
-        replica
-            .ensure_initial_user(
-                Id::from_u128(103),
-                Id::from_u128(104),
-                "replica-user",
-                "password"
-            )
-            .await
-            .expect_err("replica must not provision users")
-            .error,
-        ErrorCode::AccessDenied
-    );
+    let replica = reopened_service(&engine, &authority);
+    replica
+        .ensure_initial_user(Id::now_v7(), Id::now_v7(), "local-user", "password")
+        .await
+        .expect("local provisioning needs no peer");
 }
 
 fn infrastructure_client_registration() -> ClientRegistration {
@@ -232,7 +255,7 @@ fn infrastructure_client_registration() -> ClientRegistration {
 }
 
 #[tokio::test]
-async fn infrastructure_client_provisioning_is_retry_safe_and_authority_only() {
+async fn infrastructure_client_provisioning_is_retry_safe_on_each_node() {
     let (engine, authority, _, _) = setup().await;
     let created = authority
         .ensure_infrastructure_client(infrastructure_client_registration())
@@ -254,15 +277,11 @@ async fn infrastructure_client_provisioning_is_retry_safe_and_authority_only() {
             .is_err()
     );
 
-    let replica = replica_service(&engine, &authority);
-    assert_eq!(
-        replica
-            .ensure_infrastructure_client(infrastructure_client_registration())
-            .await
-            .expect_err("replica must not provision service clients")
-            .error,
-        ErrorCode::AccessDenied
-    );
+    let replica = reopened_service(&engine, &authority);
+    replica
+        .ensure_infrastructure_client(infrastructure_client_registration())
+        .await
+        .expect("local retry");
 }
 
 fn auth(client: &Client) -> OAuth2ClientAuth {
@@ -318,7 +337,7 @@ async fn states(engine: &TestEngine) -> Vec<db::Row> {
         .rows
 }
 
-fn replica_service(engine: &Arc<TestEngine>, authority: &TestService) -> TestService {
+fn reopened_service(engine: &Arc<TestEngine>, authority: &TestService) -> TestService {
     OAuth2Service::new(
         DbApplicationRepo::new(Arc::clone(engine)),
         DbClientRepo::new(Arc::clone(engine), Arc::clone(&authority.key_service)),
@@ -328,284 +347,37 @@ fn replica_service(engine: &Arc<TestEngine>, authority: &TestService) -> TestSer
         DbOAuth2UserConsentRepo::new(Arc::clone(engine)),
         Arc::clone(&authority.key_service),
         OAuth2Config {
-            role: idp_model::contract::IdpRole::Replica,
             ..authority.oauth_config.clone()
         },
     )
 }
 
 #[tokio::test]
-async fn replica_readiness_blocks_before_database_work_and_restart() {
-    use idp_model::contract::ClientCredentialsGrantRequest;
-
-    let (_, authority, _, _) = setup().await;
-    // No schema: any repository access would fail instead of returning access_denied.
-    let empty = Arc::new(Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new()));
-    for _ in 0..2 {
-        let mut replica = replica_service(&empty, &authority);
-        replica.oauth_config.role = idp_model::contract::IdpRole::Authority;
-        for _ in 0..3 {
-            assert_eq!(
-                replica
-                    .require_security_ready()
-                    .expect_err("restart is unready")
-                    .error,
-                ErrorCode::AccessDenied
-            );
-            assert_eq!(
-                replica
-                    .find_principal(Id::from_u128(1))
-                    .await
-                    .err()
-                    .expect("deny before DB")
-                    .error,
-                ErrorCode::AccessDenied
-            );
-            assert_eq!(
-                replica
-                    .find_public_jwk(Id::from_u128(1))
-                    .await
-                    .expect_err("deny before DB")
-                    .error,
-                ErrorCode::AccessDenied
-            );
-            assert_eq!(
-                replica.list_jwks().await.expect_err("deny before DB").error,
-                ErrorCode::AccessDenied
-            );
-            assert_eq!(
-                replica
-                    .token(
-                        TokenRequest::ClientCredentials(ClientCredentialsGrantRequest {
-                            client_id: "absent".into(),
-                            client_secret: String::new(),
-                            scope: None,
-                            audience: None,
-                            resource: None,
-                        }),
-                        None
-                    )
-                    .await
-                    .expect_err("deny before client lookup or password/signature work")
-                    .error,
-                ErrorCode::AccessDenied
-            );
-        }
-    }
-    authority
-        .require_security_ready()
-        .expect("authority unaffected");
-}
-
-#[tokio::test]
-async fn replica_role_rejects_user_grants_without_consuming_state() {
-    use crate::repo::OAuth2UserConsentRepo;
-    use idp_model::contract::{
-        ApproveForUserRequest, AuthorizationCodeGrantRequest, AuthorizationRequest,
-        PasswordGrantRequest, SubjectTokenType, TokenExchangeGrantRequest,
-    };
-
-    let (engine, authority, client, principal) = setup().await;
-    let approval = ApproveForUserRequest {
-        client_id: client.client_id.clone(),
-        redirect_uri: client.redirect_uris[0].clone(),
-        scope: "openid profile".into(),
-    };
-    let mut replica = replica_service(&engine, &authority);
-    // Editing public token settings must not promote an existing service.
-    replica.oauth_config.role = idp_model::contract::IdpRole::Authority;
-    assert_eq!(
-        replica
-            .approve_for_user(approval.clone(), &principal)
-            .await
-            .expect_err("replica cannot approve")
-            .error,
-        ErrorCode::AccessDenied
-    );
+async fn reopened_local_node_can_issue_and_rotate_user_grants_offline() {
+    let (engine, first, client, principal) = setup().await;
+    let tokens = issue(&first, &client, &principal).await;
+    let reopened = reopened_service(&engine, &first);
+    let replacement = reopened
+        .token(
+            grant(&tokens.refresh_token.expect("refresh grant").0, None),
+            Some(auth(&client)),
+        )
+        .await
+        .expect("local state survives service reopen without peer contact");
+    assert!(replacement.refresh_token.is_some());
     assert!(
-        authority
-            .oauth2_user_consent_repo
-            .list_user_consents(principal.user.id, 0, 100)
-            .await
-            .expect("read consents")
-            .is_empty()
-    );
-    authority
-        .approve_for_user(approval, &principal)
-        .await
-        .expect("authority approves");
-    let request = AuthorizationRequest {
-        response_type: ResponseType::Code,
-        client_id: client.client_id.clone(),
-        redirect_uri: Some(client.redirect_uris[0].clone()),
-        scope: Some("openid profile".into()),
-        state: None,
-        resource: None,
-        code_challenge: None,
-        code_challenge_method: None,
-        nonce: None,
-        prompt: None,
-        response_mode: None,
-        login_hint: None,
-        id_token_hint: None,
-        ui_locales: None,
-    };
-    assert_eq!(
-        replica
-            .authorize(request.clone(), &principal)
-            .await
-            .expect_err("replica cannot create code")
-            .error,
-        ErrorCode::AccessDenied
-    );
-    let mut authority = authority;
-    authority.oauth_config.require_pkce = false;
-    let response = authority
-        .authorize(request, &principal)
-        .await
-        .expect("authority creates code");
-    let idp_model::contract::AuthorizationCodeResponse::Success { code, .. } = response else {
-        panic!("authority returns a code");
-    };
-    let code_grant = TokenRequest::AuthorizationCode(AuthorizationCodeGrantRequest {
-        client_id: Some(client.client_id.clone()),
-        code,
-        code_verifier: "a".repeat(43),
-        redirect_uri: Some(client.redirect_uris[0].clone()),
-    });
-    let tokens = issue(&authority, &client, &principal).await;
-    let refresh = tokens.refresh_token.expect("refresh token").0;
-    let requests = [
-        code_grant.clone(),
-        grant(&refresh, None),
-        TokenRequest::Password(PasswordGrantRequest {
-            client_id: client.client_id.clone(),
-            username: "refresh-user".into(),
-            password: "test-password".into(),
-            scope: None,
-            resource: None,
-        }),
-        TokenRequest::TokenExchange(TokenExchangeGrantRequest {
-            subject_token: tokens.access_token.0,
-            subject_token_type: SubjectTokenType::AccessToken,
-            actor_token: None,
-            actor_token_type: None,
-            resource: None,
-            audience: None,
-            authorization_details: None,
-            scope: None,
-            requested_token_type: None,
-        }),
-    ];
-    let before = states(&engine).await;
-    for request in requests {
-        assert_eq!(
-            replica
-                .token(request, Some(auth(&client)))
-                .await
-                .expect_err("replica rejects user grant")
-                .error,
-            ErrorCode::AccessDenied
-        );
-    }
-    assert_eq!(
-        replica
-            .revoke(
-                RevocationRequest {
-                    token: refresh.clone(),
-                    token_type_hint: None
-                },
-                Some(auth(&client))
+        reopened
+            .find_public_jwk(
+                first
+                    .oauth_config
+                    .local_signer
+                    .as_ref()
+                    .expect("node binding")
+                    .key_id
             )
             .await
-            .expect_err("replica cannot revoke")
-            .error,
-        ErrorCode::AccessDenied
+            .is_ok()
     );
-    assert_eq!(
-        states(&engine).await,
-        before,
-        "denials leave refresh state unchanged"
-    );
-    authority
-        .token(code_grant, Some(auth(&client)))
-        .await
-        .expect("rejected code remains redeemable");
-    authority
-        .token(grant(&refresh, None), Some(auth(&client)))
-        .await
-        .expect("rejected refresh remains redeemable");
-}
-
-#[tokio::test]
-async fn replica_role_denies_client_credentials_until_signer_readiness() {
-    use idp_model::contract::ClientCredentialsGrantRequest;
-    let (engine, authority, mut client, _) = setup().await;
-    client
-        .allowed_grant_types
-        .push(GrantType::ClientCredentials);
-    client
-        .allowed_audiences
-        .push("https://service.example".into());
-    let client = authority
-        .client_repo
-        .update_client(client)
-        .await
-        .expect("enable machine grant");
-    let replica = replica_service(&engine, &authority);
-    let request = TokenRequest::ClientCredentials(ClientCredentialsGrantRequest {
-        client_id: client.client_id.clone(),
-        client_secret: String::new(),
-        scope: Some("profile".into()),
-        audience: Some("https://service.example".into()),
-        resource: None,
-    });
-    assert_eq!(
-        replica
-            .token(request.clone(), Some(auth(&client)))
-            .await
-            .expect_err("shared subject private keys do not establish replica readiness")
-            .error,
-        ErrorCode::AccessDenied
-    );
-    let tokens = authority
-        .token(request, Some(auth(&client)))
-        .await
-        .expect("authority still permits machine grant");
-    assert!(tokens.refresh_token.is_none());
-    let (header, _) = decode_jwt::<StandardClaims>(&tokens.access_token.0).expect("decode token");
-    let key_id = Id::parse_str(&header.kid).expect("key ID");
-    assert_eq!(
-        replica
-            .find_public_jwk(key_id)
-            .await
-            .expect_err("unready replica cannot verify")
-            .error,
-        ErrorCode::AccessDenied
-    );
-    assert_eq!(
-        replica
-            .find_principal(key_id)
-            .await
-            .err()
-            .expect("unready replica cannot resolve principal")
-            .error,
-        ErrorCode::AccessDenied
-    );
-    assert_eq!(
-        replica
-            .list_jwks()
-            .await
-            .expect_err("unready replica cannot publish eligible keys")
-            .error,
-        ErrorCode::AccessDenied
-    );
-    let key = authority
-        .find_public_jwk(key_id)
-        .await
-        .expect("authority reads verification key");
-    super::verify_jwt::<StandardClaims>(&key, &tokens.access_token.0).expect("validate signature");
-    assert!(states(&engine).await.is_empty());
 }
 
 #[tokio::test]
@@ -758,10 +530,7 @@ async fn refresh_verification_precedes_consumption() {
         .expect("refresh token")
         .0;
     let (header, claims) = decode_jwt::<StandardClaims>(&original).expect("decode token");
-    let signing_key = service
-        .load_signing_jwk(&principal.key)
-        .await
-        .expect("load signing key");
+    let signing_key = service.local_signing_jwk().await.expect("load signing key");
     let mut invalid_claims = Vec::new();
     let mut expired = claims.clone();
     expired.exp = expired.iat;
@@ -789,7 +558,16 @@ async fn refresh_verification_precedes_consumption() {
     invalid_claims.push(principal_type);
     let mut tokens: Vec<String> = invalid_claims
         .iter()
-        .map(|claims| encode_jwt(&signing_key, claims).expect("sign invalid claims"))
+        .map(|claims| {
+            encode_jwt(
+                &signing_key,
+                &crate::oauth2::token::PrincipalBoundClaims {
+                    standard_claims: claims.clone(),
+                    principal_key_id: principal.key.id,
+                },
+            )
+            .expect("sign invalid claims")
+        })
         .collect();
     let mut parts: Vec<String> = original.split('.').map(str::to_owned).collect();
     let mut signature = URL_SAFE_NO_PAD.decode(&parts[2]).expect("decode signature");
@@ -839,6 +617,7 @@ async fn refresh_verification_precedes_consumption() {
         &signing_key,
         &super::super::token::RefreshClaims {
             standard_claims: claims,
+            principal_key_id: principal.key.id,
             jti: Id::now_v7().to_string(),
         },
     )
@@ -855,4 +634,146 @@ async fn refresh_verification_precedes_consumption() {
         .token(grant(&original, None), Some(auth(&client)))
         .await
         .expect("invalid requests did not consume original");
+}
+
+#[tokio::test]
+async fn user_token_signer_is_not_the_user_principal() {
+    let (_, service, client, principal) = setup().await;
+    let tokens = issue(&service, &client, &principal).await;
+    let (header, claims) =
+        decode_jwt::<StandardClaims>(&tokens.access_token.0).expect("decode token");
+    assert_eq!(claims.sub, principal.user.id.to_string());
+    assert_ne!(header.kid, principal.key.id.to_string());
+}
+
+#[tokio::test]
+async fn missing_local_signer_does_not_consume_authorization_code() {
+    use crate::repo::OAuth2AuthorizationCodeRepo;
+    use idp_model::contract::AuthorizationCodeGrantRequest;
+    let (_, mut service, client, principal) = setup().await;
+    let code = service
+        .authorization_code_repo
+        .create_authorization_code(
+            client.client_id.clone(),
+            principal.key.id,
+            client.redirect_uris[0].clone(),
+            vec!["openid".into()],
+            None,
+            None,
+            None,
+            None,
+            chrono::Utc::now() + chrono::Duration::minutes(1),
+        )
+        .await
+        .expect("create local code");
+    service.oauth_config.local_signer = None;
+    let request = TokenRequest::AuthorizationCode(AuthorizationCodeGrantRequest {
+        code: code.code.clone(),
+        client_id: Some(client.client_id.clone()),
+        redirect_uri: Some(client.redirect_uris[0].clone()),
+        code_verifier: "fixture-verifier".into(),
+    });
+    let error = service
+        .token(request, Some(auth(&client)))
+        .await
+        .expect_err("missing local signer denies");
+    assert_eq!(
+        error.error_description.as_deref(),
+        Some("local node signer is not configured")
+    );
+    assert!(
+        service
+            .authorization_code_repo
+            .find_authorization_code_by_code(&code.code)
+            .await
+            .expect("read code after denial")
+            .expect("code remains")
+            .consumed_at
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn approved_local_node_signer_survives_native_reopen_without_peer_or_trust_lease() {
+    let (source, service, client, principal) = setup().await;
+    let token = issue(&service, &client, &principal).await.access_token.0;
+    let binding = service
+        .oauth_config
+        .local_signer
+        .clone()
+        .expect("node binding");
+    let private_store = service.key_service.private_key_repo().clone();
+    let path = std::env::temp_dir().join(format!("local-node-{}.redb", Id::now_v7()));
+    {
+        let engine = Arc::new(db::open_native_engine(&path).expect("persist Node identity"));
+        up(&engine).await.expect("initialize local trust schema");
+        for table in ["devices", "idp_replica_members", "idp_replica_signers"] {
+            let rows = source
+                .translate_and_execute(&format!("SELECT * FROM {table}"), &db::SqlTranslator)
+                .await
+                .expect("read local fixture trust")
+                .remove(0)
+                .rows;
+            for row in rows {
+                engine
+                    .execute(vec![Statement::Query(Query::Insert(db::QueryInsert {
+                        table: table.into(),
+                        row,
+                        returning: None,
+                    }))])
+                    .await
+                    .expect("persist local trust");
+            }
+        }
+    }
+    {
+        let engine = Arc::new(db::open_native_engine(&path).expect("reopen offline Node trust"));
+        let keys = KeyService::new(
+            DbKeyRepo::new(Arc::clone(&engine)),
+            private_store,
+            "refresh-test",
+        );
+        let signing = keys
+            .load_node_signer(
+                &binding,
+                &service.oauth_config.issuer,
+                chrono::Utc::now().timestamp(),
+            )
+            .await
+            .expect("no live peer or lease needed");
+        let renewed = encode_jwt(
+            &signing,
+            &serde_json::json!({"sub": principal.user.id.to_string()}),
+        )
+        .expect("issue with restored local private signer");
+        let public = idp_model::contract::JwkPublic::from(signing);
+        crate::oauth2::verify_jwt::<StandardClaims>(&public, &token)
+            .expect("verify earlier token after reopen");
+        crate::oauth2::verify_jwt::<serde_json::Value>(&public, &renewed)
+            .expect("verify new offline issuance");
+        let peers = crate::replica::DbReplicaSignerRepo::new(engine);
+        assert!(
+            peers
+                .is_trusted_peer(
+                    &service.oauth_config.issuer,
+                    binding.member_id,
+                    &binding.endpoint_id,
+                    chrono::Utc::now().timestamp()
+                )
+                .await
+                .expect("persistent peer trust")
+        );
+        assert!(
+            !peers
+                .is_trusted_peer(
+                    &service.oauth_config.issuer,
+                    binding.member_id,
+                    "forged-endpoint",
+                    chrono::Utc::now().timestamp()
+                )
+                .await
+                .expect("endpoint impersonation denial")
+        );
+    }
+    std::fs::remove_file(path).expect("remove trust fixture");
 }

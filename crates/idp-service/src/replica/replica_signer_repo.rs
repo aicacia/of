@@ -23,6 +23,149 @@ where
         Self { engine }
     }
 
+    /// Check current local membership for an independently authenticated connection endpoint.
+    /// This is not actor authentication or resource permission.
+    pub async fn is_trusted_peer(
+        &self,
+        issuer: &str,
+        member_id: idp_model::model::Id,
+        authenticated_endpoint_id: &str,
+        now: i64,
+    ) -> RepoResult<bool> {
+        let records = self.trusted_signers(issuer, now).await?;
+        Ok(records
+            .iter()
+            .filter(|(member, _)| member.matches(issuer, member_id, authenticated_endpoint_id))
+            .count()
+            == 1)
+    }
+
+    pub async fn trusted_signers(
+        &self,
+        issuer: &str,
+        now: i64,
+    ) -> RepoResult<Vec<(ReplicaMembership, IdpSignerRecord)>> {
+        let mut results = self.engine.translate_and_execute(
+            "SELECT id, installation_id, member_id, endpoint_id, issuer, approved_at, revoked_at FROM idp_replica_members; SELECT id, member_id, active_member_id, key_id, issuer, public_jwk, approved_at, revoked_at, expires_at FROM idp_replica_signers; SELECT id, public_key, state, revoked_at FROM devices", &SqlTranslator,
+        ).await.map_err(db_error)?;
+        if results.len() != 3 {
+            return Err(RepoError::InvalidInput(
+                "incomplete node trust results".into(),
+            ));
+        }
+        let devices = results.pop().expect("three query results").rows;
+        let signers = results.pop().expect("two query results").rows;
+        let members = results.pop().expect("one query result").rows;
+        let mut trusted = Vec::new();
+        for row in signers {
+            let [
+                Value::Uuid(row_id),
+                Value::Uuid(member_id),
+                Value::Uuid(active_member_id),
+                Value::Uuid(key_id),
+                Value::Text(record_issuer),
+                Value::Text(public_jwk),
+                Value::Integer(approved_at),
+                Value::Null,
+                expires,
+            ] = row.values.as_slice()
+            else {
+                continue;
+            };
+            if active_member_id != member_id {
+                continue;
+            }
+            let expires_at = match expires {
+                Value::Null => None,
+                Value::Integer(value) => Some(*value),
+                _ => continue,
+            };
+            let signer = IdpSignerRecord {
+                member_id: *member_id,
+                key_id: *key_id,
+                issuer: record_issuer.clone(),
+                public_jwk: serde_json::from_str(public_jwk).map_err(RepoError::other)?,
+                approved_at: Some(*approved_at),
+                revoked_at: None,
+                expires_at,
+            };
+            if !signer.matches(*member_id, *key_id, issuer, now)
+                || crate::oauth2::verifing_key_from_jwt(&signer.public_jwk).is_err()
+            {
+                continue;
+            }
+            for member_row in &members {
+                let [
+                    Value::Uuid(member_row_id),
+                    Value::Text(installation_id),
+                    Value::Uuid(id),
+                    Value::Text(endpoint_id),
+                    Value::Text(member_issuer),
+                    Value::Integer(member_approved),
+                    Value::Null,
+                ] = member_row.values.as_slice()
+                else {
+                    continue;
+                };
+                if id != member_id || *member_approved < 0 || *member_approved > now {
+                    continue;
+                }
+                let member = ReplicaMembership {
+                    installation_id: installation_id.clone(),
+                    member_id: *id,
+                    endpoint_id: endpoint_id.clone(),
+                    issuer: member_issuer.clone(),
+                    approved_at: *member_approved,
+                    revoked_at: None,
+                };
+                if !member.matches(issuer, *member_id, endpoint_id) {
+                    continue;
+                }
+                let device = devices.iter().any(|device| matches!(device.values.as_slice(), [Value::Uuid(id), Value::Text(endpoint), Value::Integer(1), Value::Null] if id == member_id && endpoint == endpoint_id));
+                if !device {
+                    continue;
+                }
+                let rows = [
+                    idp_model::replica::SecurityRow::new(
+                        idp_model::replica::SecurityTable::ReplicaSigner,
+                        *row_id,
+                    ),
+                    idp_model::replica::SecurityRow::new(
+                        idp_model::replica::SecurityTable::ReplicaMember,
+                        *member_row_id,
+                    ),
+                    idp_model::replica::SecurityRow::new(
+                        idp_model::replica::SecurityTable::Device,
+                        *member_id,
+                    ),
+                ];
+                if idp_model::replica::allows_authorization(&self.engine, &rows)
+                    .await
+                    .map_err(db_error)?
+                {
+                    trusted.push((member, signer.clone()));
+                }
+            }
+        }
+        let ambiguous = trusted.iter().any(|(member, signer)| {
+            trusted
+                .iter()
+                .filter(|(other_member, other_signer)| {
+                    other_member.member_id == member.member_id
+                        || other_member.endpoint_id == member.endpoint_id
+                        || other_signer.key_id == signer.key_id
+                })
+                .count()
+                != 1
+        });
+        if ambiguous {
+            return Err(RepoError::InvalidInput(
+                "ambiguous node trust bindings".into(),
+            ));
+        }
+        Ok(trusted)
+    }
+
     /// Store membership and its first approved signer as one unit. Returns `false` for an exact retry.
     pub async fn enroll(
         &self,
@@ -69,16 +212,15 @@ where
             let signer_row = query_results.remove(0).rows.into_iter().next();
             let active_signer = query_results.remove(0).rows.into_iter().next();
 
-            if let (Some(member), Some(signer_row)) = (member.as_ref(), signer_row.as_ref()) {
-                if endpoint.as_ref().is_some_and(|row| {
+            if let (Some(member), Some(signer_row)) = (member.as_ref(), signer_row.as_ref())
+                && endpoint.as_ref().is_some_and(|row| {
                     matches!(row.values.first(), Some(Value::Uuid(id)) if *id == membership.member_id)
                 }) && active_signer.as_ref().is_some_and(|row| {
                     matches!(row.values.first(), Some(Value::Uuid(id)) if *id == signer.key_id)
                 }) && member_matches(member, membership)
                     && signer_matches(signer_row, signer)?
                 {
-                    return Ok(false);
-                }
+                return Ok(false);
             }
             if member.is_some() || endpoint.is_some() || signer_row.is_some() || active_signer.is_some() {
                 return Err(RepoError::InvalidInput(
@@ -87,7 +229,7 @@ where
             }
 
             let jwk = serde_json::to_string(&signer.public_jwk)
-                .map_err(|error| RepoError::other(error))?;
+                .map_err(RepoError::other)?;
             let insert_member = format!(
                 "INSERT INTO idp_replica_members (id, installation_id, member_id, endpoint_id, issuer, approved_at, revoked_at) VALUES (CAST('{}' AS UUID), {}, CAST('{}' AS UUID), {}, {}, {}, NULL)",
                 db::Uuid::now_v7(),
@@ -284,7 +426,7 @@ fn validate_signer(
         &signer.public_jwk.params,
         idp_model::contract::JwkPublicParameters::Ec { crv, .. } if crv == "secp256k1"
     ) && signer.public_jwk.r#use == KeyUse::Signature
-        && signer.public_jwk.alg == JwsAlgorithm::EdDSA
+        && signer.public_jwk.alg == JwsAlgorithm::ES256K
         && crate::oauth2::verifing_key_from_jwt(&signer.public_jwk).is_ok();
     if signer.member_id != member_id
         || signer.issuer != issuer
@@ -372,7 +514,7 @@ mod tests {
             public_jwk: JwkPublic {
                 kid: key_id.to_string(),
                 r#use: KeyUse::Signature,
-                alg: JwsAlgorithm::EdDSA,
+                alg: JwsAlgorithm::ES256K,
                 params: JwkPublicParameters::Ec {
                     crv: "secp256k1".to_owned(),
                     x: STANDARD_NO_PAD.encode(point.x().expect("public point has x coordinate")),

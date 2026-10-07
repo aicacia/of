@@ -49,9 +49,6 @@ pub(crate) async fn enroll_replica_signer(
     actor: StandardAuthorization,
     Json(body): Json<EnrollReplicaSigner>,
 ) -> Result<StatusCode, ErrorResponse> {
-    if !state.oauth2_service.is_authority() {
-        return Err(ErrorResponse::new(ErrorCode::AccessDenied));
-    }
     require_identity_permission(
         &state,
         &actor,
@@ -115,9 +112,6 @@ pub(crate) async fn rotate_replica_signer(
     actor: StandardAuthorization,
     Json(body): Json<RotateReplicaSigner>,
 ) -> Result<StatusCode, ErrorResponse> {
-    if !state.oauth2_service.is_authority() {
-        return Err(ErrorResponse::new(ErrorCode::AccessDenied));
-    }
     require_identity_permission(
         &state,
         &actor,
@@ -165,9 +159,6 @@ pub(crate) async fn revoke_replica_signer(
     Path(member_id): Path<Id>,
     actor: StandardAuthorization,
 ) -> Result<StatusCode, ErrorResponse> {
-    if !state.oauth2_service.is_authority() {
-        return Err(ErrorResponse::new(ErrorCode::AccessDenied));
-    }
     require_identity_permission(
         &state,
         &actor,

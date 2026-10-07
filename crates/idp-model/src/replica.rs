@@ -27,6 +27,7 @@ where
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SecurityTable {
+    User,
     Application,
     Client,
     Credential,
@@ -46,6 +47,7 @@ pub enum SecurityTable {
 impl SecurityTable {
     const fn name(self) -> &'static str {
         match self {
+            Self::User => "users",
             Self::Application => "applications",
             Self::Client => "clients",
             Self::Credential => "credentials",
@@ -169,13 +171,18 @@ where
     R: RowCodec<K::Transaction>,
 {
     let conflicts = engine.row_conflicts(row.table.name(), &row.key()).await?;
-    if conflicts.is_empty()
-        || (row.table.is_token_state()
-            && conflicts.iter().any(|column| column == "consumed_at")
-            && !values
+    let unsafe_lifecycle = ["revoked_at", "consumed_at"].iter().any(|column| {
+        let monotonic = *column == "revoked_at" || row.table.is_token_state();
+        monotonic
+            && (values
                 .iter()
-                .any(|(column, value)| column == "consumed_at" && !matches!(value, Value::Null)))
-    {
+                .any(|(field, value)| field == column && matches!(value, Value::Null))
+                || (conflicts.iter().any(|field| field == column)
+                    && !values.iter().any(|(field, value)| {
+                        field == column && matches!(value, Value::Integer(_))
+                    })))
+    });
+    if administrator_id.is_nil() || conflicts.is_empty() || unsafe_lifecycle {
         return Ok(None);
     }
 
@@ -328,6 +335,58 @@ mod tests {
                 )
                 .await
                 .is_err());
+        });
+    }
+
+    #[test]
+    fn reconnect_conflict_resolution_cannot_resurrect_revoked_refresh_grants() {
+        block_on(async {
+            let source = Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new());
+            let destination = Engine::new(InMemoryKernel::new(), AutomergeRowCodec::new());
+            up(&source).await.expect("initialize grant source");
+            seed(&source).await;
+            synchronize(&source, &destination).await;
+            update(&source, "oauth2_refresh_tokens", REFRESH, "revoked_at", "1").await;
+            update(
+                &destination,
+                "oauth2_refresh_tokens",
+                REFRESH,
+                "revoked_at",
+                "2",
+            )
+            .await;
+            synchronize(&source, &destination).await;
+            synchronize(&destination, &source).await;
+            let grant = SecurityRow::new(SecurityTable::OAuthRefreshToken, uuid(REFRESH));
+            assert!(
+                !allows_token_issuance(&source, &[grant])
+                    .await
+                    .expect("conflicting grants deny")
+            );
+            assert!(
+                resolve(
+                    &source,
+                    uuid(ADMIN),
+                    grant,
+                    vec![("revoked_at".into(), db::Value::Null)],
+                    3
+                )
+                .await
+                .expect("reject resurrection")
+                .is_none()
+            );
+            assert!(
+                resolve(
+                    &source,
+                    uuid(ADMIN),
+                    grant,
+                    vec![("revoked_at".into(), db::Value::Integer(1))],
+                    3
+                )
+                .await
+                .expect("retain revocation")
+                .is_some()
+            );
         });
     }
 
@@ -487,6 +546,6 @@ mod tests {
     }
 
     fn uuid(value: u128) -> db::Uuid {
-        db::Uuid::from_u128(value)
+        db::Uuid::from_u128(0x00000000000070008000000000000000 | value)
     }
 }

@@ -27,7 +27,6 @@ mod error_response;
 
 mod grant_type;
 mod id_token_claims;
-mod idp_role;
 mod idp_signer;
 
 mod introspection_request;
@@ -102,7 +101,6 @@ pub use error_response::{ErrorResponse, ErrorResponseResult};
 
 pub use grant_type::GrantType;
 pub use id_token_claims::IdTokenClaims;
-pub use idp_role::IdpRole;
 pub use idp_signer::{IdpSignerRecord, ReplicaMembership, TokenPrincipalBinding};
 
 pub use introspection_request::IntrospectionRequest;

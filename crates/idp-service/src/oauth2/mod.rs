@@ -1,9 +1,9 @@
 mod authorization;
 mod config;
 mod jwt;
+mod node_signer;
 mod pkce;
 mod principal;
-mod readiness;
 mod scope;
 mod service;
 mod token;
@@ -20,3 +20,5 @@ pub use principal::{ClientPrincipal, Principal, UserPrincipal};
 pub use scope::{intersect_scopes, parse_scopes, scopes_to_string, validate_scopes};
 pub use service::{OAuth2Service, UpdateUserInfoRequest};
 pub use token::validate_authorization_code_grant;
+
+pub use node_signer::NodeSignerBinding;

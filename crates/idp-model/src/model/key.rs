@@ -51,7 +51,7 @@ impl Key {
         let jwt = JwkPrivate {
             r#use: KeyUse::Signature,
             kid: self.id.to_string(),
-            alg: JwsAlgorithm::EdDSA,
+            alg: JwsAlgorithm::ES256K,
             params: JwkPrivateParameters::Ec {
                 crv: "secp256k1".to_string(),
                 x: STANDARD_NO_PAD.encode(x),
@@ -69,7 +69,7 @@ impl Key {
         let jwt = JwkPublic {
             r#use: KeyUse::Signature,
             kid: self.id.to_string(),
-            alg: JwsAlgorithm::EdDSA,
+            alg: JwsAlgorithm::ES256K,
             params: JwkPublicParameters::Ec {
                 crv: "secp256k1".to_string(),
                 x: STANDARD_NO_PAD.encode(x),

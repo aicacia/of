@@ -38,9 +38,9 @@ pub(crate) async fn require_identity_permission(
         action,
         target,
     };
-    let client = state.permission_client.as_ref().ok_or_else(|| {
+    let client = state.local_permissions.as_ref().ok_or_else(|| {
         ErrorResponse::new(ErrorCode::AccessDenied)
-            .with_description("IdP permission service relationship is not configured")
+            .with_description("local Management policy is not configured")
     })?;
     let allowed = client
         .evaluate(&request)

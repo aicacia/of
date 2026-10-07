@@ -82,6 +82,21 @@ where
     K: Kernel,
     R: RowCodec<K::Transaction> + Send + Sync,
 {
+    async fn trusted_node_signers(
+        &self,
+        issuer: &str,
+        now: i64,
+    ) -> RepoResult<
+        Vec<(
+            idp_model::contract::ReplicaMembership,
+            idp_model::contract::IdpSignerRecord,
+        )>,
+    > {
+        super::DbReplicaSignerRepo::new(Arc::clone(&self.engine))
+            .trusted_signers(issuer, now)
+            .await
+    }
+
     async fn set_public_jwk(&self, id: Id, jwk: JwkPublic) -> RepoResult<Key> {
         if jwk.kid != id.to_string() {
             return Err(RepoError::InvalidInput(

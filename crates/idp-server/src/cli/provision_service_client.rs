@@ -282,7 +282,7 @@ mod tests {
     };
     use iroh::{Endpoint, SecretKey, endpoint::presets};
     use key::{DerivationPath, DerivedKey};
-    use management_service::{MANAGEMENT_APPLICATION_URI, PermissionClient};
+    use management_service::{LocalPermissions, MANAGEMENT_APPLICATION_URI};
     use model::contract::{PrincipalType, StandardClaims, TokenType, TokenUse};
 
     struct ModifierTolerantTestStore {
@@ -682,10 +682,10 @@ mod tests {
             &fs::read(&evaluator_credentials_path).expect("read evaluator credentials"),
         )
         .expect("parse evaluator credentials");
-        let evaluator_client_id = evaluator_credentials["client_id"]
+        let _evaluator_client_id = evaluator_credentials["client_id"]
             .as_str()
             .expect("evaluator client ID is a string");
-        let evaluator_client_secret = evaluator_credentials["client_secret"]
+        let _evaluator_client_secret = evaluator_credentials["client_secret"]
             .as_str()
             .expect("evaluator client secret is a string");
         let issuer = "https://idp.example.test";
@@ -803,7 +803,7 @@ mod tests {
         let management_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind Management permission fixture");
-        let management_address = management_listener
+        let _management_address = management_listener
             .local_addr()
             .expect("read Management fixture address");
         let _management_server = tokio::spawn(async move {
@@ -823,16 +823,10 @@ mod tests {
             Arc::clone(&devices),
             Arc::new(crate::DeviceIdentity::new(endpoint.clone(), secret_key)),
         )
-        .with_permission_client(
-            PermissionClient::new(
-                &format!("http://{management_address}/"),
-                &format!("http://{address}/"),
-                issuer,
-                evaluator_client_id,
-                evaluator_client_secret,
-            )
-            .expect("configure real IdP-to-Management client"),
-        );
+        .with_local_permissions(LocalPermissions::new(Arc::new(
+            open_native_engine(root.join("management.redb"))
+                .expect("open local Management fixture"),
+        )));
         let app = crate::openapi_router(state.clone(), "/")
             .split_for_parts()
             .0;
@@ -1000,7 +994,6 @@ mod tests {
             Arc::clone(&state.oauth2_service.key_service),
             OAuth2Config {
                 issuer: issuer.to_owned(),
-                role: idp_model::contract::IdpRole::Replica,
                 ..OAuth2Config::default()
             },
         ));
@@ -1563,7 +1556,6 @@ mod tests {
             replica_keys,
             OAuth2Config {
                 issuer: issuer.to_owned(),
-                role: idp_model::contract::IdpRole::Replica,
                 ..OAuth2Config::default()
             },
         ));

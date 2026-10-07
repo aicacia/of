@@ -10,6 +10,7 @@ mod password_config;
 #[cfg(feature = "replica")]
 pub mod replica;
 pub mod repo;
+pub mod security_sync;
 
 mod util;
 

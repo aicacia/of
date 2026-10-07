@@ -115,14 +115,30 @@ where
     }
 
     async fn users(&self, predicate: Option<QueryExpr>) -> RepoResult<Vec<User>> {
-        self.rows::<UserRow>(
-            select(USERS, &USER_COLUMNS, predicate),
-            "missing user query result",
-        )
-        .await?
-        .into_iter()
-        .map(User::try_from)
-        .collect()
+        let users = self
+            .rows::<UserRow>(
+                select(USERS, &USER_COLUMNS, predicate),
+                "missing user query result",
+            )
+            .await?
+            .into_iter()
+            .map(User::try_from)
+            .collect::<RepoResult<Vec<_>>>()?;
+        for user in &users {
+            if !idp_model::replica::allows_authorization(
+                &self.engine,
+                &[idp_model::replica::SecurityRow::new(
+                    idp_model::replica::SecurityTable::User,
+                    user.id,
+                )],
+            )
+            .await
+            .map_err(db_error)?
+            {
+                return Err(RepoError::InvalidInput("conflicted User identity".into()));
+            }
+        }
+        Ok(users)
     }
 
     async fn emails(&self, user_id: Id) -> RepoResult<Vec<UserEmail>> {
