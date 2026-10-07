@@ -1,6 +1,6 @@
 # Management
 
-The resource-policy and role-based access-control authority for an Installation. Shared terms are defined in [the root glossary](../../GLOSSARY.md).
+The resource-policy and role-based access-control authority for an Installation. Shared terms are defined in [the root glossary](../../GLOSSARY.md). Service authority is described in [system design](../../docs/design.md); resource selection and admission are described in [Storage design](../storage-service/docs/design.md).
 
 ## Language
 

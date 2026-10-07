@@ -121,6 +121,11 @@ where
         }
     }
 
+    #[must_use]
+    pub fn is_authority(&self) -> bool {
+        self.role == IdpRole::Authority
+    }
+
     /// Deny replica security operations until trusted authority synchronization exists.
     pub fn require_security_ready(&self) -> ErrorResponseResult<()> {
         if self.role == IdpRole::Replica && !self.replica_readiness.is_fresh() {

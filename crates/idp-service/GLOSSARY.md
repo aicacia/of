@@ -1,6 +1,6 @@
 # Identity Provider (IdP)
 
-The identity and OAuth/OIDC authority for an Installation. Shared terms are defined in [the root glossary](../../GLOSSARY.md).
+The identity and OAuth/OIDC authority for an Installation. Shared terms are defined in [the root glossary](../../GLOSSARY.md). OAuth/OIDC and key identity are described in [IdP design](docs/design.md).
 
 ## Language
 

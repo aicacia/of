@@ -3,19 +3,19 @@
 ## Shared domain
 
 - [Shared terms](GLOSSARY.md): Installation, User, Application, Principal, Device, and setup lifecycle.
-- [System-wide decisions](docs/adr/).
+- [System design](docs/design.md): service authority, replica boundaries, Installation, and synchronization requirements.
 - [Unified service spec](.scratch/unified-server/spec.md), [tickets](.scratch/unified-server/map.md), and [implementation evidence](.scratch/unified-server/evidence.md).
 
 ## Contexts
 
-| Context    | Glossary                                            | Decisions and contracts                                                                        |
-| ---------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| IdP        | [Identity Provider](crates/idp-service/GLOSSARY.md) | [OIDC and key identity](crates/idp-service/docs/adr/0001-oidc-and-key-identity.md)             |
-| Management | [Management](crates/management-service/GLOSSARY.md) | [Owner-service authority](docs/adr/0002-service-authority-and-replica-boundaries.md)           |
-| Storage    | [Storage](crates/storage-service/GLOSSARY.md)       | [API](crates/storage-service/docs/api.md), [security](crates/storage-service/docs/security.md) |
+| Context    | Glossary                                            | Design and contracts                                                                                                                                            |
+| ---------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IdP        | [Identity Provider](crates/idp-service/GLOSSARY.md) | [Design](crates/idp-service/docs/design.md): OAuth/OIDC and key identity                                                                                        |
+| Management | [Management](crates/management-service/GLOSSARY.md) | [Service authority](docs/design.md#service-ownership), [selection and admission](crates/storage-service/docs/design.md#device-ownership-and-resource-selection) |
+| Storage    | [Storage](crates/storage-service/GLOSSARY.md)       | [Design](crates/storage-service/docs/design.md), [API](crates/storage-service/docs/api.md), [security](crates/storage-service/docs/security.md)                 |
 
 Each context covers its related model, service, server, and client packages.
-Context-specific contracts belong in `crates/<context>-service/docs/`; context-specific ADRs belong in its `adr/` directory. Create them only when needed. System-wide decisions stay in `docs/adr/`.
+Definitions belong in the relevant `GLOSSARY.md`. Current design, contracts, and operational guidance belong in stable topic files such as `docs/design.md`, `docs/api.md`, `docs/security.md`, or `docs/operations.md`, not numbered decision records. System-wide topics live in `docs/`; context-specific topics live in `crates/<context>-service/docs/`. Create topic files only when needed, update them in place, and link them here.
 
 ## Relationships
 
@@ -24,4 +24,4 @@ Context-specific contracts belong in `crates/<context>-service/docs/`; context-s
 - Storage owns resources and synchronization. It uses IdP identity and Management policy.
 - A Unified Host coordinates owner-local setup and service lifecycle without merging authority or state ownership.
 
-Read shared docs and every context relevant to the work. State conflicts with existing ADRs rather than silently overriding them.
+Read shared docs and every context relevant to the work. State conflicts with existing definitions and design contracts rather than silently overriding them.

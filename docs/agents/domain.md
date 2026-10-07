@@ -1,21 +1,26 @@
 # Domain Docs
 
-## Before exploring code
+How the engineering skills should consume this repo's domain documentation when exploring the codebase.
 
-- Read `GLOSSARY-MAP.md` to select relevant contexts.
-- Read the shared `GLOSSARY.md` and relevant context glossaries.
-- Read relevant system-wide decisions in `docs/adr/`.
-- Read relevant context contracts in `crates/<context>-service/docs/` and decisions in its `adr/` directory, as listed in the glossary map.
-- Read `.scratch/unified-server/spec.md` for unified service requirements, `map.md` in that feature for active tickets, and `evidence.md` for historical implementation results. Operator procedures are in `operations.md` in the same feature.
+## Before exploring, read these
 
-If a mapped file or directory is absent, proceed silently. Create glossaries and ADRs only when terms or decisions are resolved.
+- **`GLOSSARY.md`** at the repo root, or
+- **`GLOSSARY-MAP.md`** at the repo root if it exists: it points at each context's glossary and named design, contract, and operations documents. Read each one relevant to the topic.
 
-## Layout
+If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. Create domain documentation lazily when terms or design actually get resolved.
 
-This repo has shared terms and three contexts: IdP, Management, and Storage. The root `GLOSSARY-MAP.md` lists their paths and relationships. Glossaries contain domain terms, not implementation rules or plans.
+## Use the glossary's vocabulary
 
-## Vocabulary and conflicts
+When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `GLOSSARY.md`. Don't drift to synonyms the glossary explicitly avoids.
 
-Use glossary terms in issues, proposals, hypotheses, and tests. If a required term is missing, note the gap rather than invent a competing term.
+If the concept you need isn't in the glossary yet, that's a signal: either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 
-Read ADR status before using a decision. State any conflict with an existing ADR; do not silently override it.
+## Document current concepts and design
+
+Keep definitions in the relevant `GLOSSARY.md`, without implementation details. Keep current design, contracts, and operational guidance in stable topic files such as `docs/design.md`, `docs/api.md`, `docs/security.md`, or `docs/operations.md`. Shared topics belong in root `docs/`; context-specific topics belong in `crates/<context>-service/docs/`.
+
+Update topic documents in place and link them from `GLOSSARY-MAP.md`. Include rationale and constraints alongside the design they explain, not in numbered decision records or historical status sections. Do not create ADRs, even when a general-purpose skill suggests them. Distinguish design requirements from verified implementation behavior and acceptance evidence.
+
+## Flag conflicts
+
+If your output contradicts an existing definition or design contract, surface it explicitly rather than silently overriding it.

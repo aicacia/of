@@ -1,6 +1,6 @@
 # Shared domain
 
-Terms shared by IdP, Management, and Storage. See [the glossary map](GLOSSARY-MAP.md) for context terms and architecture decisions.
+Terms shared by IdP, Management, and Storage. See [the glossary map](GLOSSARY-MAP.md) for context terms, design, and contracts.
 
 ## Language
 

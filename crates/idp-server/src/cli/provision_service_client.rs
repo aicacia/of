@@ -255,13 +255,18 @@ mod tests {
         io::{Read, Write},
         net::TcpStream,
         os::unix::fs::PermissionsExt,
-        sync::{Arc, Mutex},
+        sync::{
+            Arc, Mutex,
+            atomic::{AtomicBool, Ordering},
+        },
     };
 
+    use axum::{Json, Router, extract::State, http::HeaderMap, routing::post};
     use db::open_native_engine;
     use idp_model::contract::{
-        ClientCredentialsGrantRequest, EntityType, IntrospectionRequest, OAuth2ClientAuth,
-        TokenRequest,
+        ClientCredentialsGrantRequest, EntityType, IntrospectionRequest,
+        MANAGEMENT_PERMISSION_EVALUATE_SCOPE, OAuth2ClientAuth, PermissionAuditIdentity,
+        PermissionEvaluationRequest, PermissionEvaluationResponse, TokenRequest,
     };
     use idp_service::{
         PasswordConfig,
@@ -277,6 +282,7 @@ mod tests {
     };
     use iroh::{Endpoint, SecretKey, endpoint::presets};
     use key::{DerivationPath, DerivedKey};
+    use management_service::{MANAGEMENT_APPLICATION_URI, PermissionClient};
     use model::contract::{PrincipalType, StandardClaims, TokenType, TokenUse};
 
     struct ModifierTolerantTestStore {
@@ -320,6 +326,40 @@ mod tests {
     }
 
     use super::{has_duplicates, provision, validate_values};
+
+    #[derive(Clone)]
+    struct PermissionFixture {
+        requests: Arc<Mutex<Vec<PermissionEvaluationRequest>>>,
+        allowed: Arc<AtomicBool>,
+    }
+
+    async fn allow_permission_evaluation(
+        State(fixture): State<PermissionFixture>,
+        headers: HeaderMap,
+        Json(request): Json<PermissionEvaluationRequest>,
+    ) -> Json<PermissionEvaluationResponse> {
+        let token = headers
+            .get(http::header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.strip_prefix("Bearer "))
+            .expect("permission request has bearer token");
+        let (_, claims) = decode_jwt::<StandardClaims>(token)
+            .expect("permission request has a valid IdP-signed token");
+        fixture
+            .requests
+            .lock()
+            .expect("permission request log lock")
+            .push(request.clone());
+        Json(PermissionEvaluationResponse {
+            audit: PermissionAuditIdentity {
+                service_subject: claims.sub.parse().expect("service subject is an Id"),
+                service_client_id: claims.client_id,
+                actor: request.subject.clone(),
+            },
+            request,
+            allowed: fixture.allowed.load(Ordering::SeqCst),
+        })
+    }
 
     #[derive(Clone)]
     struct TestPrivateKeyRepo {
@@ -545,6 +585,14 @@ mod tests {
             )
             .await
             .expect("create canonical application");
+        applications
+            .create_application(
+                "Management evaluator application".to_owned(),
+                MANAGEMENT_APPLICATION_URI.to_owned(),
+                None,
+            )
+            .await
+            .expect("create Management evaluator application");
         let key_service = Arc::new(KeyService::new(
             DbKeyRepo::new(Arc::clone(&engine)),
             PrivateKeyKeyringRepo::new_with_store("idp-live-test", test_keyring_store()),
@@ -559,6 +607,7 @@ mod tests {
             "https://example.test/app",
             "management-to-idp",
             vec![
+                "https://example.test/app".to_owned(),
                 "https://idp.example.test".to_owned(),
                 "https://management.example.test".to_owned(),
             ],
@@ -593,7 +642,10 @@ mod tests {
             &key_service,
             "https://example.test/app",
             "storage-to-idp",
-            vec!["https://idp.example.test".to_owned()],
+            vec![
+                "https://example.test/app".to_owned(),
+                "https://idp.example.test".to_owned(),
+            ],
             vec![
                 "idp.token.validate".to_owned(),
                 "idp.device.lookup".to_owned(),
@@ -613,6 +665,29 @@ mod tests {
         let storage_idp_client_secret = storage_idp_credentials["client_secret"]
             .as_str()
             .expect("Storage IdP client secret is a string");
+        let evaluator_credentials_path = root.join("idp-management-credentials.json");
+        provision(
+            &applications,
+            &clients,
+            &key_service,
+            MANAGEMENT_APPLICATION_URI,
+            "idp-management-evaluator",
+            vec![MANAGEMENT_APPLICATION_URI.to_owned()],
+            vec![MANAGEMENT_PERMISSION_EVALUATE_SCOPE.to_owned()],
+            &evaluator_credentials_path,
+        )
+        .await
+        .expect("provision IdP-to-Management evaluator client");
+        let evaluator_credentials: serde_json::Value = serde_json::from_slice(
+            &fs::read(&evaluator_credentials_path).expect("read evaluator credentials"),
+        )
+        .expect("parse evaluator credentials");
+        let evaluator_client_id = evaluator_credentials["client_id"]
+            .as_str()
+            .expect("evaluator client ID is a string");
+        let evaluator_client_secret = evaluator_credentials["client_secret"]
+            .as_str()
+            .expect("evaluator client secret is a string");
         let issuer = "https://idp.example.test";
         let oauth2_service = Arc::new(OAuth2Service::new(
             DbApplicationRepo::new(Arc::clone(&engine)),
@@ -717,25 +792,67 @@ mod tests {
             .await
             .expect("approve secondary device")
             .expect("secondary device exists");
-        let state = crate::RouterState::new(
-            issuer,
-            issuer,
-            Arc::clone(&engine),
-            oauth2_service,
-            Arc::clone(&devices),
-            Arc::new(crate::DeviceIdentity::new(endpoint.clone(), secret_key)),
-        );
-        let app = crate::openapi_router(state.clone(), "/")
-            .split_for_parts()
-            .0;
+        let permission_requests = Arc::new(Mutex::new(Vec::new()));
+        let permission_allowed = Arc::new(AtomicBool::new(false));
+        let management_app = Router::new()
+            .route("/permissions/evaluate", post(allow_permission_evaluation))
+            .with_state(PermissionFixture {
+                requests: Arc::clone(&permission_requests),
+                allowed: Arc::clone(&permission_allowed),
+            });
+        let management_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind Management permission fixture");
+        let management_address = management_listener
+            .local_addr()
+            .expect("read Management fixture address");
+        let _management_server = tokio::spawn(async move {
+            axum::serve(management_listener, management_app)
+                .await
+                .expect("serve Management permission fixture");
+        });
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind IdP HTTP listener");
         let address = listener.local_addr().expect("read IdP HTTP address");
+        let state = crate::RouterState::new(
+            issuer,
+            "https://example.test/app",
+            Arc::clone(&engine),
+            oauth2_service,
+            Arc::clone(&devices),
+            Arc::new(crate::DeviceIdentity::new(endpoint.clone(), secret_key)),
+        )
+        .with_permission_client(
+            PermissionClient::new(
+                &format!("http://{management_address}/"),
+                &format!("http://{address}/"),
+                issuer,
+                evaluator_client_id,
+                evaluator_client_secret,
+            )
+            .expect("configure real IdP-to-Management client"),
+        );
+        let app = crate::openapi_router(state.clone(), "/")
+            .split_for_parts()
+            .0;
         let server = tokio::spawn(async move {
             axum::serve(listener, app)
                 .await
                 .expect("serve IdP test router");
+        });
+        let signer_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind signer authorization listener");
+        let signer_address = signer_listener
+            .local_addr()
+            .expect("read signer authorization address");
+        let signer_state = state.clone().with_service_audience("live-refresh-client");
+        let signer_app = crate::openapi_router(signer_state, "/").split_for_parts().0;
+        let _signer_server = tokio::spawn(async move {
+            axum::serve(signer_listener, signer_app)
+                .await
+                .expect("serve signer authorization router");
         });
 
         for (method, path, body) in [
@@ -786,10 +903,285 @@ mod tests {
         let issued: model::contract::TokenResponse =
             serde_json::from_str(http_response_body(&issued)).expect("parse user token response");
         let user_access_token = issued.access_token.0;
+        let (_, user_claims) = decode_jwt::<StandardClaims>(&user_access_token)
+            .expect("decode issued user access token");
+        assert_eq!(user_claims.aud, "live-refresh-client");
+        let member_id = idp_model::model::Id::now_v7();
+        let replica_signer_owner = state
+            .oauth2_service
+            .user_repo
+            .create_user_with_password("replica-signer-owner", "replica-signer-password")
+            .await
+            .expect("create independent replica signer owner");
+        state
+            .oauth2_service
+            .key_service
+            .ensure_entity_master_key(
+                EntityType::User,
+                replica_signer_owner.id,
+                "replica-signer-password",
+            )
+            .expect("create replica signer owner's master key");
+        let (replica_key, _) = state
+            .oauth2_service
+            .key_service
+            .create_key(
+                None,
+                EntityType::User,
+                replica_signer_owner.id,
+                true,
+                "replica local signer".into(),
+                None,
+            )
+            .await
+            .expect("create independent replica signer key");
+        let signer_jwk = state
+            .oauth2_service
+            .find_public_jwk(replica_key.id)
+            .await
+            .expect("load replica signer JWK for route authorization test");
+        let enrollment = serde_json::json!({
+            "memberId": member_id,
+            "endpointId": endpoint_id,
+            "publicJwk": signer_jwk,
+        })
+        .to_string();
+        let wrong_audience_enrollment = loopback_http_request(
+            address,
+            "POST",
+            "/replica-signers",
+            "application/json",
+            &enrollment,
+            Some(&user_access_token),
+        );
+        assert!(
+            wrong_audience_enrollment.starts_with("HTTP/1.1 403"),
+            "{wrong_audience_enrollment}"
+        );
+        let signer_enrollment_denied = loopback_http_request(
+            signer_address,
+            "POST",
+            "/replica-signers",
+            "application/json",
+            &enrollment,
+            Some(&user_access_token),
+        );
+        assert!(
+            signer_enrollment_denied.starts_with("HTTP/1.1 403"),
+            "{signer_enrollment_denied}"
+        );
+        let signer_rows = engine
+            .translate_and_execute(
+                "SELECT id FROM idp_replica_signers",
+                &ofdb_sql::SqlTranslator,
+            )
+            .await
+            .expect("check rejected enrollment did not create signer state");
+        assert!(signer_rows[0].rows.is_empty());
+        let membership_rows = engine
+            .translate_and_execute(
+                "SELECT id FROM idp_replica_members",
+                &ofdb_sql::SqlTranslator,
+            )
+            .await
+            .expect("check rejected enrollment did not create membership state");
+        assert!(membership_rows[0].rows.is_empty());
+
+        let replica_oauth = Arc::new(OAuth2Service::new(
+            DbApplicationRepo::new(Arc::clone(&engine)),
+            DbClientRepo::new(
+                Arc::clone(&engine),
+                Arc::clone(&state.oauth2_service.key_service),
+            ),
+            DbOAuth2AuthorizationCodeRepo::new(Arc::clone(&engine)),
+            DbOAuth2RefreshTokenRepo::new(Arc::clone(&engine)),
+            DbUserRepo::new(Arc::clone(&engine), PasswordConfig::default()),
+            DbOAuth2UserConsentRepo::new(Arc::clone(&engine)),
+            Arc::clone(&state.oauth2_service.key_service),
+            OAuth2Config {
+                issuer: issuer.to_owned(),
+                role: idp_model::contract::IdpRole::Replica,
+                ..OAuth2Config::default()
+            },
+        ));
+        let replica_state = crate::RouterState::new(
+            issuer,
+            "https://example.test/app",
+            Arc::clone(&engine),
+            replica_oauth,
+            Arc::clone(&devices),
+            Arc::clone(&state.device_identity),
+        )
+        .with_service_audience("live-refresh-client");
+        let replica_app = crate::openapi_router(replica_state, "/")
+            .split_for_parts()
+            .0;
+        let replica_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind replica IdP listener");
+        let replica_address = replica_listener
+            .local_addr()
+            .expect("read replica listener address");
+        let _replica_server = tokio::spawn(async move {
+            axum::serve(replica_listener, replica_app)
+                .await
+                .expect("serve replica IdP listener");
+        });
+        let replica_denied = loopback_http_request(
+            replica_address,
+            "POST",
+            "/replica-signers",
+            "application/json",
+            &enrollment,
+            Some(&user_access_token),
+        );
+        assert!(
+            replica_denied.starts_with("HTTP/1.1 403"),
+            "{replica_denied}"
+        );
+        assert!(
+            engine
+                .translate_and_execute(
+                    "SELECT id FROM idp_replica_signers",
+                    &ofdb_sql::SqlTranslator
+                )
+                .await
+                .expect("check replica denied enrollment state")[0]
+                .rows
+                .is_empty()
+        );
+
+        permission_allowed.store(true, Ordering::SeqCst);
+        let approved_enrollment = loopback_http_request(
+            signer_address,
+            "POST",
+            "/replica-signers",
+            "application/json",
+            &enrollment,
+            Some(&user_access_token),
+        );
+        assert!(
+            approved_enrollment.starts_with("HTTP/1.1 201"),
+            "{approved_enrollment}; permission requests: {:?}",
+            permission_requests
+                .lock()
+                .expect("permission request log lock")
+                .as_slice()
+        );
+        let enrollment_retry = loopback_http_request(
+            signer_address,
+            "POST",
+            "/replica-signers",
+            "application/json",
+            &enrollment,
+            Some(&user_access_token),
+        );
+        assert!(
+            enrollment_retry.starts_with("HTTP/1.1 200"),
+            "{enrollment_retry}"
+        );
+        let conflicting_enrollment = serde_json::json!({
+            "memberId": member_id,
+            "endpointId": "different-endpoint",
+            "publicJwk": signer_jwk,
+        })
+        .to_string();
+        let conflict = loopback_http_request(
+            signer_address,
+            "POST",
+            "/replica-signers",
+            "application/json",
+            &conflicting_enrollment,
+            Some(&user_access_token),
+        );
+        assert!(conflict.starts_with("HTTP/1.1 400"), "{conflict}");
+
+        let (replacement_key, _) = state
+            .oauth2_service
+            .key_service
+            .create_key(
+                None,
+                EntityType::User,
+                replica_signer_owner.id,
+                true,
+                "replica replacement signer".into(),
+                None,
+            )
+            .await
+            .expect("create replacement public signer key");
+        let replacement_jwk = state
+            .oauth2_service
+            .find_public_jwk(replacement_key.id)
+            .await
+            .expect("load replacement public signer JWK");
+        let replacement_body = serde_json::json!({ "publicJwk": replacement_jwk }).to_string();
+        let rotated_signer = loopback_http_request(
+            signer_address,
+            "PUT",
+            &format!("/replica-signers/{member_id}"),
+            "application/json",
+            &replacement_body,
+            Some(&user_access_token),
+        );
+        assert!(
+            rotated_signer.starts_with("HTTP/1.1 200"),
+            "{rotated_signer}"
+        );
+        let revoked_signer = loopback_http_request(
+            signer_address,
+            "DELETE",
+            &format!("/replica-signers/{member_id}"),
+            "application/json",
+            "",
+            Some(&user_access_token),
+        );
+        assert!(
+            revoked_signer.starts_with("HTTP/1.1 200"),
+            "{revoked_signer}"
+        );
+        let active_signers = engine
+            .translate_and_execute(
+                "SELECT key_id FROM idp_replica_signers WHERE active_member_id IS NOT NULL",
+                &ofdb_sql::SqlTranslator,
+            )
+            .await
+            .expect("check revocation removed active signer binding");
+        assert!(active_signers[0].rows.is_empty());
+        let permission_actions = permission_requests
+            .lock()
+            .expect("permission request log lock")
+            .iter()
+            .map(|request| request.action)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            permission_actions,
+            vec![
+                idp_model::contract::IdentityAction::ReplicaSignersEnroll,
+                idp_model::contract::IdentityAction::ReplicaSignersEnroll,
+                idp_model::contract::IdentityAction::ReplicaSignersEnroll,
+                idp_model::contract::IdentityAction::ReplicaSignersEnroll,
+                idp_model::contract::IdentityAction::ReplicaSignersRotate,
+                idp_model::contract::IdentityAction::ReplicaSignersRevoke,
+            ]
+        );
+        assert_eq!(
+            engine
+                .translate_and_execute(
+                    "SELECT id FROM idp_replica_members",
+                    &ofdb_sql::SqlTranslator
+                )
+                .await
+                .expect("count approved membership")[0]
+                .rows
+                .len(),
+            1
+        );
+
         let registration = serde_json::to_string(&idp_model::contract::ClientRegistration::from(
             refresh_client.clone(),
         ))
         .expect("serialize valid registration body");
+        permission_allowed.store(false, Ordering::SeqCst);
         for (method, path, body) in [
             ("GET", "/oauth2/register/live-refresh-client", ""),
             ("POST", "/oauth2/register", registration.as_str()),
@@ -984,12 +1376,12 @@ mod tests {
             "grant_type=client_credentials&client_id={}&client_secret={}&scope=idp.token.validate%20idp.device.lookup&audience={}",
             form_encode(client_id),
             form_encode(client_secret),
-            form_encode(issuer),
+            form_encode("https://example.test/app"),
         );
         let wrong_secret_form = format!(
             "grant_type=client_credentials&client_id={}&client_secret=wrong-secret&scope=idp.token.validate%20idp.device.lookup&audience={}",
             form_encode(client_id),
-            form_encode(issuer),
+            form_encode("https://example.test/app"),
         );
         let rejected_token = loopback_http_request(
             address,
@@ -1063,7 +1455,7 @@ mod tests {
                 .expect("parse live introspection response");
         assert_eq!(introspected.claims.principal_type, PrincipalType::Client);
         assert_eq!(introspected.claims.client_id, client_id);
-        assert_eq!(introspected.claims.aud, issuer);
+        assert_eq!(introspected.claims.aud, "https://example.test/app");
         assert_eq!(
             introspected.claims.scope,
             vec!["idp.token.validate", "idp.device.lookup"]
@@ -1074,7 +1466,7 @@ mod tests {
             "grant_type=client_credentials&client_id={}&client_secret={}&scope=idp.device.list&audience={}",
             form_encode(storage_idp_client_id),
             form_encode(storage_idp_client_secret),
-            form_encode(issuer),
+            form_encode("https://example.test/app"),
         );
         let device_list_token_response = loopback_http_request(
             address,
@@ -1094,6 +1486,15 @@ mod tests {
         let device_list_access_token = device_list_token["access_token"]
             .as_str()
             .expect("Storage endpoint-list token is a string");
+        let (_, device_list_claims) = decode_jwt::<StandardClaims>(device_list_access_token)
+            .expect("decode Storage endpoint-list token");
+        assert_eq!(device_list_claims.aud, "https://example.test/app");
+        assert!(
+            device_list_claims
+                .scope
+                .iter()
+                .any(|scope| scope == "idp.device.list")
+        );
         let endpoint_list_response = loopback_http_request(
             address,
             "GET",

@@ -245,3 +245,34 @@ CREATE TABLE IF NOT EXISTS device_resource_selections (
     selected_id UUID NOT NULL,
     selected BOOLEAN NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS idp_replica_members (
+    id UUID PRIMARY KEY,
+    installation_id TEXT NOT NULL,
+    member_id UUID NOT NULL,
+    endpoint_id TEXT NOT NULL,
+    issuer TEXT NOT NULL,
+    approved_at INTEGER NOT NULL,
+    revoked_at INTEGER
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idp_replica_members_installation_member
+    ON idp_replica_members (installation_id, member_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idp_replica_members_installation_endpoint
+    ON idp_replica_members (installation_id, endpoint_id);
+
+CREATE TABLE IF NOT EXISTS idp_replica_signers (
+    id UUID PRIMARY KEY,
+    member_id UUID NOT NULL,
+    active_member_id UUID,
+    key_id UUID NOT NULL,
+    issuer TEXT NOT NULL,
+    public_jwk TEXT NOT NULL,
+    approved_at INTEGER NOT NULL,
+    revoked_at INTEGER,
+    expires_at INTEGER
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idp_replica_signers_key_id ON idp_replica_signers (key_id);
+CREATE INDEX IF NOT EXISTS idp_replica_signers_member
+    ON idp_replica_signers (member_id, revoked_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idp_replica_signers_active_member
+    ON idp_replica_signers (active_member_id);

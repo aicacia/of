@@ -13,6 +13,7 @@ pub use authorization::{
     resolve_redirect_uri, validate_authorization_details, validate_authorization_request,
 };
 pub use config::OAuth2Config;
+pub(crate) use jwt::verifing_key_from_jwt;
 pub use jwt::{JwtHeader, decode_jwt, encode_jwt, verify_jwt};
 pub use pkce::verify_code_challenge;
 pub use principal::{ClientPrincipal, Principal, UserPrincipal};

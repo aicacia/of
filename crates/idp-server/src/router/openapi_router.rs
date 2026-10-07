@@ -25,6 +25,10 @@ use super::routes::devices::{
     revoke_device, set_pairing_acceptance, trusted_devices, update_device,
 };
 use super::routes::health::{__path_health, health};
+use super::routes::replica_signers::{
+    __path_enroll_replica_signer, __path_revoke_replica_signer, __path_rotate_replica_signer,
+    enroll_replica_signer, revoke_replica_signer, rotate_replica_signer,
+};
 
 use super::routes::oauth2::approvals::{
     __path_approve_for_user, __path_is_allowed_for_user, approve_for_user, is_allowed_for_user,
@@ -56,6 +60,9 @@ use super::routes::well_known::{
     paths(
         super::routes::oauth2::introspect::introspect,
         super::routes::setup::register_bootstrap,
+        super::routes::replica_signers::enroll_replica_signer,
+        super::routes::replica_signers::rotate_replica_signer,
+        super::routes::replica_signers::revoke_replica_signer,
 
         super::routes::devices::lookup_device_endpoint,
         super::routes::devices::list_approved_device_endpoints,
@@ -73,6 +80,9 @@ pub fn openapi_router(router_state: RouterState, prefix: &str) -> OpenApiRouter 
     let routes = || {
         OpenApiRouter::new()
             .routes(routes!(health))
+            .routes(routes!(enroll_replica_signer))
+            .routes(routes!(rotate_replica_signer))
+            .routes(routes!(revoke_replica_signer))
             .routes(routes!(list_applications))
             .routes(routes!(create_application))
             .routes(routes!(get_application))
@@ -174,7 +184,7 @@ mod tests {
     #[test]
     fn documents_setup_and_excludes_storage_routes() {
         let document = ApiDoc::openapi();
-        for path in ["/setup/bootstrap"] {
+        for path in ["/setup/bootstrap", "/replica-signers"] {
             assert!(document.paths.paths.contains_key(path), "missing {path}");
         }
         assert!(

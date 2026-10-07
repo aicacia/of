@@ -39,6 +39,8 @@ pub enum SecurityTable {
     Role,
     RolePermission,
     UserRole,
+    ReplicaMember,
+    ReplicaSigner,
 }
 
 impl SecurityTable {
@@ -56,6 +58,8 @@ impl SecurityTable {
             Self::Role => "roles",
             Self::RolePermission => "role_permissions",
             Self::UserRole => "application_user_roles",
+            Self::ReplicaMember => "idp_replica_members",
+            Self::ReplicaSigner => "idp_replica_signers",
         }
     }
 
@@ -273,6 +277,8 @@ mod tests {
                 "oauth2_user_consents",
                 "oauth2_refresh_tokens",
                 "idp_conflict_resolutions",
+                "idp_replica_members",
+                "idp_replica_signers",
             ] {
                 let schema = engine.table_schema(table).await.unwrap();
                 assert_eq!(schema.columns[0].name, "id");
@@ -296,6 +302,28 @@ mod tests {
             assert!(engine
                 .translate_and_execute(
                     "INSERT INTO devices (id, public_key) VALUES (CAST('00000000-0000-0000-0000-000000000002' AS UUID), 'key')",
+                    &db::SqlTranslator,
+                )
+                .await
+                .is_err());
+
+            engine
+                .translate_and_execute(
+                    "INSERT INTO idp_replica_members (id, installation_id, member_id, endpoint_id, issuer, approved_at) VALUES (CAST('00000000-0000-0000-0000-000000000010' AS UUID), 'installation-a', CAST('00000000-0000-0000-0000-000000000011' AS UUID), 'endpoint-a', 'https://issuer.example', 1)",
+                    &db::SqlTranslator,
+                )
+                .await
+                .expect("insert first replica membership");
+            assert!(engine
+                .translate_and_execute(
+                    "INSERT INTO idp_replica_members (id, installation_id, member_id, endpoint_id, issuer, approved_at) VALUES (CAST('00000000-0000-0000-0000-000000000012' AS UUID), 'installation-a', CAST('00000000-0000-0000-0000-000000000011' AS UUID), 'endpoint-b', 'https://issuer.example', 1)",
+                    &db::SqlTranslator,
+                )
+                .await
+                .is_err());
+            assert!(engine
+                .translate_and_execute(
+                    "INSERT INTO idp_replica_members (id, installation_id, member_id, endpoint_id, issuer, approved_at) VALUES (CAST('00000000-0000-0000-0000-000000000013' AS UUID), 'installation-a', CAST('00000000-0000-0000-0000-000000000014' AS UUID), 'endpoint-a', 'https://issuer.example', 1)",
                     &db::SqlTranslator,
                 )
                 .await

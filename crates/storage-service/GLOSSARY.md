@@ -1,6 +1,6 @@
 # Storage
 
-The resource-management and database/filesystem synchronization context. Shared terms are defined in [the root glossary](../../GLOSSARY.md).
+The resource-management and database/filesystem synchronization context. Shared terms are defined in [the root glossary](../../GLOSSARY.md). Resource isolation and synchronization policy are described in [Storage design](docs/design.md).
 
 ## Language
 

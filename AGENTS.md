@@ -60,4 +60,4 @@ Use the five default triage labels. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
-Multi-context: shared terms plus IdP, Management, and Storage contexts. See `GLOSSARY-MAP.md` and `docs/agents/domain.md`.
+Multi-context: shared terms plus IdP, Management, and Storage contexts. Definitions belong in `GLOSSARY.md`; current design and operations belong in stable named topic documents, not ADRs. See `GLOSSARY-MAP.md` and `docs/agents/domain.md`.

@@ -5,7 +5,7 @@ use idp_service::{
     oauth2::OAuth2Service,
     replica::{
         DbApplicationRepo, DbClientRepo, DbKeyRepo, DbOAuth2AuthorizationCodeRepo,
-        DbOAuth2RefreshTokenRepo, DbOAuth2UserConsentRepo, DbUserRepo,
+        DbOAuth2RefreshTokenRepo, DbOAuth2UserConsentRepo, DbReplicaSignerRepo, DbUserRepo,
     },
     repo::PrivateKeyKeyringRepo,
 };
@@ -27,6 +27,7 @@ pub(super) type NativeOAuth2Service = OAuth2Service<
 >;
 
 pub type NativeDeviceRepo = DbDeviceRepo<RedbKernel, AutomergeRowCodec>;
+pub type NativeReplicaSignerRepo = DbReplicaSignerRepo<RedbKernel, AutomergeRowCodec>;
 
 #[derive(Clone)]
 pub struct DeviceIdentity {
@@ -78,6 +79,7 @@ pub struct RouterState {
     pub engine: Arc<db::NativeEngine>,
     pub oauth2_service: Arc<NativeOAuth2Service>,
     pub devices: Arc<NativeDeviceRepo>,
+    pub replica_signers: Arc<NativeReplicaSignerRepo>,
     pub device_identity: Arc<DeviceIdentity>,
     pub pairing_acceptance: Arc<PairingAcceptanceControllerSlot>,
     pub hosted_control_plane: Option<Arc<HostedControlPlane>>,
@@ -94,12 +96,14 @@ impl RouterState {
         device_identity: Arc<DeviceIdentity>,
     ) -> Self {
         let api_base_uri = api_base_uri.into();
+        let replica_signers = Arc::new(DbReplicaSignerRepo::new(Arc::clone(&engine)));
         Self {
             ui_base_uri: ui_base_uri.into(),
             service_audience: api_base_uri.clone(),
             api_base_uri,
             engine,
             oauth2_service,
+            replica_signers,
             devices,
             device_identity,
             pairing_acceptance: Arc::new(PairingAcceptanceControllerSlot::new()),

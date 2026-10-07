@@ -1,6 +1,6 @@
 # Storage security and transport
 
-[System ADR 0001](../../../docs/adr/0001-offline-storage-resources.md) records resource isolation; [system ADR 0002](../../../docs/adr/0002-service-authority-and-replica-boundaries.md) records owner-service authority and bounded synchronization. This document separates source-checked behavior from acceptance targets. No tests were rerun for this documentation audit.
+[Storage design](design.md) defines resource isolation; [system design](../../../docs/design.md) defines owner-service authority and bounded synchronization. This document separates source-checked behavior from acceptance targets. No tests were rerun for this documentation audit.
 
 ## Authority
 

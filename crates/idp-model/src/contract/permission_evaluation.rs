@@ -46,6 +46,9 @@ pub enum IdentityAction {
     KeysRevoke,
     DevicePairingRead,
     DevicePairingUpdate,
+    ReplicaSignersEnroll,
+    ReplicaSignersRotate,
+    ReplicaSignersRevoke,
 }
 
 impl IdentityAction {
@@ -74,6 +77,9 @@ impl IdentityAction {
             Self::KeysRevoke => "idp.keys.revoke",
             Self::DevicePairingRead => "idp.device_pairing.read",
             Self::DevicePairingUpdate => "idp.device_pairing.update",
+            Self::ReplicaSignersEnroll => "idp.replica_signers.enroll",
+            Self::ReplicaSignersRotate => "idp.replica_signers.rotate",
+            Self::ReplicaSignersRevoke => "idp.replica_signers.revoke",
         }
     }
 
@@ -128,6 +134,10 @@ pub enum IdentityResource {
         client_id: String,
     },
     DevicePairing,
+    ReplicaSigner {
+        #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>))]
+        member_id: Option<Id>,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -191,6 +201,13 @@ impl PermissionEvaluationRequest {
             (A::DevicePairingRead | A::DevicePairingUpdate, IdentityResource::DevicePairing) => {
                 true
             }
+            (A::ReplicaSignersEnroll, IdentityResource::ReplicaSigner { member_id: None }) => true,
+            (
+                A::ReplicaSignersRotate | A::ReplicaSignersRevoke,
+                IdentityResource::ReplicaSigner {
+                    member_id: Some(id),
+                },
+            ) => !id.is_nil(),
             _ => false,
         };
         if !valid {
@@ -236,6 +253,58 @@ mod tests {
         PermissionTarget,
     };
     use crate::model::Id;
+
+    #[test]
+    fn replica_signer_permissions_are_installation_scoped_and_exact() {
+        let mut request = PermissionEvaluationRequest {
+            request_id: Id::from_u128(1),
+            subject: PermissionSubject::User {
+                id: Id::from_u128(2),
+            },
+            action: IdentityAction::ReplicaSignersEnroll,
+            target: PermissionTarget::Installation {
+                resource: IdentityResource::ReplicaSigner { member_id: None },
+            },
+        };
+        assert_eq!(request.policy_namespace(), Some(Id::nil()));
+        assert_eq!(request.action.permission(), "idp.replica_signers.enroll");
+
+        request.action = IdentityAction::ReplicaSignersRotate;
+        request.target = PermissionTarget::Installation {
+            resource: IdentityResource::ReplicaSigner {
+                member_id: Some(Id::from_u128(3)),
+            },
+        };
+        assert_eq!(request.policy_namespace(), Some(Id::nil()));
+        request.action = IdentityAction::ReplicaSignersRevoke;
+        assert_eq!(request.action.permission(), "idp.replica_signers.revoke");
+        assert_eq!(request.policy_namespace(), Some(Id::nil()));
+
+        request.target = PermissionTarget::Installation {
+            resource: IdentityResource::ReplicaSigner { member_id: None },
+        };
+        assert!(request.policy_namespace().is_none());
+        request.action = IdentityAction::ReplicaSignersEnroll;
+        request.target = PermissionTarget::Installation {
+            resource: IdentityResource::ReplicaSigner {
+                member_id: Some(Id::from_u128(3)),
+            },
+        };
+        assert!(request.policy_namespace().is_none());
+        request.action = IdentityAction::ReplicaSignersRotate;
+        request.target = PermissionTarget::Installation {
+            resource: IdentityResource::ReplicaSigner {
+                member_id: Some(Id::nil()),
+            },
+        };
+        assert!(request.policy_namespace().is_none());
+
+        request.target = PermissionTarget::Application {
+            application_id: Id::from_u128(4),
+            resource: IdentityResource::ReplicaSigner { member_id: None },
+        };
+        assert!(request.policy_namespace().is_none());
+    }
 
     #[test]
     fn permission_scope_cannot_escalate() {

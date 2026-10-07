@@ -50,6 +50,32 @@ impl IdpSignerRecord {
     }
 }
 
+/// Authority-approved Installation membership binds a replica identity and transport endpoint.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ReplicaMembership {
+    pub installation_id: String,
+    pub member_id: Id,
+    pub endpoint_id: String,
+    pub issuer: String,
+    pub approved_at: i64,
+    pub revoked_at: Option<i64>,
+}
+
+impl ReplicaMembership {
+    pub fn matches(&self, installation_id: &str, member_id: Id, endpoint_id: &str) -> bool {
+        !installation_id.is_empty()
+            && installation_id.trim() == installation_id
+            && !member_id.is_nil()
+            && !endpoint_id.is_empty()
+            && endpoint_id.trim() == endpoint_id
+            && self.installation_id == installation_id
+            && self.member_id == member_id
+            && self.endpoint_id == endpoint_id
+            && self.issuer == installation_id
+            && self.revoked_at.is_none()
+    }
+}
+
 /// Subject binding is resolved independently of the IdP member's signer key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TokenPrincipalBinding {
@@ -77,7 +103,7 @@ mod tests {
     #[cfg(not(feature = "std"))]
     use alloc::string::ToString;
 
-    use super::{IdpSignerRecord, TokenPrincipalBinding};
+    use super::{IdpSignerRecord, ReplicaMembership, TokenPrincipalBinding};
     use crate::{
         contract::{
             EntityType, JwkPrivate, JwkPrivateParameters, JwkPublic, JwkPublicParameters,
@@ -161,6 +187,45 @@ mod tests {
             k: "unsupported".to_string(),
         };
         assert!(!record.matches_local_public_material(Some(&private)));
+    }
+
+    #[test]
+    fn replica_membership_binds_installation_member_and_endpoint() {
+        let membership = ReplicaMembership {
+            installation_id: "https://installation.example".to_string(),
+            member_id: Id::from_u128(2),
+            endpoint_id: "endpoint-public-key".to_string(),
+            issuer: "https://installation.example".to_string(),
+            approved_at: 10,
+            revoked_at: None,
+        };
+        assert!(membership.matches(
+            "https://installation.example",
+            Id::from_u128(2),
+            "endpoint-public-key"
+        ));
+        assert!(!membership.matches(
+            "https://other.example",
+            Id::from_u128(2),
+            "endpoint-public-key"
+        ));
+        assert!(!membership.matches(
+            "https://installation.example",
+            Id::from_u128(3),
+            "endpoint-public-key"
+        ));
+        assert!(!membership.matches(
+            "https://installation.example",
+            Id::from_u128(2),
+            "other-endpoint"
+        ));
+        let mut revoked = membership;
+        revoked.revoked_at = Some(20);
+        assert!(!revoked.matches(
+            "https://installation.example",
+            Id::from_u128(2),
+            "endpoint-public-key"
+        ));
     }
 
     #[test]
