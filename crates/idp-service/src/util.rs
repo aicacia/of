@@ -27,6 +27,9 @@ pub fn encrypt_password(config: &PasswordConfig, input: &str) -> argon2::Result<
 }
 
 pub fn verify_password(input: &str, encrypted_password: &str) -> argon2::Result<bool> {
+    if encrypted_password.is_empty() {
+        return Ok(false);
+    }
     argon2::verify_encoded(encrypted_password, input.as_bytes())
 }
 
@@ -38,5 +41,15 @@ fn argon2_config(config: &PasswordConfig) -> argon2::Config<'_> {
         mem_cost: config.memory_mib * 1024,
         time_cost: config.iterations,
         ..Default::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn missing_local_verifier_denies_without_a_password_parser_error() {
+        assert!(
+            !super::verify_password("presented-secret", "").expect("missing verifier is a denial")
+        );
     }
 }

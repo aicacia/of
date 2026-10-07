@@ -70,6 +70,29 @@ async fn public_verifier(source: &TestEngine) -> (Arc<TestEngine>, TestService) 
     (engine, service)
 }
 
+async fn provision_fixture_client_secret(engine: &TestEngine, client_id: Id, secret: &str) {
+    let hash = crate::encrypt_password(&PasswordConfig::default(), secret)
+        .expect("hash independently provisioned local secret");
+    let metadata = engine
+        .client()
+        .translate_and_execute(
+            &format!("SELECT credential_id FROM clients WHERE id = CAST('{client_id}' AS UUID)"),
+            &SqlTranslator,
+        )
+        .await
+        .expect("public credential revision");
+    let revision = metadata[0].rows[0].values[0].clone();
+    engine
+        .client()
+        .execute(vec![Statement::Query(Query::Insert(db::QueryInsert {
+            table: "local_client_credentials".into(),
+            row: db::Row::new(vec![Value::Uuid(client_id), revision, Value::Text(hash)]),
+            returning: None,
+        }))])
+        .await
+        .expect("explicit local fixture credential provisioning, not sync");
+}
+
 async fn set(engine: &TestEngine, table: &str, id: Id, name: &str, value: Value) {
     let column = |name: &str| QueryColumn::new(table.into(), name.into());
     engine
@@ -364,6 +387,7 @@ async fn partitioned_nodes_rotate_same_grant_independently_without_global_single
         .expect("refresh grant")
         .0;
     let (second_engine, mut second) = public_verifier(&source).await;
+    provision_fixture_client_secret(&second_engine, client.id, "test-secret").await;
     approve_independent_signer(&second_engine, &mut second).await;
     let (left, right) = tokio::join!(
         first.token(grant(&refresh, None), Some(auth(&client))),
@@ -550,6 +574,7 @@ async fn partitioned_nodes_consume_same_code_once_per_local_store() {
         .await
         .expect("create local code");
     let (engine, mut second) = public_verifier(&source).await;
+    provision_fixture_client_secret(&engine, client.id, "test-secret").await;
     approve_independent_signer(&engine, &mut second).await;
     let request = TokenRequest::AuthorizationCode(AuthorizationCodeGrantRequest {
         code: code.code,
@@ -606,6 +631,15 @@ async fn independent_nodes_issue_client_tokens_with_distinct_local_signers() {
     });
     let mut client_auth = auth(&client);
     client_auth.client_secret = Some("stable-secret".into());
+    assert_eq!(
+        second
+            .token(request.clone(), Some(client_auth.clone()))
+            .await
+            .expect_err("public metadata alone cannot authenticate a confidential client")
+            .error,
+        idp_model::contract::ErrorCode::InvalidClient
+    );
+    provision_fixture_client_secret(&engine, client.id, "stable-secret").await;
     let left = first
         .token(request.clone(), Some(client_auth.clone()))
         .await

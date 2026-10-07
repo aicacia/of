@@ -19,6 +19,27 @@ pub async fn up(engine: &Database) -> Result<(), db::QueryError> {
                 .await?;
         }
     }
+    for table in ["clients", "credentials", "devices"] {
+        let results = engine
+            .client()
+            .translate_and_execute(&format!("SELECT * FROM {table}"), &SqlTranslator)
+            .await?;
+        if results[0].columns.iter().any(|column| {
+            matches!(
+                column.name.as_str(),
+                "client_secret_hash"
+                    | "secret_hash"
+                    | "enrollment_code_hash"
+                    | "enrollment_expires_at"
+                    | "pairing_accepting_public_key"
+            )
+        }) {
+            return Err(db::QueryError::new(
+                db::QueryErrorKind::Rejected,
+                "mixed credential history is unsupported; initialize a fresh identity database",
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -228,6 +249,34 @@ mod tests {
     const KEY: u128 = 5;
     const CODE: u128 = 6;
     const REFRESH: u128 = 7;
+
+    #[test]
+    fn mixed_legacy_client_schema_is_rejected_not_silently_migrated() {
+        block_on(async {
+            let database = db::Database::in_memory();
+            for file in super::MIGRATIONS.files() {
+                let legacy = file.contents_utf8().expect("schema UTF-8").replace(
+                    "    client_id TEXT,",
+                    "    client_id TEXT,\n    client_secret_hash TEXT,",
+                );
+                for statement in legacy
+                    .split(';')
+                    .map(str::trim)
+                    .filter(|statement| !statement.is_empty())
+                {
+                    database
+                        .client()
+                        .translate_and_execute(statement, &db::SqlTranslator)
+                        .await
+                        .expect("create legacy mixed schema");
+                }
+            }
+            let error = up(&database)
+                .await
+                .expect_err("old mixed-history store must not qualify as separated");
+            assert!(error.message.contains("fresh"));
+        });
+    }
 
     #[test]
     fn identity_schema_initializes_idempotently_and_rejects_duplicate_device_bindings() {

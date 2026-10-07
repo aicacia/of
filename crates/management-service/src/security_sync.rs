@@ -5,6 +5,8 @@ pub const PUBLIC_POLICY_TABLES: &[&str] = &[
     "permissions",
     "role_permissions",
     "application_user_roles",
+    "device_selection_policies",
+    "device_resource_selections",
 ];
 
 #[must_use]
@@ -19,6 +21,8 @@ mod tests {
     #[test]
     fn policy_sync_is_context_local_and_explicitly_allowlisted() {
         assert!(permits_policy_table("role_permissions"));
+        assert!(permits_policy_table("device_selection_policies"));
+        assert!(permits_policy_table("device_resource_selections"));
         for table in [
             "users",
             "credentials",
@@ -26,6 +30,9 @@ mod tests {
             "keys",
             "devices",
             "oauth2_refresh_tokens",
+            "local_client_credentials",
+            "local_credential_secrets",
+            "local_device_enrollments",
             "unknown",
         ] {
             assert!(!permits_policy_table(table));

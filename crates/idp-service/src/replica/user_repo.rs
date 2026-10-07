@@ -68,11 +68,10 @@ const PHONE_COLUMNS: [&str; 7] = [
     "created_at",
     "updated_at",
 ];
-const CREDENTIAL_COLUMNS: [&str; 8] = [
+const CREDENTIAL_COLUMNS: [&str; 7] = [
     "id",
     "user_id",
     "kind",
-    "secret_hash",
     "active",
     "revoked_at",
     "created_at",
@@ -260,15 +259,43 @@ impl UserRepo for DbUserRepo {
     }
 
     async fn find_user_password_by_user_id(&self, user_id: Id) -> RepoResult<Option<UserPassword>> {
-        let credential = self
+        let Some(credential) = self
             .credentials(user_id)
             .await?
             .into_iter()
-            .find(|credential| credential.active && credential.revoked_at.is_none());
-        if let Some(credential) = credential.as_ref() {
-            self.ensure_credential_clear(credential.id).await?;
+            .find(|credential| credential.active && credential.revoked_at.is_none())
+        else {
+            return Ok(None);
+        };
+        self.ensure_credential_clear(credential.id).await?;
+        let key = Row::new(vec![Value::Uuid(credential.id)]);
+        if !self
+            .engine
+            .client()
+            .row_conflicts("local_credential_secrets", &key)
+            .await
+            .map_err(db_error)?
+            .is_empty()
+        {
+            return Err(RepoError::InvalidInput(
+                "conflicted local password verifier".into(),
+            ));
         }
-        credential.map(UserPassword::try_from).transpose()
+        let results = self.engine.client().translate_and_execute(
+            &format!("SELECT secret_hash FROM local_credential_secrets WHERE credential_id = CAST('{}' AS UUID)", credential.id),
+            &db::SqlTranslator,
+        ).await.map_err(db_error)?;
+        let Some(row) = results[0].rows.first() else {
+            return Ok(None);
+        };
+        Ok(Some(UserPassword {
+            id: credential.id,
+            user_id: credential.user_id,
+            active: credential.active,
+            password_hash: db::decode(&row.values[0], "secret_hash").map_err(row_error)?,
+            created_at: timestamp(credential.created_at)?,
+            updated_at: timestamp(credential.updated_at)?,
+        }))
     }
 
     async fn create_user_with_password(&self, name: &str, password: &str) -> RepoResult<User> {
@@ -304,19 +331,19 @@ impl UserRepo for DbUserRepo {
             created_at: now,
             updated_at: now,
         };
+        let secret_hash = encrypt_password(&self.password_config, password)
+            .map_err(|error| RepoError::Other(error.into()))?;
         let credential = CredentialRow {
             id: credential_id,
             user_id: user.id,
             kind: PASSWORD_KIND.into(),
-            secret_hash: encrypt_password(&self.password_config, password)
-                .map_err(|error| RepoError::Other(error.into()))?,
             active: true,
             revoked_at: None,
             created_at: now.timestamp(),
             updated_at: now.timestamp(),
         };
-        self.engine
-            .client()
+        let mut transaction = self.engine.client().transaction().await.map_err(db_error)?;
+        transaction
             .execute(vec![
                 Statement::Query(Query::Insert(QueryInsert {
                     table: USERS.into(),
@@ -328,9 +355,11 @@ impl UserRepo for DbUserRepo {
                     row: credential.into(),
                     returning: None,
                 })),
+                Statement::Query(local_password_insert(credential_id, secret_hash)),
             ])
             .await
             .map_err(db_error)?;
+        transaction.commit().await.map_err(db_error)?;
         Ok(user)
     }
 
@@ -488,14 +517,33 @@ impl UserRepo for DbUserRepo {
         let password_hash = encrypt_password(&self.password_config, password)
             .map_err(|error| RepoError::Other(error.into()))?;
         let now = now().timestamp();
-        for credential in self.credentials(user_id).await? {
-            if credential.active {
-                self.ensure_credential_clear(credential.id).await?;
+        let mut transaction = self.engine.client().transaction().await.map_err(db_error)?;
+        let results = transaction
+            .execute(vec![Statement::Query(select(
+                CREDENTIALS,
+                &CREDENTIAL_COLUMNS,
+                Some(and(
+                    equals(CREDENTIALS, "user_id", Value::Uuid(user_id)),
+                    equals(CREDENTIALS, "kind", Value::Text(PASSWORD_KIND.into())),
+                )),
+            ))])
+            .await
+            .map_err(db_error)?;
+        for credential in results[0]
+            .rows_as::<CredentialRow>()
+            .map_err(row_error)?
+            .into_iter()
+            .filter(|credential| credential.active)
+        {
+            if !transaction
+                .row_conflicts(CREDENTIALS, &Row::new(vec![Value::Uuid(credential.id)]))
+                .await
+                .map_err(db_error)?
+                .is_empty()
+            {
+                return Err(RepoError::InvalidInput("conflicted credential".into()));
             }
-        }
-        for credential in self.credentials(user_id).await? {
-            self.engine
-                .client()
+            transaction
                 .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                     from: from(CREDENTIALS),
                     assignments: vec![
@@ -508,25 +556,28 @@ impl UserRepo for DbUserRepo {
                 .await
                 .map_err(db_error)?;
         }
-        self.engine
-            .client()
-            .execute(vec![Statement::Query(Query::Insert(QueryInsert {
-                table: CREDENTIALS.into(),
-                row: CredentialRow {
-                    id: Id::now_v7(),
-                    user_id,
-                    kind: PASSWORD_KIND.into(),
-                    secret_hash: password_hash,
-                    active: true,
-                    revoked_at: None,
-                    created_at: now,
-                    updated_at: now,
-                }
-                .into(),
-                returning: None,
-            }))])
+        let credential_id = Id::now_v7();
+        transaction
+            .execute(vec![
+                Statement::Query(Query::Insert(QueryInsert {
+                    table: CREDENTIALS.into(),
+                    row: CredentialRow {
+                        id: credential_id,
+                        user_id,
+                        kind: PASSWORD_KIND.into(),
+                        active: true,
+                        revoked_at: None,
+                        created_at: now,
+                        updated_at: now,
+                    }
+                    .into(),
+                    returning: None,
+                })),
+                Statement::Query(local_password_insert(credential_id, password_hash)),
+            ])
             .await
             .map_err(db_error)?;
+        transaction.commit().await.map_err(db_error)?;
         Ok(())
     }
 
@@ -779,7 +830,6 @@ struct CredentialRow {
     id: Uuid,
     user_id: Uuid,
     kind: String,
-    secret_hash: String,
     active: bool,
     revoked_at: Option<i64>,
     created_at: i64,
@@ -791,24 +841,10 @@ impl FromRow for CredentialRow {
             id: decode!(row, columns, "id")?,
             user_id: decode!(row, columns, "user_id")?,
             kind: decode!(row, columns, "kind")?,
-            secret_hash: decode!(row, columns, "secret_hash")?,
             active: decode!(i64, row, columns, "active")? != 0,
             revoked_at: decode!(row, columns, "revoked_at")?,
             created_at: decode!(row, columns, "created_at")?,
             updated_at: decode!(row, columns, "updated_at")?,
-        })
-    }
-}
-impl TryFrom<CredentialRow> for UserPassword {
-    type Error = RepoError;
-    fn try_from(row: CredentialRow) -> RepoResult<Self> {
-        Ok(Self {
-            id: row.id,
-            user_id: row.user_id,
-            active: row.active,
-            password_hash: row.secret_hash,
-            created_at: timestamp(row.created_at)?,
-            updated_at: timestamp(row.updated_at)?,
         })
     }
 }
@@ -818,13 +854,20 @@ impl From<CredentialRow> for Row {
             Value::Uuid(row.id),
             Value::Uuid(row.user_id),
             Value::Text(row.kind),
-            Value::Text(row.secret_hash),
             bool_value(row.active),
             row.revoked_at.map_or(Value::Null, Value::Integer),
             Value::Integer(row.created_at),
             Value::Integer(row.updated_at),
         ])
     }
+}
+
+fn local_password_insert(id: Id, hash: String) -> Query {
+    Query::Insert(QueryInsert {
+        table: "local_credential_secrets".into(),
+        row: Row::new(vec![Value::Uuid(id), Value::Text(hash)]),
+        returning: None,
+    })
 }
 
 fn now() -> DateTime<Utc> {
@@ -917,6 +960,66 @@ mod tests {
     use idp_model::replica::up;
 
     use super::*;
+
+    #[tokio::test]
+    async fn local_password_verifier_is_separate_durable_and_missing_verifier_denies() {
+        let path = std::env::temp_dir().join(format!("local-password-{}.redb", Id::now_v7()));
+        let id;
+        {
+            let database = Arc::new(Database::open(&path).expect("open local identity"));
+            up(&database).await.expect("initialize new schema");
+            let repo = DbUserRepo::new(Arc::clone(&database), PasswordConfig::default());
+            id = repo
+                .create_user_with_password("local-user", "first-password")
+                .await
+                .expect("create local credential")
+                .id;
+            let metadata = database
+                .client()
+                .translate_and_execute("SELECT * FROM credentials", &db::SqlTranslator)
+                .await
+                .expect("query public credential metadata")
+                .remove(0);
+            assert!(
+                metadata
+                    .columns
+                    .iter()
+                    .all(|column| column.name != "secret_hash")
+            );
+            repo.replace_user_password(id, "second-password")
+                .await
+                .expect("replace password atomically");
+        }
+        {
+            let database = Arc::new(Database::open(&path).expect("reopen identity offline"));
+            let repo = DbUserRepo::new(Arc::clone(&database), PasswordConfig::default());
+            let credential = repo
+                .find_user_password_by_user_id(id)
+                .await
+                .expect("read local password")
+                .expect("local verifier persisted");
+            assert!(
+                crate::util::verify_password("second-password", &credential.password_hash)
+                    .expect("valid verifier")
+            );
+            assert!(
+                !crate::util::verify_password("first-password", &credential.password_hash)
+                    .expect("valid verifier")
+            );
+            database
+                .client()
+                .translate_and_execute("DELETE FROM local_credential_secrets", &db::SqlTranslator)
+                .await
+                .expect("simulate metadata without local secret");
+            assert!(
+                repo.find_user_password_by_user_id(id)
+                    .await
+                    .expect("missing local verifier denies")
+                    .is_none()
+            );
+        }
+        std::fs::remove_file(path).expect("remove credential fixture");
+    }
 
     #[tokio::test]
     async fn manages_uuid_users_and_password_credentials() {

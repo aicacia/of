@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PublicSecurityTable {
     Users,
+    Credentials,
     Applications,
     Clients,
     Keys,
@@ -19,6 +20,7 @@ impl PublicSecurityTable {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Users => "users",
+            Self::Credentials => "credentials",
             Self::Applications => "applications",
             Self::Clients => "clients",
             Self::Keys => "keys",
@@ -53,6 +55,15 @@ impl PublicSecurityTable {
                 "created_at",
                 "updated_at",
             ],
+            Self::Credentials => &[
+                "id",
+                "user_id",
+                "kind",
+                "active",
+                "revoked_at",
+                "created_at",
+                "updated_at",
+            ],
             Self::Applications => &[
                 "id",
                 "name",
@@ -65,6 +76,7 @@ impl PublicSecurityTable {
                 "id",
                 "application_id",
                 "client_id",
+                "credential_id",
                 "client_id_issued_at",
                 "client_secret_expires_at",
                 "client_name",
@@ -200,7 +212,8 @@ impl PublicSecurityTable {
         }
         let uuid = matches!(
             column,
-            "id" | "parent_id"
+            "id" | "credential_id"
+                | "parent_id"
                 | "entity_id"
                 | "application_id"
                 | "user_id"
@@ -216,7 +229,8 @@ impl PublicSecurityTable {
         }
         let integer = matches!(
             column,
-            "sex"
+            "active"
+                | "sex"
                 | "entity_type"
                 | "derivation_index"
                 | "hardened"
@@ -290,6 +304,7 @@ pub fn public_security_tables() -> Vec<PublicSecurityTable> {
     use PublicSecurityTable as T;
     alloc::vec![
         T::Users,
+        T::Credentials,
         T::Applications,
         T::Clients,
         T::Keys,
@@ -393,6 +408,7 @@ mod tests {
                     serde_json::json!(idp_model::model::Id::now_v7())
                 } else if column.name.ends_with("_at")
                     || [
+                        "active",
                         "sex",
                         "entity_type",
                         "derivation_index",

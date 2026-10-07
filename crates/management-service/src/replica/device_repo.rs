@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Timelike, Utc};
 use db::{
-    Database, FromRow, FromRowError, Query, QueryColumn, QueryExpr, QueryExprValue, QueryFrom,
-    QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row, Statement, Uuid, Value,
+    Database, FromRow, FromRowError, Query, QueryColumn, QueryDelete, QueryExpr, QueryExprValue,
+    QueryFrom, QueryInsert, QuerySelect, QueryUpdate, QueryUpdateAssignment, Row, Statement, Uuid,
+    Value,
 };
 use idp_model::{
     contract::{DeviceState, TrustedDevice},
@@ -14,15 +15,12 @@ use idp_model::{
 use crate::{DeviceRepo, ManagementError, ManagementResult};
 
 const TABLE: &str = "devices";
-const COLUMNS: [&str; 13] = [
+const COLUMNS: [&str; 10] = [
     "id",
     "owner_subject",
     "name",
     "public_key",
     "address",
-    "enrollment_code_hash",
-    "enrollment_expires_at",
-    "pairing_accepting_public_key",
     "state",
     "approved_at",
     "revoked_at",
@@ -47,11 +45,26 @@ impl DbDeviceRepo {
             .execute(vec![Statement::Query(select())])
             .await
             .map_err(db_error)?;
-        let rows = results
+        let mut rows = results
             .pop()
             .ok_or_else(|| ManagementError::InvalidInput("missing device query result".into()))?
             .rows_as::<DeviceRow>()
             .map_err(row_error)?;
+        for row in &mut rows {
+            let results = self.engine.client().translate_and_execute(
+                &format!("SELECT enrollment_code_hash, enrollment_expires_at, pairing_accepting_public_key FROM local_device_enrollments WHERE device_id = CAST('{}' AS UUID)", row.id),
+                &db::SqlTranslator,
+            ).await.map_err(db_error)?;
+            if let Some(local) = results[0].rows.first() {
+                row.enrollment_code_hash =
+                    db::decode(&local.values[0], "enrollment_code_hash").map_err(row_error)?;
+                row.enrollment_expires_at =
+                    db::decode(&local.values[1], "enrollment_expires_at").map_err(row_error)?;
+                row.pairing_accepting_public_key =
+                    db::decode(&local.values[2], "pairing_accepting_public_key")
+                        .map_err(row_error)?;
+            }
+        }
         if rows.iter().any(|row| row.owner_subject.trim().is_empty()) {
             return Err(ManagementError::InvalidInput(
                 "device record has no owner".into(),
@@ -68,6 +81,13 @@ impl DbDeviceRepo {
         if allows_tunnel_access(&self.engine, &[id])
             .await
             .map_err(db_error)?
+            && self
+                .engine
+                .client()
+                .row_conflicts("local_device_enrollments", &Row::new(vec![Value::Uuid(id)]))
+                .await
+                .map_err(db_error)?
+                .is_empty()
         {
             Ok(())
         } else {
@@ -80,8 +100,15 @@ impl DbDeviceRepo {
         id: Id,
         assignments: Vec<QueryUpdateAssignment>,
     ) -> ManagementResult<()> {
-        self.engine
-            .client()
+        let terminal = assignments.iter().any(|assignment| {
+            assignment.column.column == "state"
+                && matches!(
+                    assignment.value,
+                    QueryExprValue::Value(Value::Integer(1 | 2))
+                )
+        });
+        let mut transaction = self.engine.client().transaction().await.map_err(db_error)?;
+        transaction
             .execute(vec![Statement::Query(Query::Update(QueryUpdate {
                 from: from(),
                 assignments,
@@ -90,6 +117,13 @@ impl DbDeviceRepo {
             }))])
             .await
             .map_err(db_error)?;
+        if terminal {
+            transaction
+                .execute(vec![Statement::Query(local_enrollment_delete(id))])
+                .await
+                .map_err(db_error)?;
+        }
+        transaction.commit().await.map_err(db_error)?;
         Ok(())
     }
 }
@@ -130,8 +164,8 @@ impl DeviceRepo for DbDeviceRepo {
             created_at: now.timestamp(),
             updated_at: now.timestamp(),
         };
-        self.engine
-            .client()
+        let mut transaction = self.engine.client().transaction().await.map_err(db_error)?;
+        transaction
             .execute(vec![Statement::Query(Query::Insert(QueryInsert {
                 table: TABLE.into(),
                 row: row.clone().into(),
@@ -139,6 +173,13 @@ impl DeviceRepo for DbDeviceRepo {
             }))])
             .await
             .map_err(db_error)?;
+        if row.state == DeviceState::Pending {
+            transaction
+                .execute(vec![Statement::Query(local_enrollment_insert(&row))])
+                .await
+                .map_err(db_error)?;
+        }
+        transaction.commit().await.map_err(db_error)?;
         row.try_into()
     }
 
@@ -176,8 +217,8 @@ impl DeviceRepo for DbDeviceRepo {
             created_at: now.timestamp(),
             updated_at: now.timestamp(),
         };
-        self.engine
-            .client()
+        let mut transaction = self.engine.client().transaction().await.map_err(db_error)?;
+        transaction
             .execute(vec![Statement::Query(Query::Insert(QueryInsert {
                 table: TABLE.into(),
                 row: row.clone().into(),
@@ -185,6 +226,13 @@ impl DeviceRepo for DbDeviceRepo {
             }))])
             .await
             .map_err(db_error)?;
+        if row.state == DeviceState::Pending {
+            transaction
+                .execute(vec![Statement::Query(local_enrollment_insert(&row))])
+                .await
+                .map_err(db_error)?;
+        }
+        transaction.commit().await.map_err(db_error)?;
         row.try_into()
     }
 
@@ -215,7 +263,6 @@ impl DeviceRepo for DbDeviceRepo {
             device_id,
             vec![
                 assignment("state", Value::Integer(DeviceState::Approved as i64)),
-                assignment("pairing_accepting_public_key", Value::Null),
                 assignment("updated_at", Value::Integer(updated_at.timestamp())),
             ],
         )
@@ -331,8 +378,6 @@ impl DeviceRepo for DbDeviceRepo {
             device_id,
             vec![
                 assignment("state", Value::Integer(DeviceState::Approved as i64)),
-                assignment("enrollment_code_hash", Value::Null),
-                assignment("enrollment_expires_at", Value::Null),
                 assignment("updated_at", Value::Integer(updated_at.timestamp())),
             ],
         )
@@ -486,18 +531,9 @@ impl FromRow for DeviceRow {
             name: db::decode(db::value(row, columns, "name")?, "name")?,
             public_key: db::decode(db::value(row, columns, "public_key")?, "public_key")?,
             address: db::decode(db::value(row, columns, "address")?, "address")?,
-            enrollment_code_hash: db::decode(
-                db::value(row, columns, "enrollment_code_hash")?,
-                "enrollment_code_hash",
-            )?,
-            enrollment_expires_at: db::decode(
-                db::value(row, columns, "enrollment_expires_at")?,
-                "enrollment_expires_at",
-            )?,
-            pairing_accepting_public_key: db::decode(
-                db::value(row, columns, "pairing_accepting_public_key")?,
-                "pairing_accepting_public_key",
-            )?,
+            enrollment_code_hash: None,
+            enrollment_expires_at: None,
+            pairing_accepting_public_key: None,
             state,
             approved_at: db::decode(db::value(row, columns, "approved_at")?, "approved_at")?,
             revoked_at: db::decode(db::value(row, columns, "revoked_at")?, "revoked_at")?,
@@ -533,11 +569,6 @@ impl From<DeviceRow> for Row {
             Value::Text(row.name),
             Value::Text(row.public_key),
             Value::Text(row.address),
-            row.enrollment_code_hash.map_or(Value::Null, Value::Blob),
-            row.enrollment_expires_at
-                .map_or(Value::Null, Value::Integer),
-            row.pairing_accepting_public_key
-                .map_or(Value::Null, Value::Text),
             Value::Integer(row.state as i64),
             row.approved_at.map_or(Value::Null, Value::Integer),
             row.revoked_at.map_or(Value::Null, Value::Integer),
@@ -545,6 +576,41 @@ impl From<DeviceRow> for Row {
             Value::Integer(row.updated_at),
         ])
     }
+}
+
+fn local_enrollment_insert(row: &DeviceRow) -> Query {
+    Query::Insert(QueryInsert {
+        table: "local_device_enrollments".into(),
+        row: Row::new(vec![
+            Value::Uuid(row.id),
+            row.enrollment_code_hash
+                .clone()
+                .map_or(Value::Null, Value::Blob),
+            row.enrollment_expires_at
+                .map_or(Value::Null, Value::Integer),
+            row.pairing_accepting_public_key
+                .clone()
+                .map_or(Value::Null, Value::Text),
+        ]),
+        returning: None,
+    })
+}
+
+fn local_enrollment_delete(id: Id) -> Query {
+    Query::Delete(QueryDelete {
+        from: QueryFrom {
+            table: "local_device_enrollments".into(),
+            joins: vec![],
+        },
+        predicate: Some(QueryExpr::Equals(
+            Box::new(QueryExpr::Value(QueryExprValue::Column(QueryColumn::new(
+                "local_device_enrollments".into(),
+                "device_id".into(),
+            )))),
+            Box::new(QueryExpr::Value(QueryExprValue::Value(Value::Uuid(id)))),
+        )),
+        returning: None,
+    })
 }
 
 fn now() -> DateTime<Utc> {
@@ -625,6 +691,109 @@ mod tests {
             .await
             .expect("initialize replica schema");
         DbDeviceRepo::new(engine)
+    }
+
+    #[tokio::test]
+    async fn enrollment_secrets_are_local_durable_and_removed_on_approval() {
+        let path = std::env::temp_dir().join(format!(
+            "local-enrollment-{}.redb",
+            idp_model::model::Id::now_v7()
+        ));
+        let pending;
+        let paired;
+        {
+            let database = Arc::new(Database::open(&path).expect("open local identity"));
+            idp_model::replica::up(&database)
+                .await
+                .expect("initialize new schema");
+            let repo = DbDeviceRepo::new(Arc::clone(&database));
+            repo.create(
+                "owner".into(),
+                "primary".into(),
+                "primary".into(),
+                "addr".into(),
+                vec![],
+                0,
+            )
+            .await
+            .expect("approve first local device");
+            pending = repo
+                .create(
+                    "owner".into(),
+                    "pending".into(),
+                    "pending".into(),
+                    "addr".into(),
+                    vec![42; 32],
+                    chrono::Utc::now().timestamp() + 300,
+                )
+                .await
+                .expect("store local enrollment")
+                .id;
+            paired = repo
+                .create_pairing(
+                    "paired".into(),
+                    "paired".into(),
+                    "addr".into(),
+                    "primary".into(),
+                )
+                .await
+                .expect("store local pairing")
+                .id;
+            let public = database
+                .client()
+                .translate_and_execute("SELECT * FROM devices", &db::SqlTranslator)
+                .await
+                .expect("query syncable devices")
+                .remove(0);
+            assert!(public.columns.iter().all(|column| {
+                ![
+                    "enrollment_code_hash",
+                    "enrollment_expires_at",
+                    "pairing_accepting_public_key",
+                ]
+                .contains(&column.name.as_str())
+            }));
+        }
+        {
+            let database = Arc::new(Database::open(&path).expect("reopen identity offline"));
+            let repo = DbDeviceRepo::new(Arc::clone(&database));
+            assert!(
+                repo.approve(pending, &[0; 32])
+                    .await
+                    .expect("wrong enrollment code denies")
+                    .is_none()
+            );
+            assert!(
+                repo.approve(pending, &[42; 32])
+                    .await
+                    .expect("stored code approves")
+                    .is_some()
+            );
+            assert_eq!(
+                repo.pending_pairing(paired)
+                    .await
+                    .expect("pending pairing persisted")
+                    .expect("local pairing exists")
+                    .1,
+                "primary"
+            );
+            assert!(
+                repo.approve_pairing(paired)
+                    .await
+                    .expect("approve local pairing")
+                    .is_some()
+            );
+            let rows = database
+                .client()
+                .translate_and_execute(
+                    "SELECT device_id FROM local_device_enrollments",
+                    &db::SqlTranslator,
+                )
+                .await
+                .expect("read local pending workflow");
+            assert!(rows[0].rows.is_empty());
+        }
+        std::fs::remove_file(path).expect("remove enrollment fixture");
     }
 
     #[tokio::test]

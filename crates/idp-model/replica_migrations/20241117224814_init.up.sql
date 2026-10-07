@@ -44,11 +44,15 @@ CREATE TABLE IF NOT EXISTS credentials (
     id UUID PRIMARY KEY,
     user_id UUID,
     kind TEXT,
-    secret_hash TEXT,
     active INTEGER,
     revoked_at INTEGER,
     created_at INTEGER,
     updated_at INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS local_credential_secrets (
+    credential_id UUID PRIMARY KEY,
+    secret_hash TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS keys (
@@ -83,7 +87,7 @@ CREATE TABLE IF NOT EXISTS clients (
     id UUID PRIMARY KEY,
     application_id UUID,
     client_id TEXT,
-    client_secret_hash TEXT,
+    credential_id UUID,
     client_id_issued_at INTEGER,
     client_secret_expires_at INTEGER,
     client_name TEXT,
@@ -109,15 +113,18 @@ CREATE TABLE IF NOT EXISTS clients (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS clients_client_id ON clients (client_id);
 
+CREATE TABLE IF NOT EXISTS local_client_credentials (
+    client_id UUID PRIMARY KEY,
+    credential_id UUID NOT NULL,
+    secret_hash TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS devices (
     id UUID PRIMARY KEY,
     owner_subject TEXT NOT NULL,
     name TEXT,
     public_key TEXT,
     address TEXT,
-    enrollment_code_hash BLOB,
-    enrollment_expires_at INTEGER,
-    pairing_accepting_public_key TEXT,
     state INTEGER,
     approved_at INTEGER,
     revoked_at INTEGER,
@@ -125,6 +132,13 @@ CREATE TABLE IF NOT EXISTS devices (
     updated_at INTEGER
 );
 CREATE UNIQUE INDEX IF NOT EXISTS devices_public_key ON devices (public_key);
+
+CREATE TABLE IF NOT EXISTS local_device_enrollments (
+    device_id UUID PRIMARY KEY,
+    enrollment_code_hash BLOB,
+    enrollment_expires_at INTEGER,
+    pairing_accepting_public_key TEXT
+);
 
 CREATE TABLE IF NOT EXISTS roles (
     id UUID PRIMARY KEY,
