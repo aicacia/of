@@ -5,16 +5,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use ofdb_btree_redb::{Bytes, RedbByteBTree, table_definition};
-use ofdb_kv_store::KvStore;
+use ofdb_kv::Database as KvDatabase;
 use ofdb_sql::Database;
-use redb::Database as RedbDatabase;
 use storage_model::StorageNamespace;
 
 use crate::{DatabaseCatalog, DatabaseId, DatabaseResource};
 
 type DatabaseKey = (String, idp_model::model::Id, DatabaseId);
-type KvStores = BTreeMap<DatabaseKey, Arc<KvStore<RedbByteBTree>>>;
+type KvStores = BTreeMap<DatabaseKey, Arc<KvDatabase>>;
 
 pub struct DatabaseRuntime {
     root: PathBuf,
@@ -146,7 +144,7 @@ impl DatabaseRuntime {
         &self,
         scope: &S,
         id: DatabaseId,
-    ) -> io::Result<Option<Arc<KvStore<RedbByteBTree>>>> {
+    ) -> io::Result<Option<Arc<KvDatabase>>> {
         let mut open = self
             .kv_open
             .lock()
@@ -160,29 +158,10 @@ impl DatabaseRuntime {
         }
         let mut path = database_path(&self.root, scope, id)?;
         path.set_extension("kv.redb");
-        let create = !path.exists();
-        let database = Arc::new(
-            if create {
-                RedbDatabase::create(&path)
-            } else {
-                RedbDatabase::open(&path)
-            }
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error.to_string()))?,
+        let store = Arc::new(
+            KvDatabase::open_with_table(path, "kv")
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error.to_string()))?,
         );
-        if create {
-            let transaction = database
-                .begin_write()
-                .map_err(|error| io::Error::other(error.to_string()))?;
-            transaction
-                .open_table(table_definition::<Bytes, Vec<u8>>("kv"))
-                .map_err(|error| io::Error::other(error.to_string()))?;
-            transaction
-                .commit()
-                .map_err(|error| io::Error::other(error.to_string()))?;
-        }
-        let store = Arc::new(KvStore::new(RedbByteBTree::new(database, "kv"), || {
-            uuid::Timestamp::now(uuid::NoContext)
-        }));
         open.insert(key, Arc::clone(&store));
         Ok(Some(store))
     }
@@ -330,9 +309,13 @@ mod tests {
             .open_kv_selected(&scope, resource.id)
             .expect("KV sidecar opens")
             .expect("created resource remains available");
-        let mut transaction = kv_store.transaction().await.expect("KV transaction opens");
+        let mut transaction = kv_store
+            .client()
+            .transaction()
+            .await
+            .expect("KV transaction opens");
         transaction
-            .set("key", vec![1, 2, 3], None)
+            .set("key", ofdb_kv::Value::Blob(vec![1, 2, 3]), None)
             .await
             .expect("KV value writes");
         transaction.commit().await.expect("KV value commits");
@@ -344,13 +327,14 @@ mod tests {
             .open_kv_selected(&scope, resource.id)
             .expect("persisted KV sidecar opens")
             .expect("resource remains selected");
-        let transaction = kv_store
+        let mut transaction = kv_store
+            .client()
             .transaction()
             .await
             .expect("reopened KV transaction opens");
         assert_eq!(
-            transaction.get("key", 0).await.expect("KV value reads"),
-            Some(vec![1, 2, 3])
+            transaction.get("key").await.expect("KV value reads"),
+            Some(ofdb_kv::Value::Blob(vec![1, 2, 3]))
         );
         transaction
             .rollback()
@@ -395,6 +379,7 @@ mod tests {
             .expect("second database creates");
         assert_ne!(first.id, second.id);
         first_db
+            .client()
             .translate_and_execute(
                 "CREATE TABLE first_table (id UUID PRIMARY KEY)",
                 &SqlTranslator,
@@ -402,6 +387,7 @@ mod tests {
             .await
             .expect("first schema persists");
         second_db
+            .client()
             .translate_and_execute(
                 "CREATE TABLE second_table (id UUID PRIMARY KEY)",
                 &SqlTranslator,
@@ -423,6 +409,16 @@ mod tests {
                 .expect("foreign namespace lookup succeeds")
                 .is_none()
         );
+        let other_application = Scope {
+            application: idp_model::model::Id::now_v7(),
+            ..scope
+        };
+        assert!(
+            runtime
+                .open(&other_application, first.id)
+                .expect("foreign Application lookup succeeds")
+                .is_none()
+        );
         let first_db = runtime
             .open(&scope, first.id)
             .expect("first database opens")
@@ -431,22 +427,30 @@ mod tests {
             .open(&scope, second.id)
             .expect("second database opens")
             .expect("second catalog record exists");
-        assert_eq!(
+        assert!(
             first_db
-                .table_schema("first_table")
+                .client()
+                .execute_sql("SELECT id FROM first_table", None)
                 .await
-                .expect("first schema loads")
-                .name,
-            "first_table"
+                .expect("first table survives restart")[0]
+                .rows
+                .is_empty()
         );
-        assert!(second_db.table_schema("first_table").await.is_err());
-        assert_eq!(
+        assert!(
             second_db
-                .table_schema("second_table")
+                .client()
+                .execute_sql("SELECT id FROM first_table", None)
                 .await
-                .expect("second schema loads")
-                .name,
-            "second_table"
+                .is_err()
+        );
+        assert!(
+            second_db
+                .client()
+                .execute_sql("SELECT id FROM second_table", None)
+                .await
+                .expect("second table survives restart")[0]
+                .rows
+                .is_empty()
         );
         assert!(
             runtime
@@ -459,13 +463,14 @@ mod tests {
                 .expect("deleted database lookup succeeds")
                 .is_none()
         );
-        assert_eq!(
+        assert!(
             first_db
-                .table_schema("first_table")
+                .client()
+                .execute_sql("SELECT id FROM first_table", None)
                 .await
-                .expect("an already-issued handle remains usable")
-                .name,
-            "first_table"
+                .expect("an already-issued handle remains usable")[0]
+                .rows
+                .is_empty()
         );
 
         drop(runtime);

@@ -7,6 +7,10 @@ mod config;
 mod data_protocol;
 #[cfg(feature = "network")]
 mod database_protocol;
+#[cfg(feature = "network")]
+mod database_transport;
+#[cfg(feature = "network")]
+mod filesystem_transport;
 mod idp_client;
 mod management_client;
 #[cfg(feature = "network")]
@@ -18,8 +22,7 @@ mod router;
 mod runtime;
 #[cfg(feature = "network")]
 mod storage_protocol;
-#[cfg(feature = "network")]
-mod sync_stage;
+
 #[cfg(feature = "network")]
 mod sync_timeout;
 

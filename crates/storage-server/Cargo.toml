@@ -38,12 +38,12 @@ cli = { path = "../cli", default-features = false, features = [
 
 # Internal
 api = { path = "../api", default-features = false, features = [] }
-file-system = { path = "../../../offs/crates/file-system", default-features = false, features = ["iroh"] }
+file-system = { path = "../../../offs/crates/file-system", default-features = false, features = [] }
 idp-model = { path = "../idp-model", default-features = false, features = ["std"] }
 key = { path = "../key", default-features = false, features = ["std"] }
-ofdb-kv-sync = { package = "ofdb-kv-sync", path = "../../../ofdb/crates/kv-sync", default-features = false, features = [] }
 model = { path = "../model", default-features = false, features = ["std", "utoipa", "axum"] }
-ofdb-sql = { package = "ofdb-sql", path = "../../../ofdb/crates/sql", default-features = false, features = ["redb", "sync"] }
+ofdb-kv = { path = "../../../ofdb/crates/kv", default-features = false, features = ["redb", "sync"] }
+ofdb-sql = { package = "ofdb-sql", path = "../../../ofdb/crates/sql", default-features = false, features = ["redb", "sync", "native-stage"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 storage-model = { path = "../storage-model", default-features = false, features = ["std"] }
 storage-service = { path = "../storage-service", default-features = false, features = [] }
@@ -51,6 +51,7 @@ storage-service = { path = "../storage-service", default-features = false, featu
 
 # Serialization
 base64 = { version = "0.22", default-features = false, features = ["std"] }
+postcard = { version = "1.1", default-features = false, features = ["alloc"] }
 serde = { version = "1.0", default-features = false, features = [
   "derive",
   "std",
@@ -59,7 +60,9 @@ serde_json = { version = "1.0", default-features = false, features = ["std"] }
 serde_qs = { version = "1.1", default-features = false, features = ["axum"] }
 
 # Utilities
+bytes = { version = "1.11", default-features = false, features = ["std"] }
 config = { version = "0.15", features = ["yaml"], default-features = false }
+uuid = { version = "1.26", default-features = false, features = ["std"] }
 
 # Web
 axum = { version = "0.8", default-features = false, features = [
@@ -102,8 +105,5 @@ log = { version = "0.4", default-features = false, features = ["std"] }
 env_logger = { version = "0.10", default-features = false, features = [] }
 
 [dev-dependencies]
-# Serialization
-postcard = { version = "1.1", default-features = false, features = ["alloc"] }
-
 # Web
 tower = { version = "0.5", default-features = false, features = ["util"] }

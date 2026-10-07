@@ -119,8 +119,6 @@ log = { version = "0.4", default-features = false, features = ["std"] }
 env_logger = { version = "0.10", default-features = false, features = [] }
 
 [dev-dependencies]
-# Database
-ofdb-sql-sync = { package = "ofdb-sql-sync", path = "../../../ofdb/crates/sql-sync", default-features = false, features = [] }
 
 # Keyring
 keyring-core = { version = "1.0", default-features = false, features = [] }

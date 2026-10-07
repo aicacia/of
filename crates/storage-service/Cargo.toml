@@ -9,13 +9,10 @@ repository.workspace = true
 
 [dependencies]
 # Internal
-ofdb-btree-redb = { package = "ofdb-btree-redb", path = "../../../ofdb/crates/btree-redb", default-features = false, features = [] }
 file-system = { path = "../../../offs/crates/file-system", default-features = false, features = [] }
-ofdb-kv-store = { package = "ofdb-kv-store", path = "../../../ofdb/crates/kv-store", default-features = false, features = [] }
-ofdb-kv-sync = { package = "ofdb-kv-sync", path = "../../../ofdb/crates/kv-sync", default-features = false, features = [] }
-ofdb-sql = { package = "ofdb-sql", path = "../../../ofdb/crates/sql", default-features = false, features = ["redb", "sql", "sync"] }
-redb = { version = "4.3", default-features = false, features = ["uuid"] }
 idp-model = { path = "../idp-model", default-features = false, features = ["std"] }
+ofdb-kv = { path = "../../../ofdb/crates/kv", default-features = false, features = ["redb", "sync"] }
+ofdb-sql = { package = "ofdb-sql", path = "../../../ofdb/crates/sql", default-features = false, features = ["redb", "sql", "sync"] }
 storage-model = { path = "../storage-model", default-features = false, features = ["std"] }
 
 # Serialization

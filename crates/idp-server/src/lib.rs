@@ -10,6 +10,7 @@ mod device_identity;
 mod provisioning;
 mod router;
 mod runtime;
+mod security_sync;
 #[cfg(feature = "cli")]
 mod unavailable_data_protocol;
 
@@ -29,3 +30,4 @@ pub use router::{
 };
 pub(crate) use router::{authorize_bearer_any_principal, authorize_bearer_client};
 pub use runtime::{IdpRuntime, build_runtime};
+pub use security_sync::validate_public_security_record;

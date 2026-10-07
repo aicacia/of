@@ -2084,7 +2084,6 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-util",
- "iroh",
  "ofdb-kv",
  "postcard",
  "redb",
@@ -3093,7 +3092,6 @@ dependencies = [
  "management-service",
  "model",
  "ofdb-sql",
- "ofdb-sql-sync",
  "serde",
  "serde_json",
  "serde_qs",
@@ -3884,7 +3882,7 @@ dependencies = [
  "idp-service",
  "iroh",
  "model",
- "ofdb-sql-sync",
+ "ofdb-sql",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -4951,12 +4949,12 @@ name = "ofdb-sql-sync"
 version = "0.1.0"
 dependencies = [
  "futures",
- "iroh",
  "ofdb-sql-engine",
  "ofdb-value",
  "postcard",
  "serde",
  "sha2 0.10.9",
+ "tempfile",
  "thiserror 2.0.20",
  "uuid",
 ]
@@ -6733,6 +6731,7 @@ dependencies = [
  "api",
  "axum",
  "base64 0.22.1",
+ "bytes",
  "clap",
  "cli",
  "config",
@@ -6746,7 +6745,7 @@ dependencies = [
  "key",
  "log",
  "model",
- "ofdb-kv-sync",
+ "ofdb-kv",
  "ofdb-sql",
  "postcard",
  "reqwest 0.12.28",
@@ -6762,6 +6761,7 @@ dependencies = [
  "utoipa",
  "utoipa-axum",
  "utoipa-swagger-ui",
+ "uuid",
 ]
 
 [[package]]
@@ -6770,11 +6770,8 @@ version = "0.1.0"
 dependencies = [
  "file-system",
  "idp-model",
- "ofdb-btree-redb",
- "ofdb-kv-store",
- "ofdb-kv-sync",
+ "ofdb-kv",
  "ofdb-sql",
- "redb",
  "serde",
  "serde_json",
  "storage-model",

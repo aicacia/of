@@ -21,7 +21,7 @@ mod database_protocol_tests {
     };
     use iroh_chain::{DATA_ALPN, EndpointIdStore, Server};
     use model::contract::{SelectedResource, SelectedResourcesResponse};
-    use ofdb_sql::{Database, IrohTransport, SessionConfig, SyncRole, SyncTransport};
+    use ofdb_sql::{Database, SessionConfig, SyncRole, SyncTransport};
     use storage_service::DatabaseRuntime;
 
     use crate::{
@@ -30,6 +30,7 @@ mod database_protocol_tests {
             AuthorizedTransport, DATABASE_STREAM_KIND, DatabaseProtocolHandler,
             DatabaseResourceDescriptor, KvAuthorizedTransport, Namespace, authorize_with_timeout,
         },
+        database_transport::DatabaseTransport,
         sync_timeout,
     };
 
@@ -232,7 +233,7 @@ mod database_protocol_tests {
         let checks = Arc::new(AtomicUsize::new(0));
         let authorize_checks = Arc::clone(&checks);
         let mut transport = AuthorizedTransport {
-            transport: IrohTransport::new(server_send, server_receive),
+            transport: DatabaseTransport::new(server_send, server_receive),
             authorize: Arc::new(move || {
                 let checks = Arc::clone(&authorize_checks);
                 Box::pin(async move { checks.fetch_add(1, Ordering::SeqCst) == 0 })
@@ -379,7 +380,7 @@ mod database_protocol_tests {
             .await
             .expect("read database stream kind");
         assert_eq!(stream_kind[0], DATABASE_STREAM_KIND);
-        let peer_transport = IrohTransport::new(peer_send, peer_recv);
+        let peer_transport = DatabaseTransport::new(peer_send, peer_recv);
 
         let application_id = application_id.to_owned();
         let database_id = database_id.to_owned();
@@ -446,7 +447,7 @@ mod database_protocol_tests {
         let authorizer_resource = resource.clone();
         let authorizer_connection = storage_connection.clone();
         let mut transport = AuthorizedTransport {
-            transport: IrohTransport::new(storage_send, storage_recv),
+            transport: DatabaseTransport::new(storage_send, storage_recv),
             authorize: Arc::new(move || {
                 let handler = authorizer_handler.clone();
                 let resource = authorizer_resource.clone();
@@ -472,6 +473,7 @@ mod database_protocol_tests {
             .await
             .expect("insert source row");
         let mut source_kv_transaction = source_kv
+            .client()
             .transaction()
             .await
             .expect("open source KV transaction");
@@ -498,15 +500,15 @@ mod database_protocol_tests {
                 )
                 .await
                 .expect("peer completes the SQL phase before KV begins");
-            let kv_result = ofdb_kv_sync::synchronize(
-                &destination_kv_for_sync,
-                &mut KvAuthorizedTransport {
-                    transport: &mut transport,
-                },
-                ofdb_kv_sync::SyncRole::Responder,
-                ofdb_kv_sync::Config::default(),
-            )
-            .await;
+            let kv_result = destination_kv_for_sync
+                .synchronize(
+                    &mut KvAuthorizedTransport {
+                        transport: &mut transport,
+                    },
+                    ofdb_kv::SyncRole::Responder,
+                    ofdb_kv::SyncConfig::default(),
+                )
+                .await;
             (kv_result, transport.transport)
         });
         source_database
@@ -518,16 +520,16 @@ mod database_protocol_tests {
             .await
             .expect("live SQL phase completes before the Management outage");
         management_outage.store(true, Ordering::SeqCst);
-        let kv_error = ofdb_kv_sync::synchronize(
-            &source_kv,
-            &mut KvAuthorizedTransport {
-                transport: &mut transport,
-            },
-            ofdb_kv_sync::SyncRole::Initiator,
-            ofdb_kv_sync::Config::default(),
-        )
-        .await
-        .expect_err("Management outage denies the next KV operation");
+        let kv_error = source_kv
+            .synchronize(
+                &mut KvAuthorizedTransport {
+                    transport: &mut transport,
+                },
+                ofdb_kv::SyncRole::Initiator,
+                ofdb_kv::SyncConfig::default(),
+            )
+            .await
+            .expect_err("Management outage denies the next KV operation");
         assert!(
             format!("{kv_error:?}").to_lowercase().contains("transport"),
             "unexpected KV sync error: {kv_error:?}"
@@ -545,25 +547,27 @@ mod database_protocol_tests {
             .await
             .expect("source table remains available");
         assert_eq!(source_rows[0].rows.len(), 1, "source row is retained");
-        let destination_kv_transaction = destination_kv
+        let mut destination_kv_transaction = destination_kv
+            .client()
             .transaction()
             .await
             .expect("open destination KV transaction");
         assert!(
             destination_kv_transaction
-                .get("outage-key", 0)
+                .get("outage-key")
                 .await
                 .expect("read destination KV value")
                 .is_none(),
             "KV data is not applied after Management denies the session"
         );
-        let source_kv_transaction = source_kv
+        let mut source_kv_transaction = source_kv
+            .client()
             .transaction()
             .await
             .expect("open source KV transaction");
         assert!(
             source_kv_transaction
-                .get("outage-key", 0)
+                .get("outage-key")
                 .await
                 .expect("read source KV value")
                 .is_some(),
@@ -652,7 +656,7 @@ mod database_protocol_tests {
                 .expect("accept server stream")
                 .expect("server stream opens");
         let mut transport = AuthorizedTransport {
-            transport: IrohTransport::new(server_send, server_receive),
+            transport: DatabaseTransport::new(server_send, server_receive),
             authorize: Arc::new(|| Box::pin(async { true })),
         };
 
@@ -899,7 +903,7 @@ mod database_protocol_tests {
             .await
             .expect("insert source row");
         let peer_sync = tokio::spawn(async move {
-            let mut transport = IrohTransport::new(client_send, client_receive);
+            let mut transport = DatabaseTransport::new(client_send, client_receive);
             source_database
                 .synchronize(
                     &mut transport,

@@ -10,9 +10,7 @@ mod protocol_tests {
         thread,
     };
 
-    use file_system::{
-        FileSessionService, FileSystem, IrohResourceDescriptor, OpenRequest, Residency,
-    };
+    use file_system::{FileSessionService, FileSystem, OpenRequest, Residency};
     use iroh::{
         Endpoint,
         address_lookup::MemoryLookup,
@@ -24,8 +22,11 @@ mod protocol_tests {
     use storage_service::{FileSystemId, ScopedFileSystemRuntime};
 
     use crate::{
-        ManagementClient, data_protocol::DataProtocolHandler,
-        database_protocol::DatabaseProtocolHandler, storage_protocol::StorageProtocolHandler,
+        ManagementClient,
+        data_protocol::DataProtocolHandler,
+        database_protocol::DatabaseProtocolHandler,
+        filesystem_transport::{IrohFileTransport, IrohResourceDescriptor},
+        storage_protocol::StorageProtocolHandler,
     };
 
     #[derive(Debug)]
@@ -165,7 +166,7 @@ mod protocol_tests {
             .connect_direct_with_alpn(storage_id, DATA_ALPN)
             .await
             .expect("connect to Storage endpoint");
-        let transport = file_system::IrohFileTransport::open_authorized(
+        let transport = IrohFileTransport::open_authorized(
             &connection,
             IrohResourceDescriptor {
                 owner_subject: "owner-a".to_owned(),
@@ -347,7 +348,7 @@ mod protocol_tests {
             .connect_direct_with_alpn(storage_id, DATA_ALPN)
             .await
             .expect("connect to Storage");
-        let transport = file_system::IrohFileTransport::open_authorized(
+        let transport = IrohFileTransport::open_authorized(
             &connection,
             IrohResourceDescriptor {
                 owner_subject: "owner-a".to_owned(),

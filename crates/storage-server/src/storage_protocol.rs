@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use file_system::{FileSystemId, IrohFileTransport, IrohResourceDescriptor};
+use file_system::{FileSystemId, OperationControl};
 use iroh::{
     EndpointId,
     endpoint::{Connection, RecvStream, SendStream},
@@ -13,7 +13,11 @@ use storage_model::StorageNamespace;
 use storage_service::ScopedFileSystemRuntime;
 use tokio_util::sync::CancellationToken;
 
-use crate::{ManagementClient, sync_timeout};
+use crate::{
+    ManagementClient,
+    filesystem_transport::{FILESYSTEM_STREAM_KIND, IrohFileTransport, IrohResourceDescriptor},
+    sync_timeout,
+};
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 const POLICY_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
@@ -118,6 +122,7 @@ impl StorageProtocolHandler {
             )
             .into());
         }
+        let control = self.operation_control(resource.clone(), connection.clone());
         let handler = self.clone();
         let connection_for_guard = connection.clone();
         let transport = tokio::time::timeout(HANDSHAKE_TIMEOUT, async {
@@ -162,7 +167,9 @@ impl StorageProtocolHandler {
             "filesystem sync operation timed out",
             async {
                 file_system
-                    .sync_peer(transport)
+                    .metadata_sync(transport)
+                    .with_operation_control(control)
+                    .run()
                     .await
                     .map_err(std::io::Error::other)
             },
@@ -221,6 +228,7 @@ impl StorageProtocolHandler {
         let Ok(filesystem_id) = FileSystemId::parse(&resource.filesystem_id) else {
             return;
         };
+        let control = self.operation_control(resource.clone(), connection.clone());
         let namespace = Namespace {
             owner_subject: resource.owner_subject,
             application_id,
@@ -257,13 +265,16 @@ impl StorageProtocolHandler {
         };
         let cancellation_token = self.cancellation_token.clone();
         tokio::spawn(async move {
+            let executor_control = control.clone();
             let mut sync_task = tokio::spawn(async move {
                 sync_timeout::run(
                     SYNC_OPERATION_TIMEOUT,
                     "filesystem sync operation timed out",
                     async {
                         file_system
-                            .sync_peer(transport)
+                            .metadata_sync(transport)
+                            .with_operation_control(executor_control)
+                            .run()
                             .await
                             .map_err(std::io::Error::other)
                     },
@@ -272,7 +283,7 @@ impl StorageProtocolHandler {
             });
             let result = tokio::select! {
                 () = cancellation_token.cancelled() => {
-                    sync_task.abort();
+                    control.cancel();
                     let _ = sync_task.await;
                     return;
                 }
@@ -300,7 +311,7 @@ impl ProtocolHandler for StorageProtocolHandler {
             if !matches!(
                 tokio::time::timeout(HANDSHAKE_TIMEOUT, recv.read_exact(&mut kind)).await,
                 Ok(Ok(()))
-            ) || kind[0] != file_system::FILESYSTEM_STREAM_KIND
+            ) || kind[0] != FILESYSTEM_STREAM_KIND
             {
                 continue;
             }
@@ -318,6 +329,23 @@ fn descriptor(resource: &SelectedResource) -> IrohResourceDescriptor {
 }
 
 impl StorageProtocolHandler {
+    fn operation_control(
+        &self,
+        resource: IrohResourceDescriptor,
+        connection: Connection,
+    ) -> OperationControl<EndpointId> {
+        let handler = self.clone();
+        OperationControl::new(move |peer, _operation| {
+            let handler = handler.clone();
+            let resource = resource.clone();
+            let connection = connection.clone();
+            Box::pin(async move {
+                peer == connection.remote_id()
+                    && handler.authorize_bounded(&resource, &connection).await
+            })
+        })
+    }
+
     async fn authorize_bounded(
         &self,
         resource: &IrohResourceDescriptor,
@@ -393,7 +421,7 @@ mod tests;
 
 #[cfg(test)]
 mod authorization_tests {
-    use file_system::IrohResourceDescriptor;
+    use crate::filesystem_transport::IrohResourceDescriptor;
     use model::contract::SelectedResource;
 
     use super::descriptor_matches_selection;

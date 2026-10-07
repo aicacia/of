@@ -10,7 +10,7 @@ use iroh::{
 };
 
 pub(crate) const DATABASE_STREAM_KIND: u8 = 1;
-pub(crate) const FILESYSTEM_STREAM_KIND: u8 = file_system::FILESYSTEM_STREAM_KIND;
+pub(crate) const FILESYSTEM_STREAM_KIND: u8 = crate::filesystem_transport::FILESYSTEM_STREAM_KIND;
 const STREAM_MARKER_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone)]

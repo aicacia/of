@@ -2,6 +2,8 @@
 
 ## Shared domain
 
+- [Public persistence and protocol integration](docs/public-persistence.md): owner facade contracts, shared-router adapters, security-record preflight, and remaining migration gaps.
+
 - [Shared terms](GLOSSARY.md): Installation, User, Application, Principal, Device, and setup lifecycle.
 - [System design](docs/design.md): service authority, replica boundaries, Installation, and synchronization requirements.
 - [Unified service spec](.scratch/unified-server/spec.md), [tickets](.scratch/unified-server/map.md), and [implementation evidence](.scratch/unified-server/evidence.md).

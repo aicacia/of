@@ -65,5 +65,5 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 
 [dev-dependencies]
 idp-model = { path = "../idp-model", default-features = false, features = ["std"] }
-ofdb-sql-sync = { package = "ofdb-sql-sync", path = "../../../ofdb/crates/sql-sync", default-features = false, features = [] }
+ofdb-sql = { path = "../../../ofdb/crates/sql", default-features = false, features = ["sync"] }
 tokio = { version = "1.4", default-features = false, features = ["macros", "rt"] }

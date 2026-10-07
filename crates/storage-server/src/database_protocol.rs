@@ -7,14 +7,14 @@ use iroh::{
 };
 use iroh_chain::{DATA_ALPN, Server};
 use model::contract::SelectedResource;
-use ofdb_sql::{IrohTransport, SessionConfig, SyncRole, SyncTransport};
+use ofdb_sql::{SessionConfig, SyncRole, SyncTransport};
 use serde::{Deserialize, Serialize};
 use storage_model::StorageNamespace;
 use storage_service::{DatabaseId, DatabaseRuntime};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    ManagementClient, data_protocol::DATABASE_STREAM_KIND, sync_stage::FileSyncStageFactory,
+    ManagementClient, data_protocol::DATABASE_STREAM_KIND, database_transport::DatabaseTransport,
     sync_timeout,
 };
 
@@ -44,7 +44,7 @@ pub(crate) struct DatabaseProtocolHandler {
     server: Server,
     management: ManagementClient,
     databases: Arc<DatabaseRuntime>,
-    stage_factory: FileSyncStageFactory,
+    staging_directory: PathBuf,
     cancellation_token: CancellationToken,
 }
 
@@ -60,7 +60,7 @@ impl DatabaseProtocolHandler {
             server,
             management,
             databases,
-            stage_factory: FileSyncStageFactory::new(staging_directory),
+            staging_directory,
             cancellation_token,
         }
     }
@@ -177,35 +177,37 @@ impl DatabaseProtocolHandler {
             Box::pin(async move { handler.authorize_bounded(&resource, &connection).await })
         });
         let mut transport = AuthorizedTransport {
-            transport: IrohTransport::new(send, recv),
-            authorize,
+            transport: DatabaseTransport::new(send, recv),
+            authorize: Arc::clone(&authorize),
         };
         sync_timeout::run(
             SYNC_OPERATION_TIMEOUT,
             "database sync operation timed out",
             async {
                 database
-                    .synchronize_with_stage_factory(
+                    .synchronize_with_stage_directory_checked(
                         &mut transport,
                         &SessionConfig::default(),
                         SyncRole::Initiator,
-                        &self.stage_factory,
+                        &self.staging_directory,
+                        || check_apply(Arc::clone(&authorize), self.cancellation_token.clone()),
                     )
                     .await
-                    .map_err(io::Error::other)?;
-                ofdb_kv_sync::synchronize(
-                    &kv_store,
-                    &mut KvAuthorizedTransport {
-                        transport: &mut transport,
-                    },
-                    ofdb_kv_sync::SyncRole::Initiator,
-                    ofdb_kv_sync::Config {
-                        max_frame_bytes: MAX_SYNC_FRAME_BYTES,
-                        ..ofdb_kv_sync::Config::default()
-                    },
-                )
-                .await
-                .map_err(|error| io::Error::other(format!("database KV sync failed: {error:?}")))
+                    .map_err(sql_sync_error)?;
+                kv_store
+                    .synchronize_checked(
+                        &mut KvAuthorizedTransport {
+                            transport: &mut transport,
+                        },
+                        ofdb_kv::SyncRole::Initiator,
+                        ofdb_kv::SyncConfig {
+                            max_frame_bytes: MAX_SYNC_FRAME_BYTES,
+                            ..ofdb_kv::SyncConfig::default()
+                        },
+                        || check_apply(Arc::clone(&authorize), self.cancellation_token.clone()),
+                    )
+                    .await
+                    .map_err(kv_sync_error)
             },
         )
         .await?;
@@ -357,7 +359,7 @@ impl DatabaseProtocolHandler {
         }
         let handler = self.clone();
         let cancellation_token = self.cancellation_token.clone();
-        let stage_factory = self.stage_factory.clone();
+        let staging_directory = self.staging_directory.clone();
         tokio::spawn(async move {
             let resource_for_guard = handshake.resource.clone();
             let authorize: FrameAuthorizer = Arc::new(move || {
@@ -367,38 +369,39 @@ impl DatabaseProtocolHandler {
                 Box::pin(async move { handler.authorize_bounded(&resource, &connection).await })
             });
             let mut transport = AuthorizedTransport {
-                transport: IrohTransport::new(send, recv),
-                authorize,
+                transport: DatabaseTransport::new(send, recv),
+                authorize: Arc::clone(&authorize),
             };
+            let apply_cancellation = cancellation_token.clone();
             let sync_task = tokio::spawn(async move {
                 sync_timeout::run(
                     operation_timeout,
                     "database sync operation timed out",
                     async {
                         database
-                            .synchronize_with_stage_factory(
+                            .synchronize_with_stage_directory_checked(
                                 &mut transport,
                                 &SessionConfig::default(),
                                 SyncRole::Responder,
-                                &stage_factory,
+                                &staging_directory,
+                                || check_apply(Arc::clone(&authorize), apply_cancellation.clone()),
                             )
                             .await
-                            .map_err(io::Error::other)?;
-                        ofdb_kv_sync::synchronize(
-                            &kv_store,
-                            &mut KvAuthorizedTransport {
-                                transport: &mut transport,
-                            },
-                            ofdb_kv_sync::SyncRole::Responder,
-                            ofdb_kv_sync::Config {
-                                max_frame_bytes: MAX_SYNC_FRAME_BYTES,
-                                ..ofdb_kv_sync::Config::default()
-                            },
-                        )
-                        .await
-                        .map_err(|error| {
-                            io::Error::other(format!("database KV sync failed: {error:?}"))
-                        })
+                            .map_err(sql_sync_error)?;
+                        kv_store
+                            .synchronize_checked(
+                                &mut KvAuthorizedTransport {
+                                    transport: &mut transport,
+                                },
+                                ofdb_kv::SyncRole::Responder,
+                                ofdb_kv::SyncConfig {
+                                    max_frame_bytes: MAX_SYNC_FRAME_BYTES,
+                                    ..ofdb_kv::SyncConfig::default()
+                                },
+                                || check_apply(Arc::clone(&authorize), apply_cancellation.clone()),
+                            )
+                            .await
+                            .map_err(kv_sync_error)
                     },
                 )
                 .await
@@ -462,7 +465,7 @@ fn descriptor(resource: &SelectedResource) -> DatabaseResourceDescriptor {
     }
 }
 
-struct AuthorizedTransport<T = IrohTransport> {
+struct AuthorizedTransport<T = DatabaseTransport> {
     transport: T,
     authorize: FrameAuthorizer,
 }
@@ -471,7 +474,7 @@ struct KvAuthorizedTransport<'a> {
     transport: &'a mut AuthorizedTransport,
 }
 
-impl ofdb_kv_sync::SyncTransport for KvAuthorizedTransport<'_> {
+impl ofdb_kv::SyncTransport for KvAuthorizedTransport<'_> {
     type Error = io::Error;
 
     async fn receive(&mut self) -> Result<Vec<u8>, Self::Error> {
@@ -514,6 +517,41 @@ where
             ));
         }
         self.transport.send(frame).await
+    }
+}
+
+async fn check_apply(
+    authorize: FrameAuthorizer,
+    cancellation: CancellationToken,
+) -> Result<(), String> {
+    let permitted = tokio::select! {
+        () = cancellation.cancelled() => return Err("database sync cancelled".into()),
+        permitted = authorize() => permitted,
+    };
+    if cancellation.is_cancelled() {
+        Err("database sync cancelled".into())
+    } else if permitted {
+        Ok(())
+    } else {
+        Err("database sync access revoked before apply".into())
+    }
+}
+
+fn sql_sync_error(error: ofdb_sql::SyncError<io::Error>) -> io::Error {
+    match error {
+        ofdb_sql::SyncError::PreApply(detail) => {
+            io::Error::new(io::ErrorKind::PermissionDenied, detail)
+        }
+        error => io::Error::other(error),
+    }
+}
+
+fn kv_sync_error(error: ofdb_kv::SyncError<io::Error>) -> io::Error {
+    match error {
+        ofdb_kv::SyncError::PreApply(detail) => {
+            io::Error::new(io::ErrorKind::PermissionDenied, detail)
+        }
+        error => io::Error::other(format!("database KV sync failed: {error:?}")),
     }
 }
 
