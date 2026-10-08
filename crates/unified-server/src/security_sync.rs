@@ -30,6 +30,9 @@ use serde::{Deserialize, Serialize};
 use storage_server::{DataProtocolHandler, DatabaseTransport};
 use tokio_util::sync::CancellationToken;
 
+#[path = "security_candidates.rs"]
+mod candidates;
+
 #[cfg(test)]
 #[path = "security_outbound_tests.rs"]
 mod outbound_tests;
@@ -400,6 +403,41 @@ impl SecurityProtocol {
                 PUBLIC_POLICY_TABLES.to_vec(),
             ),
         };
+        let mut bindings = Vec::new();
+        if context == SecurityContext::Idp {
+            let local = self.local_handshake(context).await?;
+            for (member, endpoint) in [
+                (local.member, self.server.endpoint().id().to_string()),
+                (member, connection.remote_id().to_string()),
+            ] {
+                let device = DbDeviceRepo::new(self.idp.clone())
+                    .find_approved_by_public_key(&endpoint)
+                    .await
+                    .map_err(denied)?
+                    .ok_or_else(|| denied("missing current session Device binding"))?;
+                if device.id != member {
+                    return Err(denied("session Device and member differ"));
+                }
+                let owner: Id = device
+                    .owner_subject
+                    .parse()
+                    .map_err(|_| denied("invalid session owner"))?;
+                if owner.is_nil()
+                    || DbUserRepo::new(self.idp.clone(), PasswordConfig::default())
+                        .find_user_by_id(owner)
+                        .await
+                        .map_err(denied)?
+                        .is_none()
+                {
+                    return Err(denied("missing current session owner"));
+                }
+                bindings.push(candidates::PeerBinding {
+                    member,
+                    endpoint,
+                    owner,
+                });
+            }
+        }
         let mut transport = AuthorizedSecurityTransport {
             transport,
             protocol: self,
@@ -408,13 +446,46 @@ impl SecurityProtocol {
             context,
         };
         database
-            .synchronize_tables_with_stage_directory_validated_checked(
+            .synchronize_tables_with_stage_directory_candidate_validated_checked(
                 &mut transport,
                 &SessionConfig::default(),
                 role,
                 directory,
                 &tables,
-                |table, column, value| context.validate_value(table, column, value),
+                |table, column, value| {
+                    context.validate_value(table, column, value)?;
+                    if context == SecurityContext::Idp
+                        && !candidates::permits_installation(
+                            table,
+                            column,
+                            value,
+                            &self.installation,
+                        )
+                    {
+                        return Err("invalid public security historical value".into());
+                    }
+                    Ok(())
+                },
+                |view| match context {
+                    SecurityContext::Idp => {
+                        candidates::validate(view, &self.installation, &bindings)
+                    }
+                    SecurityContext::Management => {
+                        for table in &view.tables {
+                            let columns = management_service::public_policy_columns(&table.name)
+                                .ok_or_else(|| "invalid public policy candidate".to_string())?;
+                            if table.columns.len() != columns.len()
+                                || table
+                                    .columns
+                                    .iter()
+                                    .any(|column| !columns.contains(&column.as_str()))
+                            {
+                                return Err("invalid public policy candidate".into());
+                            }
+                        }
+                        Ok(())
+                    }
+                },
                 || async {
                     log::debug!("checking scoped security apply: {context:?} {role:?}");
                     self.authorize(connection, member, context)

@@ -33,6 +33,9 @@ use crate::{
     security_sync_tests::{enroll, sql},
 };
 
+#[path = "security_candidate_tests.rs"]
+mod candidate_tests;
+
 const INSTALLATION: &str = "https://installation.example";
 
 fn public_jwk(kid: &str) -> String {
@@ -54,6 +57,8 @@ struct RecoveryAttack {
     root: PathBuf,
     row: Id,
     variant: Poison,
+    semantic: Option<(String, String)>,
+    before_payload: bool,
     on_send: bool,
     fired: Arc<AtomicBool>,
 }
@@ -63,13 +68,33 @@ impl RecoveryAttack {
         if sending != self.on_send {
             return frame;
         }
+        if self.before_payload {
+            if matches!(
+                postcard::from_bytes::<SyncMessage>(&frame),
+                Ok(SyncMessage::State(_) | SyncMessage::Changes(_))
+            ) && !self.fired.swap(true, Ordering::SeqCst)
+            {
+                sql(
+                    &self.source,
+                    &self.semantic.as_ref().expect("payload SQL gate").1,
+                )
+                .await;
+            }
+            return frame;
+        }
         let Ok(SyncMessage::RequestSnapshots(mut requests)) = postcard::from_bytes(&frame) else {
             return frame;
         };
         if !self.fired.swap(true, Ordering::SeqCst) {
-            poison_history(&self.source, &self.root, self.row, self.variant).await;
+            let table = if let Some((table, statement)) = &self.semantic {
+                sql(&self.source, statement).await;
+                table.as_str()
+            } else {
+                poison_history(&self.source, &self.root, self.row, self.variant).await;
+                "keys"
+            };
             let SyncMessage::RequestSnapshots(additional) = serde_json::from_value(
-                serde_json::json!({"RequestSnapshots": [{"table": "keys", "row": self.row}]}),
+                serde_json::json!({"RequestSnapshots": [{"table": table, "row": self.row}]}),
             )
             .expect("public recovery request message") else {
                 panic!("fixture constructs a recovery request");
@@ -725,7 +750,7 @@ async fn marker3_revalidates_late_private_history_in_recovery_on_both_roles() {
                     let before = sql(&recipient, "SELECT * FROM keys").await[0].rows.clone();
                     let fired = Arc::new(AtomicBool::new(false));
                     pair.recovery = Some(RecoveryAttack {
-                        source: source.clone(), root: pair.root.clone(), row: pair.row, variant,
+                        source: source.clone(), root: pair.root.clone(), row: pair.row, variant, semantic: None, before_payload: false,
                         on_send: outgoing, fired: fired.clone(),
                     });
                     pair.serve(matches!(role, SyncRole::Responder));
