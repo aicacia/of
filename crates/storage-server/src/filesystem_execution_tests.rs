@@ -1,0 +1,344 @@
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
+
+use file_system::{
+    FileHandle, FileOperation, FileSessionService, FileSystem, OpenRequest, OperationControl,
+    RemoteOperation, SyncMessage, Transport,
+};
+use idp_model::model::Id;
+use iroh::EndpointId;
+use model::contract::SelectedResource;
+use storage_model::StorageNamespace;
+use storage_service::ScopedFileSystemRuntime;
+
+use super::{FILESYSTEM_STREAM_KIND, FrameAuthorizer, IrohFileTransport, IrohResourceDescriptor};
+use crate::execution_test_support::{DomainNode, Gate, IrohPair, TestDirectory, approved_signers};
+
+struct Scope {
+    owner: String,
+    application: Id,
+}
+impl StorageNamespace for Scope {
+    fn user_sub(&self) -> &str {
+        &self.owner
+    }
+    fn application_id(&self) -> Id {
+        self.application
+    }
+}
+struct Fixture {
+    peers: IrohPair,
+    nodes: [DomainNode; 2],
+    files: [Arc<FileSystem<EndpointId>>; 2],
+    resource: SelectedResource,
+    _directory: TestDirectory,
+}
+#[derive(Clone, Copy)]
+enum Hook {
+    Import,
+    Publish,
+    Write,
+}
+impl Fixture {
+    async fn new() -> Self {
+        let directory = TestDirectory::new();
+        let peers = IrohPair::new().await;
+        let owner = Id::now_v7();
+        let devices = [Id::now_v7(), Id::now_v7()];
+        let signers = approved_signers(devices);
+        let nodes = [
+            DomainNode::new(
+                directory.0.join("left"),
+                owner,
+                devices,
+                peers.ids(),
+                &signers,
+            )
+            .await,
+            DomainNode::new(
+                directory.0.join("right"),
+                owner,
+                devices,
+                peers.ids(),
+                &signers,
+            )
+            .await,
+        ];
+        let scope = Scope {
+            owner: owner.to_string(),
+            application: Id::now_v7(),
+        };
+        let left = ScopedFileSystemRuntime::new(nodes[0].root.join("storage"), peers.ids()[0])
+            .expect("left Storage");
+        let right = ScopedFileSystemRuntime::new(nodes[1].root.join("storage"), peers.ids()[1])
+            .expect("right Storage");
+        let catalog = left
+            .create_resource(&scope, None)
+            .await
+            .expect("real filesystem resource");
+        right
+            .register_selected_resource(&scope, catalog.id)
+            .await
+            .expect("selected local resource projection");
+        let files = [
+            left.open_resource(&scope, catalog.id)
+                .await
+                .expect("left filesystem"),
+            right
+                .open_resource(&scope, catalog.id)
+                .await
+                .expect("right filesystem"),
+        ];
+        let resource = SelectedResource {
+            owner_subject: scope.owner,
+            application_id: scope.application.to_string(),
+            kind: "filesystem".into(),
+            resource_id: catalog.id.as_uuid().to_string(),
+        };
+        for node in &nodes {
+            node.select(&resource).await;
+        }
+        Self {
+            peers,
+            nodes,
+            files,
+            resource,
+            _directory: directory,
+        }
+    }
+    fn descriptor(&self) -> IrohResourceDescriptor {
+        IrohResourceDescriptor {
+            owner_subject: self.resource.owner_subject.clone(),
+            application_id: self.resource.application_id.clone(),
+            filesystem_id: self.resource.resource_id.clone(),
+        }
+    }
+    fn authorize(&self, side: usize) -> FrameAuthorizer {
+        let authorizer = self.nodes[side].authorizer();
+        let resource = self.resource.clone();
+        let local = self.peers.ids()[side];
+        let remote = self.peers.connections[side].remote_id();
+        Arc::new(move || {
+            let authorizer = authorizer.clone();
+            let resource = resource.clone();
+            Box::pin(async move { authorizer.authorize(local, remote, &resource).await })
+        })
+    }
+    fn control(
+        &self,
+        side: usize,
+        gate: Option<(Gate, Hook, bool)>,
+    ) -> OperationControl<EndpointId> {
+        let authorize = self.authorize(side);
+        let remote = self.peers.connections[side].remote_id();
+        let first = Arc::new(AtomicBool::new(true));
+        OperationControl::new(move |peer, operation| {
+            let authorize = authorize.clone();
+            let gate = gate.clone();
+            let first = first.clone();
+            Box::pin(async move {
+                if peer != remote {
+                    return false;
+                }
+                if let Some((gate, hook, admitted)) = gate {
+                    let matches = matches!(
+                        (hook, operation),
+                        (Hook::Import, RemoteOperation::ImportSnapshots)
+                            | (Hook::Publish, RemoteOperation::PublishContent { .. })
+                            | (
+                                Hook::Write,
+                                RemoteOperation::Session {
+                                    operation: FileOperation::Write { .. },
+                                    ..
+                                }
+                            )
+                    );
+                    if matches && first.swap(false, Ordering::SeqCst) {
+                        if admitted {
+                            let allowed = authorize().await;
+                            assert!(
+                                allowed,
+                                "operation authorized by genuine current local domain state"
+                            );
+                            gate.pause().await;
+                            return allowed;
+                        }
+                        gate.pause().await;
+                    }
+                }
+                authorize().await
+            })
+        })
+    }
+    async fn transports(&self) -> [IrohFileTransport; 2] {
+        let authorize = self.authorize(0);
+        let expected = self.descriptor();
+        let left = IrohFileTransport::open_authorized(
+            &self.peers.connections[0],
+            expected.clone(),
+            move |resource| {
+                let authorize = authorize.clone();
+                let expected = expected.clone();
+                async move { resource == expected && authorize().await }
+            },
+        )
+        .await
+        .expect("selected resource authorized on source Node");
+        let (send, mut recv) = self.peers.connections[1]
+            .accept_bi()
+            .await
+            .expect("same-connection stream");
+        let mut marker = [0];
+        recv.read_exact(&mut marker).await.expect("marker");
+        assert_eq!(marker[0], FILESYSTEM_STREAM_KIND);
+        let authorize = self.authorize(1);
+        let expected = self.descriptor();
+        let (right, resource, deleted) = IrohFileTransport::accept_authorized_after_marker(
+            &self.peers.connections[1],
+            send,
+            recv,
+            move |resource| {
+                let authorize = authorize.clone();
+                let expected = expected.clone();
+                async move { resource == expected && authorize().await }
+            },
+        )
+        .await
+        .expect("selected resource independently authorized on target Node");
+        assert_eq!(resource, self.descriptor());
+        assert!(!deleted);
+        [left, right]
+    }
+}
+
+async fn serve(
+    fixture: &Fixture,
+    transport: IrohFileTransport,
+    control: OperationControl<EndpointId>,
+) -> tokio::task::JoinHandle<Result<(), file_system::Error>> {
+    let filesystem = fixture.files[0].clone();
+    let ready = Arc::new(tokio::sync::Notify::new());
+    let signal = ready.clone();
+    let task = tokio::spawn(async move {
+        let sync = filesystem
+            .metadata_sync(transport)
+            .with_operation_control(control);
+        signal.notify_one();
+        sync.run().await
+    });
+    ready.notified().await;
+    task
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn real_selected_filesystem_denies_fetched_content_publication_then_reconnects() {
+    tokio::time::timeout(Duration::from_secs(300), async {
+        let mut fixture = Fixture::new().await;
+        fixture.files[0].write("remote.txt", b"complete source content").await.expect("source write");
+        let [left, right] = fixture.transports().await;
+        let gate = Gate::default();
+        let left_sync = fixture.files[0].metadata_sync(left.clone()).with_operation_control(fixture.control(0, None));
+        let mut right_sync = fixture.files[1].metadata_sync(right.clone()).with_operation_control(fixture.control(1, Some((gate.clone(), Hook::Publish, false))));
+        let mut delivered = right.subscribe();
+        left_sync.announce().await.expect("authorized metadata");
+        while !matches!(delivered.recv().await.expect("received metadata"), (_, SyncMessage::SnapshotDelta { .. })) {}
+        right_sync.pump().await.expect("authorized metadata apply");
+        fixture.files[1].entry("remote.txt").await.expect("metadata applied before content fetch");
+        drop(left_sync);
+        let task = serve(&fixture, left.clone(), fixture.control(0, None)).await;
+        let mut fetch = Box::pin(right_sync.fetch("remote.txt"));
+        tokio::select! { result = &mut fetch => panic!("content did not reach publication gate: {result:?}"), () = gate.reached() => {} }
+        fixture.nodes[1].restrict(0, false).await;
+        gate.release();
+        assert!(matches!(fetch.await, Err(file_system::Error::PermissionDenied)), "received/staged content cannot authorize its own publication");
+        assert!(fixture.files[1].read("remote.txt").await.is_err(), "denied content was not published");
+        assert_eq!(fixture.files[0].read("remote.txt").await.expect("source retained"), b"complete source content");
+        left.close(); right.close(); task.await.expect("source task joins").expect("source stream released"); drop(right_sync);
+        fixture.nodes[1].restrict(0, true).await;
+        fixture.peers.reconnect().await;
+        let [left, right] = fixture.transports().await;
+        let right_sync = fixture.files[1].metadata_sync(right.clone()).with_operation_control(fixture.control(1, None));
+        let task = serve(&fixture, left.clone(), fixture.control(0, None)).await;
+        right_sync.fetch("remote.txt").await.expect("authorized retry publishes complete content");
+        assert_eq!(fixture.files[1].read("remote.txt").await.expect("retried content"), b"complete source content");
+        fixture.nodes[1].revoke(1).await;
+        assert!(right.open(fixture.peers.ids()[0], OpenRequest { path: "remote.txt".into(), revision: None }).await.is_err(), "learned local Device revocation denies next existing-connection request");
+        left.close(); right.close(); task.await.expect("retry task joins").expect("retry stream released"); drop(right_sync);
+        fixture.peers.close().await;
+    }).await.expect("content domain acceptance completes");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn real_selected_filesystem_admitted_write_finishes_next_write_denies_and_retry_succeeds() {
+    tokio::time::timeout(Duration::from_secs(300), async {
+        let fixture = Fixture::new().await;
+        fixture.files[0].write("shared.txt", b"before").await.expect("source content");
+        let [left, right] = fixture.transports().await;
+        let gate = Gate::default();
+        let task = serve(&fixture, left.clone(), fixture.control(0, Some((gate.clone(), Hook::Write, true)))).await;
+        let mut handle = Box::new(right.open(fixture.peers.ids()[0], OpenRequest { path: "shared.txt".into(), revision: None }).await.expect("authorized established file handle"));
+        let mut write = Box::pin(handle.write(0, bytes::Bytes::from_static(b"after!")));
+        tokio::select! { result = &mut write => panic!("write did not reach admitted operation gate: {result:?}"), () = gate.reached() => {} }
+        fixture.nodes[0].restrict(1, false).await;
+        gate.release();
+        assert!(write.await.is_err(), "a separately denied outbound response must not disclose after restriction");
+        assert_eq!(fixture.files[0].read("shared.txt").await.expect("admitted write completed"), b"after!");
+        assert!(handle.write(0, bytes::Bytes::from_static(b"denied")).await.is_err(), "next request on existing handle denies");
+        assert_eq!(fixture.files[0].read("shared.txt").await.expect("next write absent"), b"after!");
+        left.close(); right.close(); task.await.expect("source task joins").expect("source stream released"); drop(handle);
+        fixture.nodes[0].restrict(1, true).await;
+        let [left, right] = fixture.transports().await;
+        let task = serve(&fixture, left.clone(), fixture.control(0, None)).await;
+        let mut handle = Box::new(right.open(fixture.peers.ids()[0], OpenRequest { path: "shared.txt".into(), revision: None }).await.expect("fresh stream on same authenticated connection"));
+        handle.write(0, bytes::Bytes::from_static(b"retry!")).await.expect("authorized retry write");
+        assert_eq!(fixture.files[0].read("shared.txt").await.expect("retry content"), b"retry!");
+        fixture.nodes[0].revoke(1).await;
+        assert!(handle.write(0, bytes::Bytes::from_static(b"forged")).await.is_err(), "receiver's learned IdP revocation stops subsequent mutation");
+        assert_eq!(fixture.files[0].read("shared.txt").await.expect("revocation preserves content"), b"retry!");
+        left.close(); right.close(); task.await.expect("retry task joins").expect("retry stream released"); drop(handle);
+        fixture.peers.close().await;
+    }).await.expect("admitted filesystem operation acceptance completes");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn real_selected_filesystem_denies_received_metadata_then_reconciles_on_existing_connection()
+{
+    tokio::time::timeout(Duration::from_secs(300), async {
+        for device in 0..2 {
+            let fixture = Fixture::new().await;
+            fixture.files[0].write("remote.txt", b"source remains intact").await.expect("source content");
+            fixture.files[1].write("local.txt", b"local remains intact").await.expect("local content");
+            let [left, right] = fixture.transports().await;
+            let gate = Gate::default();
+            let left_sync = fixture.files[0].metadata_sync(left.clone()).with_operation_control(fixture.control(0, None));
+            let mut right_sync = fixture.files[1].metadata_sync(right.clone()).with_operation_control(fixture.control(1, Some((gate.clone(), Hook::Import, false))));
+            let mut delivered = right.subscribe();
+            left_sync.announce().await.expect("authenticated source metadata");
+            while !matches!(delivered.recv().await.expect("received metadata"), (_, SyncMessage::SnapshotDelta { .. })) {}
+            let mut pump = Box::pin(right_sync.pump());
+            tokio::select! { result = &mut pump => panic!("metadata execution did not reach gate: {result:?}"), () = gate.reached() => {} }
+            fixture.nodes[1].restrict(device, false).await;
+            gate.release(); pump.await.expect("owner skips denied metadata apply");
+            assert!(fixture.files[1].entry("remote.txt").await.is_err(), "received snapshots were not applied after local denial");
+            assert_eq!(fixture.files[1].read("local.txt").await.expect("local retained"), b"local remains intact");
+            assert_eq!(fixture.files[0].read("remote.txt").await.expect("source retained"), b"source remains intact");
+            left.close(); right.close(); drop(left_sync); drop(right_sync);
+            fixture.nodes[1].restrict(device, true).await;
+            let [left, right] = fixture.transports().await;
+            let left_sync = fixture.files[0].metadata_sync(left.clone()).with_operation_control(fixture.control(0, None));
+            let mut right_sync = fixture.files[1].metadata_sync(right.clone()).with_operation_control(fixture.control(1, None));
+            let mut delivered = right.subscribe();
+            left_sync.announce().await.expect("allowed reconnect metadata");
+            while !matches!(delivered.recv().await.expect("retry metadata"), (_, SyncMessage::SnapshotDelta { .. })) {}
+            right_sync.pump().await.expect("allowed apply");
+            fixture.files[1].entry("remote.txt").await.expect("metadata retry reconciles");
+            left.close(); right.close(); drop(left_sync); drop(right_sync);
+            fixture.peers.close().await;
+        }
+    }).await.expect("metadata domain acceptance completes");
+}

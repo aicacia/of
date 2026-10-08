@@ -17,7 +17,6 @@ async fn native_approved_unselected_devices_have_no_resource_access() {
 }
 
 #[tokio::test]
-#[ignore = "blocked: public SQL rejects Management's stable UUIDv5 selection keys; run explicitly for owner handoff"]
 async fn native_selected_resource_persistence() {
     native_selection_fixture(true).await;
 }

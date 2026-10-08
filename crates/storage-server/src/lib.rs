@@ -9,6 +9,8 @@ mod data_protocol;
 mod database_protocol;
 #[cfg(feature = "network")]
 mod database_transport;
+#[cfg(all(test, feature = "network"))]
+mod execution_test_support;
 #[cfg(feature = "network")]
 mod filesystem_transport;
 mod idp_client;

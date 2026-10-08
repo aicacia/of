@@ -819,6 +819,10 @@ fn service_error(error: FileServiceError) -> Error {
 mod tests;
 
 #[cfg(test)]
+#[path = "filesystem_execution_tests.rs"]
+mod domain_execution_tests;
+
+#[cfg(test)]
 #[path = "execution_authorization_tests.rs"]
 mod execution_authorization_tests;
 

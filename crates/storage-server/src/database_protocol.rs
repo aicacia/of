@@ -429,5 +429,9 @@ impl StorageNamespace for Namespace {
 }
 
 #[cfg(test)]
+#[path = "database_execution_tests.rs"]
+mod execution_tests;
+
+#[cfg(test)]
 #[path = "database_protocol_tests.rs"]
 mod tests;
