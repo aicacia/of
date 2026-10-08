@@ -95,6 +95,65 @@ Conflict names, every concurrent value and explicit resolution use the owner Cli
 
 Repository history fixtures use public sync sessions over trusted test-only channels; the Unified security integration additionally uses real authenticated Iroh streams and the production shared DATA dispatcher. No production mixed-engine export is introduced. IdP tests retain fail-closed conflict decisions, administrator resolution/audit and revoked-grant non-resurrection. Public native tests retain code/refresh replay denial, offline signer issuance, key verification without private material, local permission restart and wrong-actor/action/namespace denial. Schema/projection tests use public SQL query metadata, not backend schema inspection. Their UUID literals now satisfy the owner's UUIDv7 contract; production deterministic IDs are unchanged.
 
+## Joining from empty local owner stores
+
+A purpose-specific equal-Node enrollment receipt binds the Installation, Device/member,
+endpoint, independent public signer and approving User to a pinned approving peer.
+`OwnerProvisioner::record_node_join_approval` persists that receipt, not public owner
+state, context-export permission or local readiness. The independent private signer
+remains in the local secure-store adapter. Replaying the receipt must not activate trust,
+create grants or override a learned revocation.
+
+The existing `SecurityProtocol::synchronize` is an **already-trusted peer** session, not
+initial bootstrap. Before opening a history stream it requires local signer/member
+trust; subsequent admission requires authenticated remote membership, its exact approved
+Device, an active conflict-clear User owner, and the relevant locally evaluated
+`IdpSecuritySync` or `ManagementSecuritySync` permission. A fresh joining database has
+none of this public baseline. Enrollment on the approving Node does not establish it
+on the joining Node. The registered bootstrap ALPN currently denies every request.
+
+Consequently, initial authorized public bootstrap is not implemented. The native
+`node_join_receipt_cannot_bootstrap_context_trust_even_after_native_reopen` regression
+uses real User authentication/token exchange, authorized pairing, separate native
+stores, independent local signer preparation and an authenticated DATA connection.
+Even with explicit context grants at the source, both joining-side context attempts
+fail at local signer/member trust before staging. No User, Device or policy rows are
+imported. Offline native reopen retains the same receipt/request and local signer
+material but remains incomplete. Its keyring is an injected test store, not an OS-keyring
+or GUI/process-restart qualification.
+
+### Concrete bootstrap handoff
+
+- **Domain admission (of04 with of03):** provide explicit, purpose-bound authorization
+  for initial IdP and Management public histories from the pinned, currently trusted
+  approving endpoint to the exact enrolled joining endpoint/Device/member/signer.
+  Evaluate current active owner and exact context grants at the source; enrollment
+  approval alone is insufficient. The joining-side decision must verify these bindings
+  without requiring the public baseline it is about to receive. Do not weaken ordinary
+  marker-3 admission or treat pairing/receipt possession as general access.
+- **Existing generic owner limitation (ofdb, coordinated through of03):** the scoped
+  validated/checked native session exists and should remain the history/staging path.
+  Its validator receives only `(table, column, value)` and its async execution check
+  receives no candidate data and guards incoming applies only. It cannot expose a
+  correlated candidate Device/member/signer/owner binding to domain authorization,
+  nor perform async current-policy checks at subsequent outbound disclosures. These
+  are the precise observation/execution gaps already tracked by of03, not a missing
+  SQL sync facade. Coordinate public owner capability/evidence for those operations;
+  no consumer trait or speculative method signature is prescribed here. The admission
+  cycle itself is a domain problem, not proof that a new generic bootstrap API is
+  intrinsically required.
+- **Readiness (of04):** only after both contexts have durably imported validated full
+  public histories and owner checks establish local trust, policy and independent
+  signing capability may completion be persisted. Verify partial-apply failures,
+  stable retries, learned revocation non-resurrection and offline issuance/reopen at
+  this actual import seam. Current receipt/denial tests do not satisfy this acceptance.
+
+Whole-database export, unchecked apply, source database copying, projected LWW baseline
+inserts, receipt-derived grants and parallel staging are not bootstrap substitutes.
+Private/local credential tables remain excluded; complete public history, tombstones
+and conflicts stay owner-managed. Storage/resource access is a separate authorization
+boundary, not granted by successful public context bootstrap.
+
 ## Remaining integration and qualification gaps
 
 The previous incremental hash mismatch is repaired by original ofdb `25b9251`, which produces precise deltas and preserves causal order; see owner `docs/storage-sync-incremental-identity.md`. The unchanged active Management conflict/resolution/native-reopen regression passed five consecutive original-source runs after the repair. No integrity check was weakened and no fallback or ignored test concealed the finding.
