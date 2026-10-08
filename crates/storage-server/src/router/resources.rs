@@ -137,7 +137,11 @@ async fn authorization(
 
 fn namespace(
     authorization: StorageAuthorization,
+    resource: &str,
 ) -> Result<(StorageNamespace, bool, bool), StatusCode> {
+    if authorization.resource != resource {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
     let application_id = authorization
         .application_id
         .parse::<Id>()
@@ -169,7 +173,8 @@ pub(super) async fn create_database(
     headers: HeaderMap,
     Json(request): Json<CreateResourceRequest>,
 ) -> Result<(StatusCode, Json<DatabaseResource>), StatusCode> {
-    let (scope, _, can_write) = namespace(authorization(&state, &headers).await?)?;
+    let (scope, _, can_write) =
+        namespace(authorization(&state, &headers).await?, "storage:databases")?;
     if !can_write {
         return Err(StatusCode::FORBIDDEN);
     }
@@ -196,7 +201,8 @@ pub(super) async fn list_databases(
     State(state): State<ResourceState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<DatabaseResource>>, StatusCode> {
-    let (scope, can_read, _) = namespace(authorization(&state, &headers).await?)?;
+    let (scope, can_read, _) =
+        namespace(authorization(&state, &headers).await?, "storage:databases")?;
     if !can_read {
         return Err(StatusCode::FORBIDDEN);
     }
@@ -226,7 +232,8 @@ pub(super) async fn get_database(
     headers: HeaderMap,
     Path(database_id): Path<DatabaseId>,
 ) -> Result<Json<DatabaseDetailResponse>, StatusCode> {
-    let (scope, can_read, _) = namespace(authorization(&state, &headers).await?)?;
+    let (scope, can_read, _) =
+        namespace(authorization(&state, &headers).await?, "storage:databases")?;
     if !can_read {
         return Err(StatusCode::FORBIDDEN);
     }
@@ -263,7 +270,8 @@ pub(super) async fn delete_database(
     headers: HeaderMap,
     Path(database_id): Path<DatabaseId>,
 ) -> Result<StatusCode, StatusCode> {
-    let (scope, _, can_write) = namespace(authorization(&state, &headers).await?)?;
+    let (scope, _, can_write) =
+        namespace(authorization(&state, &headers).await?, "storage:databases")?;
     if !can_write {
         return Err(StatusCode::FORBIDDEN);
     }
@@ -296,7 +304,10 @@ pub(super) async fn create_file_system(
     headers: HeaderMap,
     Json(request): Json<CreateResourceRequest>,
 ) -> Result<(StatusCode, Json<FileSystemResourceResponse>), StatusCode> {
-    let (scope, _, can_write) = namespace(authorization(&state, &headers).await?)?;
+    let (scope, _, can_write) = namespace(
+        authorization(&state, &headers).await?,
+        "storage:filesystems",
+    )?;
     if !can_write {
         return Err(StatusCode::FORBIDDEN);
     }
@@ -324,7 +335,10 @@ pub(super) async fn list_file_systems(
     State(state): State<ResourceState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<FileSystemResourceResponse>>, StatusCode> {
-    let (scope, can_read, _) = namespace(authorization(&state, &headers).await?)?;
+    let (scope, can_read, _) = namespace(
+        authorization(&state, &headers).await?,
+        "storage:filesystems",
+    )?;
     if !can_read {
         return Err(StatusCode::FORBIDDEN);
     }
@@ -355,7 +369,10 @@ pub(super) async fn get_file_system(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<FileSystemDetailResponse>, StatusCode> {
-    let (scope, can_read, _) = namespace(authorization(&state, &headers).await?)?;
+    let (scope, can_read, _) = namespace(
+        authorization(&state, &headers).await?,
+        "storage:filesystems",
+    )?;
     if !can_read {
         return Err(StatusCode::FORBIDDEN);
     }
@@ -396,7 +413,10 @@ pub(super) async fn delete_file_system(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    let (scope, _, can_write) = namespace(authorization(&state, &headers).await?)?;
+    let (scope, _, can_write) = namespace(
+        authorization(&state, &headers).await?,
+        "storage:filesystems",
+    )?;
     if !can_write {
         return Err(StatusCode::FORBIDDEN);
     }

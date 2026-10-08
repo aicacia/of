@@ -113,9 +113,10 @@ async fn serve_socket<A>(
             Ok(access) if unix_time_seconds() < access.expires_at => access,
             Ok(_) | Err(_) => return,
         };
-        let response = match serde_json::from_str::<StorageRequest>(&message) {
-            Ok(request) if allows(&access, &request) => {
-                access.session.execute_session(request).await
+        let request = serde_json::from_str::<StorageRequest>(&message);
+        let response = match &request {
+            Ok(request) if allows(&access, request) => {
+                access.session.execute_session(request.clone()).await
             }
             Ok(_) => StorageResponse::Error {
                 code: StorageErrorCode::OperationFailed,
@@ -124,6 +125,21 @@ async fn serve_socket<A>(
                 code: StorageErrorCode::InvalidRequest,
             },
         };
+        let current = match authorizer
+            .authorize(token.clone(), resource_id.clone())
+            .await
+        {
+            Ok(current) if unix_time_seconds() < current.expires_at => current,
+            Ok(_) | Err(_) => return,
+        };
+        if !(current.read || current.write)
+            || (!matches!(response, StorageResponse::Error { .. })
+                && !request
+                    .as_ref()
+                    .is_ok_and(|request| allows(&current, request)))
+        {
+            return;
+        }
         if send_response(&mut socket, response).await.is_err() {
             return;
         }

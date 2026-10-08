@@ -107,8 +107,14 @@ env_logger = { version = "0.10", default-features = false, features = [] }
 [dev-dependencies]
 # Local owner services
 idp-db = { path = "../db", default-features = false, features = ["replica"] }
+idp-server = { path = "../idp-server", default-features = false, features = [] }
 idp-service = { path = "../idp-service", default-features = false, features = ["replica"] }
 management-service = { path = "../management-service", default-features = false, features = ["replica"] }
 
+# Key storage adapter
+keyring-core = { version = "1.0", default-features = false, features = [] }
+
 # Web
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "handshake"] }
 tower = { version = "0.5", default-features = false, features = ["util"] }

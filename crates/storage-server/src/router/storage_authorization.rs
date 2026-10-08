@@ -81,6 +81,9 @@ impl StorageSocketAuthorizer for ScopedFileSystemSocketAuthorizer {
                     StorageSocketAuthorizationError::ServiceUnavailable
                 }
             })?;
+        if authorization.resource != "storage:filesystems" {
+            return Err(StorageSocketAuthorizationError::InvalidToken);
+        }
         let application_id = authorization
             .application_id
             .parse::<Id>()
@@ -159,6 +162,10 @@ fn storage_authorization(
         can_write,
     })
 }
+
+#[cfg(all(test, feature = "network"))]
+#[path = "api_execution_tests.rs"]
+mod api_execution_tests;
 
 #[cfg(test)]
 mod tests {
