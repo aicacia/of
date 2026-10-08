@@ -1,7 +1,10 @@
 use std::{
     io,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 
@@ -45,14 +48,52 @@ enum Poison {
     LosingConflict,
 }
 
+#[derive(Clone)]
+struct RecoveryAttack {
+    source: Arc<Database>,
+    root: PathBuf,
+    row: Id,
+    variant: Poison,
+    on_send: bool,
+    fired: Arc<AtomicBool>,
+}
+
+impl RecoveryAttack {
+    async fn alter(&self, frame: Vec<u8>, sending: bool) -> Vec<u8> {
+        if sending != self.on_send {
+            return frame;
+        }
+        let Ok(SyncMessage::RequestSnapshots(mut requests)) = postcard::from_bytes(&frame) else {
+            return frame;
+        };
+        if !self.fired.swap(true, Ordering::SeqCst) {
+            poison_history(&self.source, &self.root, self.row, self.variant).await;
+            let SyncMessage::RequestSnapshots(additional) = serde_json::from_value(
+                serde_json::json!({"RequestSnapshots": [{"table": "keys", "row": self.row}]}),
+            )
+            .expect("public recovery request message") else {
+                panic!("fixture constructs a recovery request");
+            };
+            requests.extend(additional);
+        }
+        postcard::to_allocvec(&SyncMessage::RequestSnapshots(requests))
+            .expect("public recovery request")
+    }
+}
+
 struct RecordedTransport {
     inner: DatabaseTransport,
     received: Arc<Mutex<Vec<Vec<u8>>>>,
+    recovery: Option<RecoveryAttack>,
 }
 
 impl SyncTransport for RecordedTransport {
     type Error = io::Error;
     async fn send(&mut self, frame: Vec<u8>) -> io::Result<()> {
+        let frame = match &self.recovery {
+            Some(attack) => attack.alter(frame, true).await,
+            None => frame,
+        };
         self.inner.send(frame).await
     }
     async fn receive(&mut self) -> io::Result<Vec<u8>> {
@@ -61,7 +102,10 @@ impl SyncTransport for RecordedTransport {
             .lock()
             .expect("wire recorder lock")
             .push(frame.clone());
-        Ok(frame)
+        Ok(match &self.recovery {
+            Some(attack) => attack.alter(frame, false).await,
+            None => frame,
+        })
     }
 }
 
@@ -80,10 +124,15 @@ struct Pair {
     cancellation: CancellationToken,
     router: Option<Router>,
     received: Arc<Mutex<Vec<Vec<u8>>>>,
+    recovery: Option<RecoveryAttack>,
 }
 
 impl Pair {
     async fn new() -> Self {
+        Self::with_jwk_default(None).await
+    }
+
+    async fn with_jwk_default(default: Option<&str>) -> Self {
         let root = std::env::temp_dir().join(format!("of-history-value-{}", Id::now_v7()));
         std::fs::create_dir_all(&root).expect("create native history fixture");
         let lookup = MemoryLookup::new();
@@ -117,6 +166,15 @@ impl Pair {
             let idp = Arc::new(
                 Database::open(root.join("baseline-idp.redb")).expect("open public baseline"),
             );
+            if let Some(default) = default {
+                let migration =
+                    include_str!("../../idp-model/replica_migrations/20241117224814_init.up.sql")
+                        .replace(
+                            "public_jwk TEXT\n",
+                            &format!("public_jwk TEXT DEFAULT '{default}'\n"),
+                        );
+                sql(&idp, &migration).await;
+            }
             idp_model::replica::up(&idp)
                 .await
                 .expect("declare secret-free schema");
@@ -241,6 +299,7 @@ impl Pair {
             cancellation,
             router: None,
             received: Arc::new(Mutex::new(Vec::new())),
+            recovery: None,
         }
     }
 
@@ -252,11 +311,13 @@ impl Pair {
             let database = self.idp_b.clone();
             let member = self.member_b;
             let received = self.received.clone();
+            let recovery = self.recovery.clone();
             let expected_endpoint = self.a.endpoint().id();
             let expected_member = self.member_a;
             handler.with_additional_stream(move |kind, connection, send, recv| {
                 let database = database.clone();
                 let received = received.clone();
+                let recovery = recovery.clone();
                 async move {
                     assert_eq!(kind, 3, "actual security marker on shared DATA router");
                     assert_eq!(connection.remote_id(), expected_endpoint, "real authenticated endpoint");
@@ -264,7 +325,7 @@ impl Pair {
                     let handshake: serde_json::Value = serde_json::from_slice(&inner.receive().await?).map_err(io::Error::other)?;
                     assert_eq!(handshake["member"], serde_json::json!(expected_member));
                     inner.send(serde_json::to_vec(&serde_json::json!({"Accepted": {"version": 1, "installation": INSTALLATION, "member": member, "context": "idp"}})).map_err(io::Error::other)?).await?;
-                    let mut transport = RecordedTransport { inner, received };
+                    let mut transport = RecordedTransport { inner, received, recovery };
                     let tables = public_security_tables().into_iter().map(|table| table.name()).collect::<Vec<_>>();
                     // A deliberately unvalidated peer proves that the production sender prevents disclosure itself.
                     database.synchronize_tables_checked(&mut transport, &SessionConfig::default(), SyncRole::Responder, &tables, || async { Ok(()) }).await.map(|_| ()).map_err(|error| io::Error::other(error.to_string()))
@@ -286,81 +347,7 @@ impl Pair {
     }
 
     async fn poison(&self, database: &Database, variant: Poison) {
-        let mut private: serde_json::Value =
-            serde_json::from_str(&public_jwk("poison")).expect("fixture JWK");
-        private["d"] = serde_json::json!("must-never-leave-this-node");
-        sql(
-            database,
-            &format!(
-                "UPDATE keys SET public_jwk = '{}' WHERE id = CAST('{}' AS UUID)",
-                private, self.row
-            ),
-        )
-        .await;
-        match variant {
-            Poison::Current => {}
-            Poison::Overwritten => {
-                sql(
-                    database,
-                    &format!(
-                        "UPDATE keys SET public_jwk = '{}' WHERE id = CAST('{}' AS UUID)",
-                        public_jwk("replaced"),
-                        self.row
-                    ),
-                )
-                .await;
-            }
-            Poison::Deleted => {
-                sql(
-                    database,
-                    &format!("DELETE FROM keys WHERE id = CAST('{}' AS UUID)", self.row),
-                )
-                .await;
-            }
-            Poison::LosingConflict => {
-                let fork = Database::open(self.root.join("fork-idp.redb"))
-                    .expect("independent offline fork");
-                for revision in 0..10 {
-                    sql(&fork, &format!("UPDATE keys SET name = 'approved revision {revision}' WHERE id = CAST('{}' AS UUID)", self.row)).await;
-                }
-                let approved = public_jwk("approved-fork");
-                sql(
-                    &fork,
-                    &format!(
-                        "UPDATE keys SET public_jwk = '{approved}' WHERE id = CAST('{}' AS UUID)",
-                        self.row
-                    ),
-                )
-                .await;
-                sync_fixture(database, &fork).await;
-                let conflicts = database
-                    .client()
-                    .row_conflict_values("keys", &Row::new(vec![Value::Uuid(self.row)]))
-                    .await
-                    .expect("public conflict values");
-                assert!(
-                    conflicts
-                        .iter()
-                        .any(|(column, values)| column == "public_jwk"
-                            && values.contains(&Value::Text(private.to_string()))),
-                    "fixture retains private losing value"
-                );
-                assert_eq!(
-                    sql(
-                        database,
-                        &format!(
-                            "SELECT public_jwk FROM keys WHERE id = CAST('{}' AS UUID)",
-                            self.row
-                        )
-                    )
-                    .await[0]
-                        .rows[0]
-                        .values,
-                    vec![Value::Text(approved)],
-                    "private JWK is not the visible winner"
-                );
-            }
-        }
+        poison_history(database, &self.root, self.row, variant).await;
     }
 
     async fn close(mut self) {
@@ -373,6 +360,84 @@ impl Pair {
         let root = self.root.clone();
         drop(self);
         std::fs::remove_dir_all(root).expect("remove native history fixture");
+    }
+}
+
+async fn poison_history(database: &Database, root: &std::path::Path, row: Id, variant: Poison) {
+    let mut private: serde_json::Value =
+        serde_json::from_str(&public_jwk("poison")).expect("fixture JWK");
+    private["d"] = serde_json::json!("must-never-leave-this-node");
+    sql(
+        database,
+        &format!(
+            "UPDATE keys SET public_jwk = '{}' WHERE id = CAST('{}' AS UUID)",
+            private, row
+        ),
+    )
+    .await;
+    match variant {
+        Poison::Current => {}
+        Poison::Overwritten => {
+            sql(
+                database,
+                &format!(
+                    "UPDATE keys SET public_jwk = '{}' WHERE id = CAST('{}' AS UUID)",
+                    public_jwk("replaced"),
+                    row
+                ),
+            )
+            .await;
+        }
+        Poison::Deleted => {
+            sql(
+                database,
+                &format!("DELETE FROM keys WHERE id = CAST('{}' AS UUID)", row),
+            )
+            .await;
+        }
+        Poison::LosingConflict => {
+            let fork =
+                Database::open(root.join("fork-idp.redb")).expect("independent offline fork");
+            for revision in 0..10 {
+                sql(&fork, &format!("UPDATE keys SET name = 'approved revision {revision}' WHERE id = CAST('{}' AS UUID)", row)).await;
+            }
+            let approved = public_jwk("approved-fork");
+            sql(
+                &fork,
+                &format!(
+                    "UPDATE keys SET public_jwk = '{approved}' WHERE id = CAST('{}' AS UUID)",
+                    row
+                ),
+            )
+            .await;
+            sync_fixture(database, &fork).await;
+            let conflicts = database
+                .client()
+                .row_conflict_values("keys", &Row::new(vec![Value::Uuid(row)]))
+                .await
+                .expect("public conflict values");
+            assert!(
+                conflicts
+                    .iter()
+                    .any(|(column, values)| column == "public_jwk"
+                        && values.contains(&Value::Text(private.to_string()))),
+                "fixture retains private losing value"
+            );
+            assert_eq!(
+                sql(
+                    database,
+                    &format!(
+                        "SELECT public_jwk FROM keys WHERE id = CAST('{}' AS UUID)",
+                        row
+                    )
+                )
+                .await[0]
+                    .rows[0]
+                    .values,
+                vec![Value::Text(approved)],
+                "private JWK is not the visible winner"
+            );
+        }
     }
 }
 
@@ -439,6 +504,7 @@ async fn unvalidated_initiate(
     let mut transport = RecordedTransport {
         inner,
         received: pair.received.clone(),
+        recovery: pair.recovery.clone(),
     };
     let tables = public_security_tables()
         .into_iter()
@@ -576,19 +642,146 @@ async fn marker3_rejects_unvalidated_incoming_private_jwk_history_before_apply()
 
 #[tokio::test]
 async fn marker3_rejects_private_jwk_in_an_unvalidated_full_state() {
+    tokio::time::timeout(Duration::from_secs(480), async {
+        for outgoing in [true, false] {
+            for role in [SyncRole::Initiator, SyncRole::Responder] {
+                for variant in [Poison::Current, Poison::Overwritten, Poison::Deleted, Poison::LosingConflict] {
+                    let mut pair = Pair::new().await;
+                    let source_is_a = outgoing == matches!(role, SyncRole::Initiator);
+                    let (source, recipient) = if source_is_a {
+                        (pair.idp_a.clone(), pair.idp_b.clone())
+                    } else {
+                        (pair.idp_b.clone(), pair.idp_a.clone())
+                    };
+                    pair.row = Id::now_v7();
+                    sql(&source, &format!("INSERT INTO keys (id, derivation_index, public_jwk) VALUES (CAST('{}' AS UUID), 1, '{}')", pair.row, public_jwk("unseen-key"))).await;
+                    if matches!(variant, Poison::LosingConflict) {
+                        let fork = Database::open(pair.root.join("fork-idp.redb")).expect("unseen row's independent fork");
+                        sync_fixture(&source, &fork).await;
+                    }
+                    pair.poison(&source, variant).await;
+                    let before = sql(&recipient, "SELECT * FROM keys").await[0].rows.clone();
+                    pair.serve(matches!(role, SyncRole::Responder));
+                    let connection = pair.connect().await;
+                    let error = match role {
+                        SyncRole::Initiator => pair.protocol_a.synchronize(&connection, SecurityContext::Idp).await,
+                        SyncRole::Responder => unvalidated_initiate(&pair, &connection).await,
+                    }.expect_err("unseen row's full history must reject");
+                    if matches!(role, SyncRole::Initiator) {
+                        assert!(error.to_string().contains("invalid public security historical value"), "domain denial, not incidental integrity failure: {error}");
+                    }
+                    assert!(!error.to_string().contains("must-never-leave-this-node"));
+                    assert_eq!(sql(&recipient, "SELECT * FROM keys").await[0].rows, before);
+                    if outgoing { assert_no_history_disclosure(&pair, variant, role); }
+                    drop((source, recipient));
+                    pair.close().await;
+                }
+            }
+        }
+    }).await.expect("bounded authenticated full-state matrix");
+}
+
+#[tokio::test]
+async fn marker3_rejects_private_jwk_schema_defaults_before_disclosure() {
     tokio::time::timeout(Duration::from_secs(120), async {
-        let mut pair = Pair::new().await;
-        let row = Id::now_v7();
-        let mut private: serde_json::Value = serde_json::from_str(&public_jwk("unseen-key")).expect("fixture JWK");
+        let mut private: serde_json::Value =
+            serde_json::from_str(&public_jwk("default-key")).expect("fixture JWK");
         private["d"] = serde_json::json!("must-never-leave-this-node");
-        sql(&pair.idp_a, &format!("INSERT INTO keys (id, derivation_index, public_jwk) VALUES (CAST('{row}' AS UUID), 1, '{private}')")).await;
-        let before = sql(&pair.idp_b, "SELECT * FROM keys").await[0].rows.clone();
-        pair.serve(true);
-        let connection = pair.connect().await;
-        unvalidated_initiate(&pair, &connection).await.expect_err("new unseen row's full state must be guarded before apply");
-        assert_eq!(sql(&pair.idp_b, "SELECT * FROM keys").await[0].rows, before);
-        pair.close().await;
-    }).await.expect("bounded authenticated full-state denial");
+        for role in [SyncRole::Initiator, SyncRole::Responder] {
+            let mut pair = Pair::with_jwk_default(Some(&private.to_string())).await;
+            pair.serve(matches!(role, SyncRole::Responder));
+            let connection = pair.connect().await;
+            let error = match role {
+                SyncRole::Initiator => {
+                    pair.protocol_a
+                        .synchronize(&connection, SecurityContext::Idp)
+                        .await
+                }
+                SyncRole::Responder => unvalidated_initiate(&pair, &connection).await,
+            }
+            .expect_err("secret schema default must reject even with valid current JWK rows");
+            assert!(!error.to_string().contains("must-never-leave-this-node"));
+            assert_no_history_disclosure(&pair, Poison::Current, role);
+            pair.close().await;
+        }
+    })
+    .await
+    .expect("bounded marker3 schema-default denial");
+}
+
+#[tokio::test]
+async fn marker3_revalidates_late_private_history_in_recovery_on_both_roles() {
+    tokio::time::timeout(Duration::from_secs(240), async {
+        for outgoing in [true, false] {
+            for role in [SyncRole::Initiator, SyncRole::Responder] {
+                for variant in [Poison::Current, Poison::Overwritten, Poison::Deleted, Poison::LosingConflict] {
+                    let mut pair = Pair::new().await;
+                    let source_is_a = outgoing == matches!(role, SyncRole::Initiator);
+                    let (source, recipient) = if source_is_a {
+                        (pair.idp_a.clone(), pair.idp_b.clone())
+                    } else {
+                        (pair.idp_b.clone(), pair.idp_a.clone())
+                    };
+                    let before = sql(&recipient, "SELECT * FROM keys").await[0].rows.clone();
+                    let fired = Arc::new(AtomicBool::new(false));
+                    pair.recovery = Some(RecoveryAttack {
+                        source: source.clone(), root: pair.root.clone(), row: pair.row, variant,
+                        on_send: outgoing, fired: fired.clone(),
+                    });
+                    pair.serve(matches!(role, SyncRole::Responder));
+                    let connection = pair.connect().await;
+                    let error = match role {
+                        SyncRole::Initiator => pair.protocol_a.synchronize(&connection, SecurityContext::Idp).await,
+                        SyncRole::Responder => unvalidated_initiate(&pair, &connection).await,
+                    }.expect_err("late private recovery history must reject");
+                    assert!(fired.load(Ordering::SeqCst), "attack reaches recovery after clean preflight");
+                    if matches!(role, SyncRole::Initiator) {
+                        assert!(error.to_string().contains("invalid public security historical value"), "{outgoing}/{role:?}/{variant:?}: local domain callback, not incidental integrity rejection: {error}");
+                    }
+                    assert!(!error.to_string().contains("must-never-leave-this-node"));
+                    assert_eq!(sql(&recipient, "SELECT * FROM keys").await[0].rows, before, "no invalid recovery import");
+                    if outgoing { assert_no_history_disclosure(&pair, variant, role); }
+                    drop((source, recipient));
+                    pair.close().await;
+                }
+            }
+        }
+    }).await.expect("bounded real marker3 recovery matrix");
+}
+
+#[tokio::test]
+async fn marker3_rejects_overwritten_raw_grant_hashes_in_both_directions_and_roles() {
+    tokio::time::timeout(Duration::from_secs(240), async {
+        for (table, column) in [("oauth2_authorization_codes", "code_hash"), ("oauth2_refresh_tokens", "token_hash")] {
+            for outgoing in [true, false] {
+                for role in [SyncRole::Initiator, SyncRole::Responder] {
+                    let mut pair = Pair::new().await;
+                    let source_is_a = outgoing == matches!(role, SyncRole::Initiator);
+                    let (source, recipient) = if source_is_a {
+                        (pair.idp_a.clone(), pair.idp_b.clone())
+                    } else {
+                        (pair.idp_b.clone(), pair.idp_a.clone())
+                    };
+                    sql(&source, &format!("INSERT INTO {table} (id, {column}) VALUES (CAST('{}' AS UUID), 'must-never-leave-this-node'); UPDATE {table} SET {column} = '{}'", Id::now_v7(), "a".repeat(64))).await;
+                    let before = sql(&recipient, &format!("SELECT * FROM {table}")).await[0].rows.clone();
+                    pair.serve(matches!(role, SyncRole::Responder));
+                    let connection = pair.connect().await;
+                    let error = match role {
+                        SyncRole::Initiator => pair.protocol_a.synchronize(&connection, SecurityContext::Idp).await,
+                        SyncRole::Responder => unvalidated_initiate(&pair, &connection).await,
+                    }.expect_err("raw grant history behind a valid hash must reject");
+                    if matches!(role, SyncRole::Initiator) {
+                        assert!(error.to_string().contains("invalid public security historical value"), "domain hash rejection: {error}");
+                    }
+                    assert!(!error.to_string().contains("must-never-leave-this-node"));
+                    assert_eq!(sql(&recipient, &format!("SELECT * FROM {table}")).await[0].rows, before);
+                    if outgoing { assert_no_history_disclosure(&pair, Poison::Overwritten, role); }
+                    drop((source, recipient));
+                    pair.close().await;
+                }
+            }
+        }
+    }).await.expect("bounded real marker3 grant hash matrix");
 }
 
 #[tokio::test]

@@ -40,6 +40,22 @@ pub enum SecurityContext {
 }
 
 impl SecurityContext {
+    fn validate_value(self, table: &str, column: &str, value: &db::Value) -> Result<(), String> {
+        let permitted = match self {
+            Self::Idp => public_security_tables()
+                .into_iter()
+                .find(|public| public.name() == table)
+                .is_some_and(|public| public.permits_historical_value(column, value)),
+            Self::Management => management_service::public_policy_columns(table)
+                .is_some_and(|columns| columns.contains(&column)),
+        };
+        if permitted {
+            Ok(())
+        } else {
+            Err("invalid public security historical value".into())
+        }
+    }
+
     fn permission(self) -> (IdentityAction, IdentityResource) {
         match self {
             Self::Idp => (
@@ -382,12 +398,13 @@ impl SecurityProtocol {
             ),
         };
         database
-            .synchronize_tables_with_stage_directory_checked(
+            .synchronize_tables_with_stage_directory_validated_checked(
                 transport,
                 &SessionConfig::default(),
                 role,
                 directory,
                 &tables,
+                |table, column, value| context.validate_value(table, column, value),
                 || async {
                     log::debug!("checking scoped security apply: {context:?} {role:?}");
                     self.authorize(connection, member, context)
