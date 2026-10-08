@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use db::{Database, QueryError, SqlTranslator, Value};
+use db::{Database, QueryError, SqlTranslator, Transaction, Value};
 use idp_model::contract::{IdpSignerRecord, JwsAlgorithm, KeyUse, ReplicaMembership};
 
 use crate::repo::{RepoError, RepoResult};
@@ -164,92 +164,8 @@ impl DbReplicaSignerRepo {
         membership: &ReplicaMembership,
         signer: &IdpSignerRecord,
     ) -> RepoResult<bool> {
-        validate(membership, signer)?;
         let mut transaction = self.engine.client().transaction().await.map_err(db_error)?;
-        let operation = async {
-            let member_query = format!(
-                "SELECT endpoint_id, issuer, approved_at, revoked_at FROM idp_replica_members WHERE installation_id = {} AND member_id = CAST('{}' AS UUID)",
-                text(&membership.installation_id),
-                membership.member_id,
-            );
-            let endpoint_query = format!(
-                "SELECT member_id FROM idp_replica_members WHERE installation_id = {} AND endpoint_id = {}",
-                text(&membership.installation_id),
-                text(&membership.endpoint_id),
-            );
-            let signer_query = format!(
-                "SELECT member_id, issuer, public_jwk, approved_at, revoked_at, expires_at FROM idp_replica_signers WHERE key_id = CAST('{}' AS UUID)",
-                signer.key_id,
-            );
-            let active_signer_query = format!(
-                "SELECT key_id FROM idp_replica_signers WHERE active_member_id = CAST('{}' AS UUID)",
-                membership.member_id,
-            );
-            let mut query_results = transaction
-                .translate_and_execute(
-                    &format!(
-                        "{member_query}; {endpoint_query}; {signer_query}; {active_signer_query}"
-                    ),
-                    &SqlTranslator,
-                )
-                .await
-                .map_err(db_error)?;
-            if query_results.len() != 4 {
-                return Err(RepoError::InvalidInput(
-                    "incomplete replica signer query results".into(),
-                ));
-            }
-            let member = query_results.remove(0).rows.into_iter().next();
-            let endpoint = query_results.remove(0).rows.into_iter().next();
-            let signer_row = query_results.remove(0).rows.into_iter().next();
-            let active_signer = query_results.remove(0).rows.into_iter().next();
-
-            if let (Some(member), Some(signer_row)) = (member.as_ref(), signer_row.as_ref())
-                && endpoint.as_ref().is_some_and(|row| {
-                    matches!(row.values.first(), Some(Value::Uuid(id)) if *id == membership.member_id)
-                }) && active_signer.as_ref().is_some_and(|row| {
-                    matches!(row.values.first(), Some(Value::Uuid(id)) if *id == signer.key_id)
-                }) && member_matches(member, membership)
-                    && signer_matches(signer_row, signer)?
-                {
-                return Ok(false);
-            }
-            if member.is_some() || endpoint.is_some() || signer_row.is_some() || active_signer.is_some() {
-                return Err(RepoError::InvalidInput(
-                    "replica member, endpoint, or signer conflicts with approved state".into(),
-                ));
-            }
-
-            let jwk = serde_json::to_string(&signer.public_jwk)
-                .map_err(RepoError::other)?;
-            let insert_member = format!(
-                "INSERT INTO idp_replica_members (id, installation_id, member_id, endpoint_id, issuer, approved_at, revoked_at) VALUES (CAST('{}' AS UUID), {}, CAST('{}' AS UUID), {}, {}, {}, NULL)",
-                db::Uuid::now_v7(),
-                text(&membership.installation_id),
-                membership.member_id,
-                text(&membership.endpoint_id),
-                text(&membership.issuer),
-                membership.approved_at,
-            );
-            let insert_signer = format!(
-                "INSERT INTO idp_replica_signers (id, member_id, active_member_id, key_id, issuer, public_jwk, approved_at, revoked_at, expires_at) VALUES (CAST('{}' AS UUID), CAST('{}' AS UUID), CAST('{}' AS UUID), CAST('{}' AS UUID), {}, {}, {}, NULL, {})",
-                db::Uuid::now_v7(),
-                signer.member_id,
-                signer.member_id,
-                signer.key_id,
-                text(&signer.issuer),
-                text(&jwk),
-                signer.approved_at.expect("validated approval timestamp"),
-                signer.expires_at.map_or_else(|| "NULL".to_owned(), |expires| expires.to_string()),
-            );
-            transaction
-                .translate_and_execute(&format!("{insert_member}; {insert_signer}"), &SqlTranslator)
-                .await
-                .map_err(db_error)?;
-            Ok(true)
-        }
-        .await;
-
+        let operation = Self::enroll_in_transaction(&mut transaction, membership, signer).await;
         match operation {
             Ok(created) => {
                 transaction.commit().await.map_err(db_error)?;
@@ -260,6 +176,96 @@ impl DbReplicaSignerRepo {
                 Err(error)
             }
         }
+    }
+
+    /// Enroll in the caller's IdP owner transaction without committing it.
+    /// The caller must roll back the transaction on any error.
+    pub async fn enroll_in_transaction(
+        transaction: &mut Transaction,
+        membership: &ReplicaMembership,
+        signer: &IdpSignerRecord,
+    ) -> RepoResult<bool> {
+        validate(membership, signer)?;
+        let member_query = format!(
+            "SELECT endpoint_id, issuer, approved_at, revoked_at FROM idp_replica_members WHERE installation_id = {} AND member_id = CAST('{}' AS UUID)",
+            text(&membership.installation_id),
+            membership.member_id,
+        );
+        let endpoint_query = format!(
+            "SELECT member_id FROM idp_replica_members WHERE installation_id = {} AND endpoint_id = {}",
+            text(&membership.installation_id),
+            text(&membership.endpoint_id),
+        );
+        let signer_query = format!(
+            "SELECT member_id, issuer, public_jwk, approved_at, revoked_at, expires_at FROM idp_replica_signers WHERE key_id = CAST('{}' AS UUID)",
+            signer.key_id,
+        );
+        let active_signer_query = format!(
+            "SELECT key_id FROM idp_replica_signers WHERE active_member_id = CAST('{}' AS UUID)",
+            membership.member_id,
+        );
+        let mut query_results = transaction
+            .translate_and_execute(
+                &format!("{member_query}; {endpoint_query}; {signer_query}; {active_signer_query}"),
+                &SqlTranslator,
+            )
+            .await
+            .map_err(db_error)?;
+        if query_results.len() != 4 {
+            return Err(RepoError::InvalidInput(
+                "incomplete replica signer query results".into(),
+            ));
+        }
+        let member = query_results.remove(0).rows.into_iter().next();
+        let endpoint = query_results.remove(0).rows.into_iter().next();
+        let signer_row = query_results.remove(0).rows.into_iter().next();
+        let active_signer = query_results.remove(0).rows.into_iter().next();
+
+        if let (Some(member), Some(signer_row)) = (member.as_ref(), signer_row.as_ref())
+                && endpoint.as_ref().is_some_and(|row| {
+                    matches!(row.values.first(), Some(Value::Uuid(id)) if *id == membership.member_id)
+                }) && active_signer.as_ref().is_some_and(|row| {
+                    matches!(row.values.first(), Some(Value::Uuid(id)) if *id == signer.key_id)
+                }) && member_matches(member, membership)
+                    && signer_matches(signer_row, signer)?
+                {
+                return Ok(false);
+            }
+        if member.is_some() || endpoint.is_some() || signer_row.is_some() || active_signer.is_some()
+        {
+            return Err(RepoError::InvalidInput(
+                "replica member, endpoint, or signer conflicts with approved state".into(),
+            ));
+        }
+
+        let jwk = serde_json::to_string(&signer.public_jwk).map_err(RepoError::other)?;
+        let insert_member = format!(
+            "INSERT INTO idp_replica_members (id, installation_id, member_id, endpoint_id, issuer, approved_at, revoked_at) VALUES (CAST('{}' AS UUID), {}, CAST('{}' AS UUID), {}, {}, {}, NULL)",
+            db::Uuid::now_v7(),
+            text(&membership.installation_id),
+            membership.member_id,
+            text(&membership.endpoint_id),
+            text(&membership.issuer),
+            membership.approved_at,
+        );
+        let insert_signer = format!(
+            "INSERT INTO idp_replica_signers (id, member_id, active_member_id, key_id, issuer, public_jwk, approved_at, revoked_at, expires_at) VALUES (CAST('{}' AS UUID), CAST('{}' AS UUID), CAST('{}' AS UUID), CAST('{}' AS UUID), {}, {}, {}, NULL, {})",
+            db::Uuid::now_v7(),
+            signer.member_id,
+            signer.member_id,
+            signer.key_id,
+            text(&signer.issuer),
+            text(&jwk),
+            signer.approved_at.expect("validated approval timestamp"),
+            signer
+                .expires_at
+                .map_or_else(|| "NULL".to_owned(), |expires| expires.to_string()),
+        );
+        transaction
+            .translate_and_execute(&format!("{insert_member}; {insert_signer}"), &SqlTranslator)
+            .await
+            .map_err(db_error)?;
+        Ok(true)
     }
 
     pub async fn rotate(
@@ -518,6 +524,52 @@ mod tests {
             expires_at: None,
         };
         (membership, signer)
+    }
+
+    #[tokio::test]
+    async fn caller_transaction_controls_enrollment_commit_and_rollback() {
+        let engine = Arc::new(db::Database::in_memory());
+        replica::up(&engine).await.expect("initialize IdP schema");
+        let repo = DbReplicaSignerRepo::new(engine.clone());
+        let (membership, signer) = records();
+        let mut transaction = engine
+            .client()
+            .transaction()
+            .await
+            .expect("owner transaction");
+        assert!(
+            DbReplicaSignerRepo::enroll_in_transaction(&mut transaction, &membership, &signer)
+                .await
+                .expect("prepare enrollment in caller transaction")
+        );
+        transaction.rollback().await.expect("caller rollback");
+        let results = engine
+            .client()
+            .translate_and_execute(
+                "SELECT id FROM idp_replica_members; SELECT id FROM idp_replica_signers",
+                &SqlTranslator,
+            )
+            .await
+            .expect("rolled-back enrollment");
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|result| result.rows.is_empty()));
+        let mut transaction = engine
+            .client()
+            .transaction()
+            .await
+            .expect("retry owner transaction");
+        assert!(
+            DbReplicaSignerRepo::enroll_in_transaction(&mut transaction, &membership, &signer)
+                .await
+                .expect("retry rolled-back enrollment")
+        );
+        transaction.commit().await.expect("caller commit");
+        assert!(
+            !repo
+                .enroll(&membership, &signer)
+                .await
+                .expect("committed exact retry")
+        );
     }
 
     #[tokio::test]

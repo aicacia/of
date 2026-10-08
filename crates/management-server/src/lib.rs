@@ -11,6 +11,6 @@ mod runtime;
 pub use cli::run;
 pub use config::AppConfig;
 pub use management_service::MANAGEMENT_APPLICATION_URI;
-pub use provisioning::provision_initial_administrator;
+pub use provisioning::{provision_initial_administrator, provision_initial_device};
 pub use router::{RouterState, openapi_router};
-pub use runtime::build_router;
+pub use runtime::{build_router, replication_policy};

@@ -91,8 +91,7 @@ pub fn build_runtime(
     let router = openapi_router(state, api_prefix)
         .split_for_parts()
         .0
-        .merge(resource_routes)
-        .into();
+        .merge(resource_routes);
 
     Ok(StorageRuntime {
         router,

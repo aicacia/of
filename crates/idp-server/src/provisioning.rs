@@ -1,4 +1,8 @@
-use std::{fs, io, path::Path, sync::Arc};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use db::Database;
 use idp_model::{
@@ -11,7 +15,7 @@ use idp_service::{
         DbApplicationRepo, DbClientRepo, DbKeyRepo, DbOAuth2AuthorizationCodeRepo,
         DbOAuth2RefreshTokenRepo, DbOAuth2UserConsentRepo, DbUserRepo,
     },
-    repo::{KeyService, PrivateKeyKeyringRepo},
+    repo::{KeyService, PrivateKeyKeyringRepo, PrivateKeyRepo},
 };
 
 use crate::AppConfig;
@@ -24,23 +28,36 @@ fn to_io_error(error: ErrorResponse) -> io::Error {
     )
 }
 
-type NativeOAuth2Service = OAuth2Service<
+type NativeOAuth2Service<P> = OAuth2Service<
     DbApplicationRepo,
-    DbClientRepo,
+    DbClientRepo<P>,
     DbOAuth2AuthorizationCodeRepo,
     DbOAuth2RefreshTokenRepo,
     DbUserRepo,
     DbOAuth2UserConsentRepo,
     DbKeyRepo,
-    PrivateKeyKeyringRepo,
+    P,
 >;
 
-pub struct OwnerProvisioner {
-    oauth2: NativeOAuth2Service,
+pub struct OwnerProvisioner<P: PrivateKeyRepo + Send + Sync = PrivateKeyKeyringRepo> {
+    pub(crate) oauth2: NativeOAuth2Service<P>,
+    pub(crate) engine: Arc<Database>,
+    pub(crate) key_namespace: String,
+    pub(crate) data_dir: PathBuf,
 }
 
 impl OwnerProvisioner {
     pub async fn open(config: &AppConfig) -> io::Result<Self> {
+        Self::open_with_private_keys(
+            config,
+            PrivateKeyKeyringRepo::new(&config.oauth2.issuer).map_err(io::Error::other)?,
+        )
+        .await
+    }
+}
+
+impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
+    pub async fn open_with_private_keys(config: &AppConfig, private_keys: P) -> io::Result<Self> {
         let data_dir = Path::new(&config.data_dir);
         fs::create_dir_all(data_dir)?;
         let engine = Arc::new(Database::open(data_dir.join("idp.redb")).map_err(io::Error::other)?);
@@ -49,7 +66,7 @@ impl OwnerProvisioner {
             .map_err(io::Error::other)?;
         let keys = Arc::new(KeyService::new(
             DbKeyRepo::new(Arc::clone(&engine)),
-            PrivateKeyKeyringRepo::new(&config.oauth2.issuer).map_err(io::Error::other)?,
+            private_keys,
             config.key_namespace.clone(),
         ));
         let oauth2 = OAuth2Service::new(
@@ -62,7 +79,12 @@ impl OwnerProvisioner {
             keys,
             config.oauth2.clone(),
         );
-        Ok(Self { oauth2 })
+        Ok(Self {
+            oauth2,
+            engine,
+            key_namespace: config.key_namespace.clone(),
+            data_dir: data_dir.to_path_buf(),
+        })
     }
 
     pub async fn ensure_initial_user(

@@ -1,4 +1,5 @@
 mod middleware;
+mod node_join_approval;
 mod openapi;
 mod openapi_router;
 mod pairing_acceptance;
@@ -13,5 +14,4 @@ pub use pairing_acceptance::{
     PairingAcceptanceController, PairingAcceptanceControllerSlot, TimedPairingAcceptanceController,
 };
 
-pub use state::NativeDeviceRepo;
 pub use state::{DeviceIdentity, RouterState};

@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+#![cfg_attr(test, recursion_limit = "256")]
 
 #[cfg(feature = "cli")]
 mod cli;
@@ -7,6 +8,14 @@ mod config;
 mod bootstrap;
 
 mod device_identity;
+mod node_join;
+#[cfg(test)]
+mod node_join_review_tests;
+#[cfg(test)]
+mod node_join_tests;
+mod node_provisioning;
+#[cfg(test)]
+mod node_provisioning_tests;
 mod provisioning;
 mod router;
 mod runtime;
@@ -23,6 +32,7 @@ pub use device_identity::{
     delete as delete_device_identity, identity_from_server as device_identity_from_server,
     open as open_device_identity, open_with_allowlist as open_device_identity_with_allowlist,
 };
+pub use node_join::{NodeJoinApproval, NodeJoinRequest};
 pub use provisioning::OwnerProvisioner;
 pub use router::{
     DeviceIdentity, PairingAcceptanceController, PairingAcceptanceControllerSlot, RouterState,

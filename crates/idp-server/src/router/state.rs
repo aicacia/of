@@ -53,6 +53,20 @@ impl DeviceIdentity {
         self.endpoint.clone()
     }
 
+    pub(crate) fn node_join_approval(
+        &self,
+        request: crate::NodeJoinRequest,
+        owner_subject: idp_model::model::Id,
+    ) -> std::io::Result<crate::NodeJoinApproval> {
+        use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+        let payload = crate::NodeJoinApproval::payload(&request, owner_subject)?;
+        Ok(crate::NodeJoinApproval {
+            request,
+            owner_subject,
+            signature: URL_SAFE_NO_PAD.encode(self.secret_key.sign(&payload).to_bytes()),
+        })
+    }
+
     pub fn endpoint_address(&self) -> Result<String, String> {
         serde_json::to_string(&self.endpoint.addr()).map_err(|error| error.to_string())
     }
@@ -83,6 +97,9 @@ pub struct RouterState {
     pub pairing_acceptance: Arc<PairingAcceptanceControllerSlot>,
     pub hosted_control_plane: Option<Arc<HostedControlPlane>>,
     pub local_permissions: Option<Arc<LocalPermissions>>,
+    #[cfg(test)]
+    pub(crate) before_node_join_activation:
+        Option<(Arc<tokio::sync::Notify>, Arc<tokio::sync::Notify>)>,
 }
 
 impl RouterState {
@@ -108,6 +125,8 @@ impl RouterState {
             pairing_acceptance: Arc::new(PairingAcceptanceControllerSlot::new()),
             hosted_control_plane: None,
             local_permissions: None,
+            #[cfg(test)]
+            before_node_join_activation: None,
         }
     }
 
