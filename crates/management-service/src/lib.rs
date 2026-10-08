@@ -34,4 +34,4 @@ mod local_permissions;
 pub use local_permissions::LocalPermissions;
 
 mod security_sync;
-pub use security_sync::{PUBLIC_POLICY_TABLES, permits_policy_table};
+pub use security_sync::{PUBLIC_POLICY_TABLES, permits_policy_table, public_policy_columns};

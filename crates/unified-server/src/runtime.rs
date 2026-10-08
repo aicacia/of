@@ -15,7 +15,7 @@ use tokio_util::sync::CancellationToken;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
 
 use crate::{
-    UnifiedEndpoint, compose_protocol_router, compose_router,
+    SecurityContext, SecurityProtocol, UnifiedEndpoint, compose_protocol_router, compose_router,
     config::{ServiceClientCredentials, UnifiedConfig},
 };
 
@@ -35,6 +35,7 @@ pub struct UnifiedRuntime {
     storage_runtime: Option<StorageRuntime>,
     cancellation_token: CancellationToken,
     peer_refresh: Option<JoinHandle<()>>,
+    security_protocol: SecurityProtocol,
 }
 
 impl UnifiedRuntime {
@@ -76,7 +77,7 @@ impl UnifiedRuntime {
         let idp_runtime = Arc::new(
             build_idp_runtime(
                 &idp_config,
-                idp_engine,
+                Arc::clone(&idp_engine),
                 Arc::new(endpoint.identity()?),
                 server.clone(),
                 Some(local_permissions),
@@ -103,7 +104,7 @@ impl UnifiedRuntime {
         let mut management_config = config.management;
         management_config.server.prefix = Some(MANAGEMENT_PREFIX.to_owned());
         let management_router = management_server::build_router(
-            management_engine,
+            Arc::clone(&management_engine),
             &management_config.api_public_uri,
             MANAGEMENT_PREFIX,
             &management_config.storage_audience,
@@ -175,13 +176,23 @@ impl UnifiedRuntime {
             cancellation_token.clone(),
         )?;
 
-        let protocol_router = compose_protocol_router(&server, &idp_runtime, &storage_runtime)
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Storage replication handler is unavailable in unified mode",
-                )
-            })?;
+        let security_protocol = SecurityProtocol::new(
+            server.clone(),
+            idp_engine,
+            management_engine,
+            idp_config.oauth2.issuer.clone(),
+            idp_config.oauth2.local_signer.clone(),
+            Path::new(&config.endpoint_data_dir).join("security-sync-staging"),
+            cancellation_token.clone(),
+        );
+        let protocol_router =
+            compose_protocol_router(&server, &idp_runtime, &storage_runtime, &security_protocol)
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "Storage replication handler is unavailable in unified mode",
+                    )
+                })?;
         let router = compose_router(
             idp_runtime.router(),
             management_router,
@@ -201,7 +212,18 @@ impl UnifiedRuntime {
             storage_runtime: Some(storage_runtime),
             cancellation_token,
             peer_refresh: None,
+            security_protocol,
         })
+    }
+
+    pub async fn synchronize_security(
+        &self,
+        connection: &iroh::endpoint::Connection,
+        context: SecurityContext,
+    ) -> io::Result<ofdb_sql::SyncResult> {
+        self.security_protocol
+            .synchronize(connection, context)
+            .await
     }
 
     pub fn local_addr(&self) -> std::net::SocketAddr {

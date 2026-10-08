@@ -1,23 +1,35 @@
-use std::time::Duration;
+use std::{future::Future, io, pin::Pin, sync::Arc, time::Duration};
 
+use iroh::{
+    endpoint::{Connection, RecvStream, SendStream},
+    protocol::{AcceptError, ProtocolHandler},
+};
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 
 use crate::{database_protocol::DatabaseProtocolHandler, storage_protocol::StorageProtocolHandler};
-use iroh::{
-    endpoint::Connection,
-    protocol::{AcceptError, ProtocolHandler},
-};
 
 pub(crate) const DATABASE_STREAM_KIND: u8 = 1;
 pub(crate) const FILESYSTEM_STREAM_KIND: u8 = crate::filesystem_transport::FILESYSTEM_STREAM_KIND;
 const STREAM_MARKER_TIMEOUT: Duration = Duration::from_secs(5);
 
+type AdditionalStreamHandler = Arc<
+    dyn Fn(
+            u8,
+            Connection,
+            SendStream,
+            RecvStream,
+        ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send>>
+        + Send
+        + Sync,
+>;
+
 #[derive(Clone)]
-pub(crate) struct DataProtocolHandler {
+pub struct DataProtocolHandler {
     database: DatabaseProtocolHandler,
     file_system: StorageProtocolHandler,
     cancellation_token: CancellationToken,
+    additional_stream: Option<AdditionalStreamHandler>,
 }
 
 impl DataProtocolHandler {
@@ -30,7 +42,19 @@ impl DataProtocolHandler {
             database,
             file_system,
             cancellation_token,
+            additional_stream: None,
         }
+    }
+
+    pub fn with_additional_stream<F, U>(mut self, handler: F) -> Self
+    where
+        F: Fn(u8, Connection, SendStream, RecvStream) -> U + Send + Sync + 'static,
+        U: Future<Output = io::Result<()>> + Send + 'static,
+    {
+        self.additional_stream = Some(Arc::new(move |kind, connection, send, recv| {
+            Box::pin(handler(kind, connection, send, recv))
+        }));
+        self
     }
 }
 
@@ -49,7 +73,15 @@ impl ProtocolHandler for DataProtocolHandler {
                         Ok(Ok(())) => match kind[0] {
                             DATABASE_STREAM_KIND => self.database.accept_stream(connection.clone(), send, recv).await,
                             FILESYSTEM_STREAM_KIND => self.file_system.accept_stream(connection.clone(), send, recv).await,
-                            _ => log::debug!("rejected data stream with an unknown protocol kind"),
+                            kind => {
+                                if let Some(handler) = &self.additional_stream {
+                                    if let Err(error) = handler(kind, connection.clone(), send, recv).await {
+                                        log::debug!("rejected additional data stream: {error}");
+                                    }
+                                } else {
+                                    log::debug!("rejected data stream with an unknown protocol kind");
+                                }
+                            },
                         },
                         Ok(Err(error)) => log::debug!("rejected data stream without a protocol kind: {error}"),
                         Err(_) => log::debug!("rejected data stream with a timed-out protocol marker"),

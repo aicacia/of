@@ -29,6 +29,10 @@ mod sync_timeout;
 #[cfg(feature = "cli")]
 pub use cli::run;
 pub use config::AppConfig;
+#[cfg(feature = "network")]
+pub use data_protocol::DataProtocolHandler;
+#[cfg(feature = "network")]
+pub use database_transport::DatabaseTransport;
 pub use idp_client::{IdpClient, IdpIntrospectionError};
 pub use management_client::ManagementClient;
 #[cfg(feature = "network")]

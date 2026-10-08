@@ -2,7 +2,7 @@
 
 ## Shared domain
 
-- [Public persistence and protocol integration](docs/public-persistence.md): owner facade contracts, shared-router adapters, security-record preflight, and remaining migration gaps.
+- [Public persistence and protocol integration](docs/public-persistence.md): owner facade contracts, shared-router adapters, authenticated scoped security history, local credential separation, and qualification boundaries.
 
 - [Shared terms](GLOSSARY.md): Installation, User, Application, Principal, Device, and setup lifecycle.
 - [System design](docs/design.md): service authority, replica boundaries, Installation, and synchronization requirements.

@@ -6,13 +6,13 @@ use ofdb_sql::SyncTransport;
 const MAX_FRAME_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug)]
-pub(crate) struct DatabaseTransport {
+pub struct DatabaseTransport {
     send: SendStream,
     recv: RecvStream,
 }
 
 impl DatabaseTransport {
-    pub(crate) fn new(send: SendStream, recv: RecvStream) -> Self {
+    pub fn new(send: SendStream, recv: RecvStream) -> Self {
         Self { send, recv }
     }
 }

@@ -19,7 +19,7 @@ impl StorageRuntime {
         self.router.clone()
     }
 
-    pub fn data_handler(&self) -> Option<impl iroh::protocol::ProtocolHandler + Clone> {
+    pub fn data_handler(&self) -> Option<crate::DataProtocolHandler> {
         self.replication
             .as_ref()
             .map(StorageReplicationRuntime::data_handler)

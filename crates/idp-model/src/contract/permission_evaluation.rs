@@ -49,6 +49,8 @@ pub enum IdentityAction {
     ReplicaSignersEnroll,
     ReplicaSignersRotate,
     ReplicaSignersRevoke,
+    IdpSecuritySync,
+    ManagementSecuritySync,
 }
 
 impl IdentityAction {
@@ -80,6 +82,8 @@ impl IdentityAction {
             Self::ReplicaSignersEnroll => "idp.replica_signers.enroll",
             Self::ReplicaSignersRotate => "idp.replica_signers.rotate",
             Self::ReplicaSignersRevoke => "idp.replica_signers.revoke",
+            Self::IdpSecuritySync => "idp.security.sync",
+            Self::ManagementSecuritySync => "management.security.sync",
         }
     }
 
@@ -134,6 +138,8 @@ pub enum IdentityResource {
         client_id: String,
     },
     DevicePairing,
+    IdpSecurity,
+    ManagementSecurity,
     ReplicaSigner {
         #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>))]
         member_id: Option<Id>,
@@ -208,6 +214,8 @@ impl PermissionEvaluationRequest {
                     member_id: Some(id),
                 },
             ) => !id.is_nil(),
+            (A::IdpSecuritySync, IdentityResource::IdpSecurity)
+            | (A::ManagementSecuritySync, IdentityResource::ManagementSecurity) => true,
             _ => false,
         };
         if !valid {
@@ -253,6 +261,48 @@ mod tests {
         PermissionTarget,
     };
     use crate::model::Id;
+
+    #[test]
+    fn security_sync_permissions_are_context_exact_and_installation_scoped() {
+        for (action, resource, permission) in [
+            (
+                IdentityAction::IdpSecuritySync,
+                IdentityResource::IdpSecurity,
+                "idp.security.sync",
+            ),
+            (
+                IdentityAction::ManagementSecuritySync,
+                IdentityResource::ManagementSecurity,
+                "management.security.sync",
+            ),
+        ] {
+            let mut request = PermissionEvaluationRequest {
+                request_id: Id::from_u128(1),
+                subject: PermissionSubject::User {
+                    id: Id::from_u128(2),
+                },
+                action,
+                target: PermissionTarget::Installation {
+                    resource: resource.clone(),
+                },
+            };
+            assert_eq!(request.policy_namespace(), Some(Id::nil()));
+            assert_eq!(action.permission(), permission);
+            request.target = PermissionTarget::Application {
+                application_id: Id::from_u128(3),
+                resource,
+            };
+            assert_eq!(request.policy_namespace(), None);
+            request.target = PermissionTarget::Installation {
+                resource: if action == IdentityAction::IdpSecuritySync {
+                    IdentityResource::ManagementSecurity
+                } else {
+                    IdentityResource::IdpSecurity
+                },
+            };
+            assert_eq!(request.policy_namespace(), None);
+        }
+    }
 
     #[test]
     fn replica_signer_permissions_are_installation_scoped_and_exact() {

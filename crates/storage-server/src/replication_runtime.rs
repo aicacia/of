@@ -50,7 +50,7 @@ impl StorageReplicationRuntime {
         }
     }
 
-    pub fn data_handler(&self) -> impl iroh::protocol::ProtocolHandler + Clone {
+    pub fn data_handler(&self) -> DataProtocolHandler {
         self.data_handler.clone()
     }
 

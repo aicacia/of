@@ -35,14 +35,20 @@ config = { version = "0.15", default-features = false, features = ["yaml"] }
 # Internal
 api = { path = "../api", default-features = false, features = [] }
 db = { package = "idp-db", path = "../db", default-features = false, features = ["replica"] }
+idp-model = { path = "../idp-model", default-features = false, features = ["std", "replica"] }
 idp-server = { path = "../idp-server", default-features = false }
+idp-service = { path = "../idp-service", default-features = false, features = ["replica", "std"] }
 iroh-chain = { path = "../../../ofnet/crates/iroh-chain", default-features = false, features = [] }
 management-server = { path = "../management-server", default-features = false }
 management-service = { path = "../management-service", default-features = false, features = ["replica", "std"] }
 storage-server = { path = "../storage-server", default-features = false, features = ["network"] }
 
+# Persistence
+ofdb-sql = { path = "../../../ofdb/crates/sql", default-features = false, features = ["native-stage"] }
+
 # Serialization
 serde = { version = "1.0", default-features = false, features = ["derive", "std"] }
+serde_json = { version = "1.0", default-features = false, features = ["std"] }
 
 # HTTP client
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
@@ -64,12 +70,7 @@ tower-http = { version = "0.7", default-features = false, features = ["cors", "t
 
 [dev-dependencies]
 # Identity fixtures
-idp-model = { path = "../idp-model", default-features = false, features = ["std", "replica"] }
-idp-service = { path = "../idp-service", default-features = false, features = ["replica", "std"] }
 keyring-core = { version = "1.0", default-features = false, features = [] }
-
-# Serialization
-serde_json = { version = "1.0", default-features = false, features = ["std"] }
 
 # Web
 http = { version = "1.4", default-features = false }
