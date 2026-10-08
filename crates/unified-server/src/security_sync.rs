@@ -30,6 +30,10 @@ use serde::{Deserialize, Serialize};
 use storage_server::{DataProtocolHandler, DatabaseTransport};
 use tokio_util::sync::CancellationToken;
 
+#[cfg(test)]
+#[path = "security_outbound_tests.rs"]
+mod outbound_tests;
+
 const SECURITY_STREAM_KIND: u8 = 3;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -154,10 +158,12 @@ impl SecurityProtocol {
         self.authorize(connection, remote_member, context).await?;
 
         let (mut send, recv) = connection.open_bi().await.map_err(io::Error::other)?;
+        self.authorize(connection, remote_member, context).await?;
         send.write_all(&[SECURITY_STREAM_KIND])
             .await
             .map_err(io::Error::other)?;
         let mut transport = DatabaseTransport::new(send, recv);
+        self.authorize(connection, remote_member, context).await?;
         transport
             .send(serde_json::to_vec(&handshake).map_err(io::Error::other)?)
             .await?;
@@ -199,15 +205,9 @@ impl SecurityProtocol {
             Ok::<_, io::Error>(local)
         }
         .await;
-        let local = match admission {
-            Ok(local) => local,
-            Err(error) => {
-                transport
-                    .send(serde_json::to_vec(&Response::Denied).map_err(io::Error::other)?)
-                    .await?;
-                return Err(error);
-            }
-        };
+        let local = admission?;
+        self.authorize(&connection, remote.member, remote.context)
+            .await?;
         transport
             .send(serde_json::to_vec(&Response::Accepted(local)).map_err(io::Error::other)?)
             .await?;
@@ -369,6 +369,9 @@ impl SecurityProtocol {
                 "local actor lacks this context's security sync permission",
             ));
         }
+        if self.cancellation.is_cancelled() {
+            return Err(denied("security synchronization is shutting down"));
+        }
         Ok(())
     }
 
@@ -397,9 +400,16 @@ impl SecurityProtocol {
                 PUBLIC_POLICY_TABLES.to_vec(),
             ),
         };
+        let mut transport = AuthorizedSecurityTransport {
+            transport,
+            protocol: self,
+            connection,
+            member,
+            context,
+        };
         database
             .synchronize_tables_with_stage_directory_validated_checked(
-                transport,
+                &mut transport,
                 &SessionConfig::default(),
                 role,
                 directory,
@@ -415,8 +425,32 @@ impl SecurityProtocol {
             .await
             .map_err(|error| match error {
                 SyncError::PreApply(reason) => denied(reason),
+                SyncError::Transport(error) => error,
                 error => io::Error::other(error.to_string()),
             })
+    }
+}
+
+struct AuthorizedSecurityTransport<'a, T> {
+    transport: &'a mut T,
+    protocol: &'a SecurityProtocol,
+    connection: &'a Connection,
+    member: Id,
+    context: SecurityContext,
+}
+
+impl<T: SyncTransport<Error = io::Error>> SyncTransport for AuthorizedSecurityTransport<'_, T> {
+    type Error = io::Error;
+
+    async fn send(&mut self, frame: Vec<u8>) -> io::Result<()> {
+        self.protocol
+            .authorize(self.connection, self.member, self.context)
+            .await?;
+        self.transport.send(frame).await
+    }
+
+    async fn receive(&mut self) -> io::Result<Vec<u8>> {
+        self.transport.receive().await
     }
 }
 
