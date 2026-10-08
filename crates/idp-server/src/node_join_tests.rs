@@ -137,18 +137,21 @@ async fn node_join_secure_store_loss_and_corrupt_journal_fail_closed() {
     std::fs::remove_dir_all(root).expect("remove isolated owner");
 }
 
-struct ApprovalFixture {
-    state: crate::RouterState,
-    server: iroh_chain::Server,
-    issuer: String,
-    root: std::path::PathBuf,
-    owner: Id,
-    management: Arc<db::Database>,
+pub(crate) struct ApprovalFixture {
+    pub(crate) state: crate::RouterState,
+    pub(crate) server: iroh_chain::Server,
+    pub(crate) issuer: String,
+    pub(crate) root: std::path::PathBuf,
+    pub(crate) owner: Id,
+    pub(crate) management: Arc<db::Database>,
 }
 
-async fn approval_fixture() -> ApprovalFixture {
+pub(crate) async fn approval_fixture() -> ApprovalFixture {
+    approval_fixture_for_issuer(format!("https://installation-{}.test/idp", Id::now_v7())).await
+}
+
+pub(crate) async fn approval_fixture_for_issuer(issuer: String) -> ApprovalFixture {
     let root = std::env::temp_dir().join(format!("node-join-approval-{}", Id::now_v7()));
-    let issuer = format!("https://installation-{}.test/idp", Id::now_v7());
     let mut config = AppConfig {
         data_dir: root.to_string_lossy().into_owned(),
         ..AppConfig::default()
@@ -271,7 +274,7 @@ async fn approval_fixture() -> ApprovalFixture {
     }
 }
 
-async fn user_token(fixture: &ApprovalFixture, audience: &str) -> String {
+pub(crate) async fn user_token(fixture: &ApprovalFixture, audience: &str) -> String {
     let token = fixture
         .state
         .oauth2_service
@@ -573,6 +576,20 @@ async fn node_join_requires_both_permissions_and_retries_after_disconnected_repl
             .await
             .is_err(),
         "persisted approval intent binds exact request"
+    );
+    assert!(
+        fixture
+            .state
+            .replica_signers
+            .is_trusted_peer(
+                &fixture.issuer,
+                binding.member_id,
+                &binding.endpoint_id,
+                i64::MAX
+            )
+            .await
+            .expect("valid enrollment remains trusted"),
+        "rejected mismatched retry must not revoke an existing valid enrollment"
     );
     let mut changed_receipt = received.clone();
     changed_receipt.request.approving_peer = SecretKey::generate().public().to_string();

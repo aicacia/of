@@ -97,6 +97,9 @@ pub struct RouterState {
     pub pairing_acceptance: Arc<PairingAcceptanceControllerSlot>,
     pub hosted_control_plane: Option<Arc<HostedControlPlane>>,
     pub local_permissions: Option<Arc<LocalPermissions>>,
+    #[cfg(test)]
+    pub(crate) before_node_join_activation:
+        Option<(Arc<tokio::sync::Notify>, Arc<tokio::sync::Notify>)>,
 }
 
 impl RouterState {
@@ -122,6 +125,8 @@ impl RouterState {
             pairing_acceptance: Arc::new(PairingAcceptanceControllerSlot::new()),
             hosted_control_plane: None,
             local_permissions: None,
+            #[cfg(test)]
+            before_node_join_activation: None,
         }
     }
 

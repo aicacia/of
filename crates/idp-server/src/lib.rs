@@ -10,6 +10,8 @@ mod bootstrap;
 mod device_identity;
 mod node_join;
 #[cfg(test)]
+mod node_join_review_tests;
+#[cfg(test)]
 mod node_join_tests;
 mod node_provisioning;
 #[cfg(test)]
