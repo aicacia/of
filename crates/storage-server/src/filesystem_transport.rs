@@ -301,32 +301,37 @@ impl IrohFileTransport {
         };
         let (id, mut rx) = self.request(operation).await?;
         let mut responses = Vec::new();
-        let mut read_bytes = 0_usize;
+        let mut read_data = Vec::new();
         let mut complete = false;
         while let Some(response) = rx.recv().await {
-            if let (Some(limit), FileResponse::ReadChunk(bytes)) = (read_limit, &response) {
-                let Some(total) = read_bytes.checked_add(bytes.len()) else {
+            if let FileResponse::ReadChunk(bytes) = &response {
+                let Some(limit) = read_limit else {
+                    self.inner.pending.lock().await.remove(&id);
+                    return Err(Error::new(ErrorKind::InvalidData, "unexpected read chunk"));
+                };
+                let Some(total) = read_data.len().checked_add(bytes.len()) else {
                     self.inner.pending.lock().await.remove(&id);
                     return Err(Error::new(
                         ErrorKind::InvalidData,
                         "read response exceeds requested length",
                     ));
                 };
-                read_bytes = total;
-                if read_bytes > limit {
+                if total > limit {
                     self.inner.pending.lock().await.remove(&id);
                     return Err(Error::new(
                         ErrorKind::InvalidData,
                         "read response exceeds requested bounds",
                     ));
                 }
+                read_data.extend_from_slice(bytes);
+                continue;
             }
-            let done = !matches!(response, FileResponse::ReadChunk(_));
+            if read_limit.is_some() {
+                responses.push(FileResponse::ReadChunk(bytes::Bytes::from(read_data)));
+            }
             responses.push(response);
-            if done {
-                complete = true;
-                break;
-            }
+            complete = true;
+            break;
         }
         self.inner.pending.lock().await.remove(&id);
         if !complete {
@@ -841,6 +846,90 @@ mod authorization_tests {
 
     use super::{FrameAuthorizer, Inner, close_stream, send_response};
     use file_system::{FileResponse, FileServiceError};
+
+    #[tokio::test]
+    async fn read_chunks_are_coalesced_and_unexpected_chunks_are_rejected() {
+        for read in [true, false] {
+            let (outgoing, mut requests) = mpsc::channel(1);
+            let peer = iroh::SecretKey::generate().public();
+            let inner = Arc::new(Inner {
+                peer,
+                authorize_frame: None,
+                outgoing: std::sync::Mutex::new(Some(outgoing)),
+                metadata: std::sync::Mutex::new(Some(broadcast::channel(1).0)),
+                sessions: std::sync::Mutex::new(Some(broadcast::channel(1).0)),
+                pending: Mutex::new(BTreeMap::new()),
+                next_id: AtomicU64::new(1),
+                transport_handles: AtomicUsize::new(1),
+                shutdown: watch::channel(false).0,
+            });
+            let handle = file_system::FileHandleId(uuid::Uuid::now_v7());
+            let operation = if read {
+                file_system::FileOperation::Read {
+                    handle,
+                    offset: 0,
+                    length: 3,
+                }
+            } else {
+                file_system::FileOperation::Close { handle }
+            };
+            let transport = super::IrohFileTransport {
+                inner: inner.clone(),
+            };
+            let task = tokio::spawn(async move { transport.rpc(operation).await });
+            requests.recv().await.expect("request enqueued");
+            let responses = inner
+                .pending
+                .lock()
+                .await
+                .get(&1)
+                .expect("pending request")
+                .clone();
+            if read {
+                for _ in 0..1024 {
+                    responses
+                        .send(FileResponse::ReadChunk(bytes::Bytes::new()))
+                        .await
+                        .expect("empty chunk");
+                }
+                for byte in b"abc" {
+                    responses
+                        .send(FileResponse::ReadChunk(bytes::Bytes::copy_from_slice(&[
+                            *byte,
+                        ])))
+                        .await
+                        .expect("tiny chunk");
+                }
+                responses
+                    .send(FileResponse::ReadEnd)
+                    .await
+                    .expect("explicit completion");
+                let result = task.await.expect("RPC task").expect("complete read");
+                assert_eq!(
+                    result.len(),
+                    2,
+                    "retained responses do not grow with frame count"
+                );
+                assert!(
+                    matches!(&result[0], FileResponse::ReadChunk(data) if data.as_ref() == b"abc")
+                );
+                assert!(matches!(&result[1], FileResponse::ReadEnd));
+            } else {
+                responses
+                    .send(FileResponse::ReadChunk(bytes::Bytes::new()))
+                    .await
+                    .expect("unexpected chunk");
+                assert_eq!(
+                    task.await
+                        .expect("RPC task")
+                        .expect_err("non-read rejects chunks")
+                        .kind(),
+                    std::io::ErrorKind::InvalidData
+                );
+            }
+            assert!(inner.pending.lock().await.is_empty());
+        }
+    }
 
     #[tokio::test]
     async fn denied_policy_cannot_send_filesystem_response() {

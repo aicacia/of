@@ -4,7 +4,7 @@ use iroh::{
     endpoint::{Connection, RecvStream, SendStream},
     protocol::{AcceptError, ProtocolHandler},
 };
-use tokio::select;
+use tokio::{select, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 
 use crate::{database_protocol::DatabaseProtocolHandler, storage_protocol::StorageProtocolHandler};
@@ -59,21 +59,40 @@ impl DataProtocolHandler {
 
 impl ProtocolHandler for DataProtocolHandler {
     async fn accept(&self, connection: Connection) -> Result<(), AcceptError> {
+        let mut streams = JoinSet::new();
         loop {
             let (send, mut recv) = select! {
-                () = self.cancellation_token.cancelled() => return Ok(()),
-                result = connection.accept_bi() => result?,
+                () = self.cancellation_token.cancelled() => {
+                    streams.shutdown().await;
+                    return Ok(());
+                },
+                result = streams.join_next(), if !streams.is_empty() => {
+                    if let Some(Err(error)) = result {
+                        log::debug!("data stream task failed: {error}");
+                    }
+                    continue;
+                },
+                result = connection.accept_bi() => match result {
+                    Ok(stream) => stream,
+                    Err(error) => {
+                        streams.shutdown().await;
+                        return Err(error.into());
+                    }
+                },
             };
-            select! {
-                () = self.cancellation_token.cancelled() => return Ok(()),
-                () = async {
+            let handler = self.clone();
+            let connection = connection.clone();
+            streams.spawn(async move {
+                select! {
+                    () = handler.cancellation_token.cancelled() => {},
+                    () = async {
                     let mut kind = [0; 1];
                     match recv.read_exact(&mut kind).await {
                         Ok(()) => match kind[0] {
-                            DATABASE_STREAM_KIND => self.database.accept_stream(connection.clone(), send, recv).await,
-                            FILESYSTEM_STREAM_KIND => self.file_system.accept_stream(connection.clone(), send, recv).await,
+                            DATABASE_STREAM_KIND => handler.database.accept_stream(connection.clone(), send, recv).await,
+                            FILESYSTEM_STREAM_KIND => handler.file_system.accept_stream(connection.clone(), send, recv).await,
                             kind => {
-                                if let Some(handler) = &self.additional_stream {
+                                if let Some(handler) = &handler.additional_stream {
                                     if let Err(error) = handler(kind, connection.clone(), send, recv).await {
                                         log::debug!("rejected additional data stream: {error}");
                                     }
@@ -84,8 +103,9 @@ impl ProtocolHandler for DataProtocolHandler {
                         },
                         Err(error) => log::debug!("rejected data stream without a protocol kind: {error}"),
                     }
-                } => {}
-            }
+                    } => {}
+                }
+            });
         }
     }
 }
@@ -105,7 +125,7 @@ mod tests {
     };
 
     #[tokio::test]
-    async fn shutdown_cancels_inbound_stream_waiting_for_marker() {
+    async fn stalled_handshake_does_not_block_other_streams_and_shutdown_cleans_tasks() {
         let lookup = MemoryLookup::new();
         let storage_endpoint = Endpoint::builder(presets::Minimal)
             .alpns(vec![DATA_ALPN.to_vec()])
@@ -176,13 +196,41 @@ mod tests {
             file_systems,
             cancellation_token.clone(),
         );
-        let handler = DataProtocolHandler::new(database, file_system, cancellation_token.clone());
+        let handler = DataProtocolHandler::new(database, file_system, cancellation_token.clone())
+            .with_additional_stream(|kind, _, mut send, _| async move {
+                assert_eq!(kind, 9);
+                send.write_all(b"ready")
+                    .await
+                    .map_err(std::io::Error::other)?;
+                send.finish().map_err(std::io::Error::other)?;
+                Ok(())
+            });
         let task = tokio::spawn(async move { handler.accept(accepted_connection).await });
-        let (_send, mut peer_receive) = peer_connection
+        let (mut stalled_send, mut peer_receive) = peer_connection
             .open_bi()
             .await
             .expect("open stream handled by Storage");
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        stalled_send
+            .write_all(&[DATABASE_STREAM_KIND])
+            .await
+            .expect("send database marker without handshake");
+        let (mut independent_send, mut independent_receive) = peer_connection
+            .open_bi()
+            .await
+            .expect("independent stream on same connection");
+        independent_send
+            .write_all(&[9])
+            .await
+            .expect("send independent marker");
+        let mut reply = [0; 5];
+        tokio::time::timeout(
+            Duration::from_secs(5),
+            independent_receive.read_exact(&mut reply),
+        )
+        .await
+        .expect("stalled database handshake cannot block independent stream")
+        .expect("read independent response");
+        assert_eq!(&reply, b"ready");
         cancellation_token.cancel();
         tokio::time::timeout(Duration::from_secs(2), task)
             .await
