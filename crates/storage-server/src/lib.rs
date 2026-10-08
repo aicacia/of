@@ -12,6 +12,8 @@ mod database_transport;
 #[cfg(feature = "network")]
 mod filesystem_transport;
 mod idp_client;
+#[cfg(feature = "network")]
+mod local_replication_authorizer;
 mod management_client;
 #[cfg(feature = "network")]
 mod network;
@@ -23,9 +25,6 @@ mod runtime;
 #[cfg(feature = "network")]
 mod storage_protocol;
 
-#[cfg(feature = "network")]
-mod sync_timeout;
-
 #[cfg(feature = "cli")]
 pub use cli::run;
 pub use config::AppConfig;
@@ -34,6 +33,8 @@ pub use data_protocol::DataProtocolHandler;
 #[cfg(feature = "network")]
 pub use database_transport::DatabaseTransport;
 pub use idp_client::{IdpClient, IdpIntrospectionError};
+#[cfg(feature = "network")]
+pub use local_replication_authorizer::{DeviceReplicationPolicy, LocalReplicationAuthorizer};
 pub use management_client::ManagementClient;
 #[cfg(feature = "network")]
 pub use network::StoragePeerNetwork;

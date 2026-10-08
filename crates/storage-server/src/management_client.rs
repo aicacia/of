@@ -25,6 +25,8 @@ pub struct ManagementClient {
     audience: String,
     client: Client,
     cached_token: Arc<Mutex<Option<CachedToken>>>,
+    #[cfg(feature = "network")]
+    local_replication: Option<crate::LocalReplicationAuthorizer>,
 }
 
 struct CachedToken {
@@ -71,7 +73,25 @@ impl ManagementClient {
             audience: audience.to_owned(),
             client,
             cached_token: Arc::new(Mutex::new(None)),
+            #[cfg(feature = "network")]
+            local_replication: None,
         })
+    }
+
+    #[cfg(feature = "network")]
+    pub fn with_local_replication_authorizer(
+        mut self,
+        authorizer: crate::LocalReplicationAuthorizer,
+    ) -> Self {
+        self.local_replication = Some(authorizer);
+        self
+    }
+
+    #[cfg(feature = "network")]
+    pub(crate) fn local_replication_authorizer(
+        &self,
+    ) -> Option<&crate::LocalReplicationAuthorizer> {
+        self.local_replication.as_ref()
     }
 
     async fn service_access_token(&self) -> Result<String, String> {

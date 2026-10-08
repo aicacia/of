@@ -37,6 +37,90 @@ where
 }
 
 #[tokio::test]
+async fn forged_acknowledgement_cannot_deliver_resource_responses() {
+    tokio::time::timeout(Duration::from_secs(20), async {
+        let lookup = MemoryLookup::new();
+        let server = Endpoint::builder(presets::Minimal)
+            .alpns(vec![b"forged-resource-ack".to_vec()])
+            .address_lookup(lookup.clone())
+            .bind()
+            .await
+            .expect("server");
+        let client = Endpoint::builder(presets::Minimal)
+            .address_lookup(lookup.clone())
+            .bind()
+            .await
+            .expect("client");
+        lookup.add_endpoint_info(server.addr());
+        let (outgoing, incoming) =
+            tokio::join!(client.connect(server.id(), b"forged-resource-ack"), async {
+                server
+                    .accept()
+                    .await
+                    .expect("incoming")
+                    .accept()
+                    .expect("accept")
+                    .await
+            });
+        let outgoing = outgoing.expect("connect");
+        let incoming = incoming.expect("authenticate");
+        let resource = IrohResourceDescriptor {
+            owner_subject: Uuid::now_v7().to_string(),
+            application_id: Uuid::now_v7().to_string(),
+            filesystem_id: Uuid::now_v7().to_string(),
+        };
+        let transport =
+            IrohFileTransport::open_authorized(&outgoing, resource.clone(), |_| async { true })
+                .await
+                .expect("authorized resource");
+        let request = tokio::spawn(async move {
+            transport
+                .rpc(file_system::FileOperation::Open(OpenRequest {
+                    path: "file".into(),
+                    revision: None,
+                }))
+                .await
+        });
+        let (mut send, mut recv) = incoming.accept_bi().await.expect("stream");
+        recv.read_exact(&mut [0]).await.expect("marker");
+        super::read_message::<iroh::EndpointId>(&mut recv)
+            .await
+            .expect("hello");
+        let mut forged = resource;
+        forged.filesystem_id = Uuid::now_v7().to_string();
+        super::write_frame(
+            &mut send,
+            &super::encode(&super::WireMessage::<iroh::EndpointId>::Hello {
+                version: super::IROH_FILE_PROTOCOL_VERSION,
+                resource: forged,
+                deleted: false,
+            })
+            .expect("encode ack"),
+        )
+        .await
+        .expect("send forged ack");
+        super::write_frame(
+            &mut send,
+            &super::encode(&super::WireMessage::<iroh::EndpointId>::Response {
+                id: 1,
+                response: file_system::FileResponse::ReadEnd,
+            })
+            .expect("encode response"),
+        )
+        .await
+        .expect("send response");
+        assert!(
+            request.await.expect("RPC task").is_err(),
+            "foreign acknowledgement cannot authorize responses"
+        );
+        server.close().await;
+        client.close().await;
+    })
+    .await
+    .expect("forged acknowledgement test completes");
+}
+
+#[tokio::test]
 async fn delivered_read_chunk_then_channel_closure_is_not_successful_eof() {
     tokio::time::timeout(Duration::from_secs(20), async {
         let lookup = MemoryLookup::new();

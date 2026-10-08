@@ -105,5 +105,10 @@ log = { version = "0.4", default-features = false, features = ["std"] }
 env_logger = { version = "0.10", default-features = false, features = [] }
 
 [dev-dependencies]
+# Local owner services
+idp-db = { path = "../db", default-features = false, features = ["replica"] }
+idp-service = { path = "../idp-service", default-features = false, features = ["replica"] }
+management-service = { path = "../management-service", default-features = false, features = ["replica"] }
+
 # Web
 tower = { version = "0.5", default-features = false, features = ["util"] }

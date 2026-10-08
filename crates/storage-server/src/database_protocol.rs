@@ -1,4 +1,4 @@
-use std::{future::Future, io, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
+use std::{future::Future, io, path::PathBuf, pin::Pin, sync::Arc};
 
 use iroh::{
     EndpointId,
@@ -15,18 +15,13 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     ManagementClient, data_protocol::DATABASE_STREAM_KIND, database_transport::DatabaseTransport,
-    sync_timeout,
 };
 
 type FrameAuthorizer = Arc<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;
-
 const MAX_HANDSHAKE_BYTES: usize = 4096;
-const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
-const POLICY_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
-const SYNC_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
-const MAX_SYNC_FRAME_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct DatabaseResourceDescriptor {
     pub(crate) owner_subject: String,
     pub(crate) application_id: String,
@@ -34,6 +29,7 @@ pub(crate) struct DatabaseResourceDescriptor {
 }
 
 #[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct DatabaseSyncHandshake {
     resource: DatabaseResourceDescriptor,
     deleted: bool,
@@ -66,26 +62,22 @@ impl DatabaseProtocolHandler {
     }
 
     pub(crate) async fn synchronize_selected_peers(&self) {
-        let local_public_key = self.server.endpoint().id().to_string();
-        let selected = match self.management.selected_resources(&local_public_key).await {
-            Ok(response) => response.resources,
-            Err(error) => {
-                log::warn!("failed to list selected databases: {error}");
-                return;
-            }
+        let Some(local) = self.management.local_replication_authorizer() else {
+            return;
+        };
+        let Ok(selected) = local.selected_resources(self.server.endpoint().id()).await else {
+            return;
         };
         for peer in self.server.peers().ids() {
-            let remote_public_key = peer.to_string();
-            if local_public_key >= remote_public_key {
+            if self.server.endpoint().id().to_string() >= peer.to_string() {
                 continue;
             }
             for resource in selected
                 .iter()
                 .filter(|resource| resource.kind == "database")
             {
-                let descriptor = descriptor(resource);
-                if let Err(error) = self.synchronize_peer(peer, descriptor).await {
-                    log::debug!("database sync with {remote_public_key} failed: {error}");
+                if let Err(error) = self.synchronize_peer(peer, descriptor(resource)).await {
+                    log::debug!("database sync with {peer} failed: {error}");
                 }
             }
         }
@@ -96,130 +88,59 @@ impl DatabaseProtocolHandler {
         peer: EndpointId,
         resource: DatabaseResourceDescriptor,
     ) -> io::Result<()> {
-        let connection = tokio::time::timeout(
-            HANDSHAKE_TIMEOUT,
-            self.server.connect_direct_with_alpn(peer, DATA_ALPN),
-        )
-        .await
-        .map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::TimedOut,
-                "database sync connection timed out",
-            )
-        })?
-        .map_err(io::Error::other)?;
-        if !self.authorize_bounded(&resource, &connection).await {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "database resource is not authorized for sync",
-            ));
+        tokio::select! {
+            biased;
+            () = self.cancellation_token.cancelled() => Err(io::Error::new(io::ErrorKind::Interrupted, "database sync cancelled")),
+            result = self.synchronize_peer_active(peer, resource) => result,
         }
+    }
+
+    async fn synchronize_peer_active(
+        &self,
+        peer: EndpointId,
+        resource: DatabaseResourceDescriptor,
+    ) -> io::Result<()> {
+        let connection = self
+            .server
+            .connect_direct_with_alpn(peer, DATA_ALPN)
+            .await
+            .map_err(io::Error::other)?;
+        self.require_authorized(&resource, &connection).await?;
         let database_id = resource
             .database_id
             .parse::<DatabaseId>()
             .map_err(io::Error::other)?;
-        let application_id = resource.application_id.parse().map_err(io::Error::other)?;
         let namespace = Namespace {
             owner_subject: resource.owner_subject.clone(),
-            application_id,
+            application_id: resource.application_id.parse().map_err(io::Error::other)?,
         };
         let deleted = self.databases.is_tombstoned(&namespace, database_id)?;
-        let (send, recv) = tokio::time::timeout(HANDSHAKE_TIMEOUT, async {
-            let (mut send, mut recv) = connection.open_bi().await.map_err(io::Error::other)?;
-            send.write_all(&[DATABASE_STREAM_KIND])
-                .await
-                .map_err(io::Error::other)?;
-            write_frame(
-                &mut send,
-                &serde_json::to_vec(&DatabaseSyncHandshake {
-                    resource: resource.clone(),
-                    deleted,
-                })
-                .map_err(io::Error::other)?,
-            )
-            .await?;
-            if read_frame(&mut recv, MAX_HANDSHAKE_BYTES).await? != b"OK" {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "invalid database sync acknowledgement",
-                ));
-            }
-            Ok::<_, io::Error>((send, recv))
-        })
-        .await
-        .map_err(|_| {
-            io::Error::new(io::ErrorKind::TimedOut, "database sync handshake timed out")
-        })??;
-
+        let (mut send, mut recv) = connection.open_bi().await.map_err(io::Error::other)?;
+        self.require_authorized(&resource, &connection).await?;
+        send.write_all(&[DATABASE_STREAM_KIND])
+            .await
+            .map_err(io::Error::other)?;
+        self.require_authorized(&resource, &connection).await?;
+        write_frame(
+            &mut send,
+            &serde_json::to_vec(&DatabaseSyncHandshake {
+                resource: resource.clone(),
+                deleted,
+            })
+            .map_err(io::Error::other)?,
+        )
+        .await?;
+        if read_frame(&mut recv, MAX_HANDSHAKE_BYTES).await? != b"OK" {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid database sync acknowledgement",
+            ));
+        }
         if deleted {
             return Ok(());
         }
-        let database = self
-            .databases
-            .open(&namespace, database_id)
-            .map_err(io::Error::other)?
-            .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::NotFound, "database resource not found")
-            })?;
-        let kv_store = self
-            .databases
-            .open_kv_selected(&namespace, database_id)
-            .map_err(io::Error::other)?
-            .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::NotFound, "database KV store not found")
-            })?;
-        let handler = self.clone();
-        let resource_for_guard = resource.clone();
-        let authorize: FrameAuthorizer = Arc::new(move || {
-            let handler = handler.clone();
-            let resource = resource_for_guard.clone();
-            let connection = connection.clone();
-            Box::pin(async move { handler.authorize_bounded(&resource, &connection).await })
-        });
-        let mut transport = AuthorizedTransport {
-            transport: DatabaseTransport::new(send, recv),
-            authorize: Arc::clone(&authorize),
-        };
-        sync_timeout::run(
-            SYNC_OPERATION_TIMEOUT,
-            "database sync operation timed out",
-            async {
-                database
-                    .synchronize_with_stage_directory_checked(
-                        &mut transport,
-                        &SessionConfig::default(),
-                        SyncRole::Initiator,
-                        &self.staging_directory,
-                        || check_apply(Arc::clone(&authorize), self.cancellation_token.clone()),
-                    )
-                    .await
-                    .map_err(sql_sync_error)?;
-                kv_store
-                    .synchronize_checked(
-                        &mut KvAuthorizedTransport {
-                            transport: &mut transport,
-                        },
-                        ofdb_kv::SyncRole::Initiator,
-                        ofdb_kv::SyncConfig {
-                            max_frame_bytes: MAX_SYNC_FRAME_BYTES,
-                            ..ofdb_kv::SyncConfig::default()
-                        },
-                        || check_apply(Arc::clone(&authorize), self.cancellation_token.clone()),
-                    )
-                    .await
-                    .map_err(kv_sync_error)
-            },
-        )
-        .await?;
-        Ok(())
-    }
-
-    async fn authorize_bounded(
-        &self,
-        resource: &DatabaseResourceDescriptor,
-        connection: &Connection,
-    ) -> bool {
-        authorize_with_timeout(POLICY_CHECK_TIMEOUT, self.authorize(resource, connection)).await
+        self.exchange(connection, resource, send, recv, SyncRole::Initiator)
+            .await
     }
 
     async fn authorize(
@@ -227,234 +148,162 @@ impl DatabaseProtocolHandler {
         resource: &DatabaseResourceDescriptor,
         connection: &Connection,
     ) -> bool {
-        if resource
-            .application_id
-            .parse::<idp_model::model::Id>()
-            .is_err()
-            || resource.database_id.parse::<DatabaseId>().is_err()
-        {
+        if self.cancellation_token.is_cancelled() {
             return false;
         }
-        if resource.owner_subject.trim().is_empty() {
-            return false;
-        }
-        let local_endpoint_id = self.server.endpoint().id().to_string();
-        let Ok(selected) = self.management.selected_resources(&local_endpoint_id).await else {
+        let Some(local) = self.management.local_replication_authorizer() else {
             return false;
         };
-        if !selected
-            .resources
-            .iter()
-            .any(|candidate| descriptor_matches_selection(resource, candidate))
-        {
-            return false;
-        }
-        self.management
-            .admit_peer_replication(
-                &self.server,
-                connection,
-                &resource.application_id,
-                "database",
-                &resource.database_id,
+        local
+            .authorize(
+                self.server.endpoint().id(),
+                connection.remote_id(),
+                &SelectedResource {
+                    owner_subject: resource.owner_subject.clone(),
+                    application_id: resource.application_id.clone(),
+                    kind: "database".into(),
+                    resource_id: resource.database_id.clone(),
+                },
             )
             .await
-            .is_ok()
     }
-}
 
-fn descriptor_matches_selection(
-    descriptor: &DatabaseResourceDescriptor,
-    selected: &SelectedResource,
-) -> bool {
-    selected.owner_subject == descriptor.owner_subject
-        && selected.application_id == descriptor.application_id
-        && selected.kind == "database"
-        && selected.resource_id == descriptor.database_id
-}
-
-impl core::fmt::Debug for DatabaseProtocolHandler {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_struct("DatabaseProtocolHandler")
-            .finish_non_exhaustive()
-    }
-}
-
-impl DatabaseProtocolHandler {
-    pub(crate) async fn accept_stream(
+    async fn require_authorized(
         &self,
-        connection: Connection,
-        send: iroh::endpoint::SendStream,
-        recv: iroh::endpoint::RecvStream,
-    ) {
-        self.accept_stream_with_timeout(connection, send, recv, SYNC_OPERATION_TIMEOUT)
-            .await;
+        resource: &DatabaseResourceDescriptor,
+        connection: &Connection,
+    ) -> io::Result<()> {
+        if self.authorize(resource, connection).await {
+            Ok(())
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "database resource is not locally authorized",
+            ))
+        }
     }
 
-    async fn accept_stream_with_timeout(
+    pub(crate) async fn accept_stream(
         &self,
         connection: Connection,
         mut send: iroh::endpoint::SendStream,
         mut recv: iroh::endpoint::RecvStream,
-        operation_timeout: Duration,
     ) {
-        let handshake =
-            match tokio::time::timeout(HANDSHAKE_TIMEOUT, read_handshake(&mut recv)).await {
-                Ok(Ok(handshake)) => handshake,
-                Ok(Err(error)) => {
-                    log::warn!("rejected database sync handshake: {error}");
-                    return;
+        let result = tokio::select! {
+            biased;
+            () = self.cancellation_token.cancelled() => return,
+            result = async {
+                let handshake: DatabaseSyncHandshake = serde_json::from_slice(&read_frame(&mut recv, MAX_HANDSHAKE_BYTES).await?).map_err(io::Error::other)?;
+                self.require_authorized(&handshake.resource, &connection).await?;
+                let database_id = handshake.resource.database_id.parse::<DatabaseId>().map_err(io::Error::other)?;
+                let namespace = Namespace { owner_subject: handshake.resource.owner_subject.clone(), application_id: handshake.resource.application_id.parse().map_err(io::Error::other)? };
+                if handshake.deleted {
+                    self.require_authorized(&handshake.resource, &connection).await?;
+                    self.databases.apply_tombstone(&namespace, database_id)?;
+                    self.require_authorized(&handshake.resource, &connection).await?;
+                    return write_frame(&mut send, b"OK").await;
                 }
-                Err(_) => {
-                    log::warn!("rejected database sync handshake: timed out");
-                    return;
-                }
-            };
-        if !self
-            .authorize_bounded(&handshake.resource, &connection)
-            .await
-        {
-            log::warn!("rejected unauthorized database sync stream");
-            return;
+                self.require_authorized(&handshake.resource, &connection).await?;
+                write_frame(&mut send, b"OK").await?;
+                self.exchange(connection, handshake.resource, send, recv, SyncRole::Responder).await
+            } => result,
+        };
+        if let Err(error) = result {
+            log::debug!("database sync session ended: {error}");
         }
-        let Ok(application_id) = handshake.resource.application_id.parse() else {
-            return;
-        };
-        let Ok(database_id) = handshake.resource.database_id.parse::<DatabaseId>() else {
-            return;
-        };
+    }
+
+    async fn exchange(
+        &self,
+        connection: Connection,
+        resource: DatabaseResourceDescriptor,
+        send: iroh::endpoint::SendStream,
+        recv: iroh::endpoint::RecvStream,
+        role: SyncRole,
+    ) -> io::Result<()> {
+        self.require_authorized(&resource, &connection).await?;
+        let database_id = resource
+            .database_id
+            .parse::<DatabaseId>()
+            .map_err(io::Error::other)?;
         let namespace = Namespace {
-            owner_subject: handshake.resource.owner_subject.clone(),
-            application_id,
+            owner_subject: resource.owner_subject.clone(),
+            application_id: resource.application_id.parse().map_err(io::Error::other)?,
         };
-        if handshake.deleted {
-            if let Err(error) = self.databases.apply_tombstone(&namespace, database_id) {
-                log::warn!("failed to apply database tombstone: {error}");
-                return;
-            }
-            if let Err(error) = write_frame(&mut send, b"OK").await {
-                log::warn!("failed to acknowledge database tombstone: {error}");
-            }
-            return;
-        }
-        let Some(database) = self
+        let database = self
             .databases
-            .open_selected(&namespace, database_id)
-            .ok()
-            .flatten()
-        else {
-            return;
-        };
-        let Some(kv_store) = self
+            .open_selected(&namespace, database_id)?
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::NotFound, "database resource not found")
+            })?;
+        self.require_authorized(&resource, &connection).await?;
+        let kv = self
             .databases
-            .open_kv_selected(&namespace, database_id)
-            .ok()
-            .flatten()
-        else {
-            return;
-        };
-        if let Err(error) = write_frame(&mut send, b"OK").await {
-            log::warn!("failed to acknowledge database sync stream: {error}");
-            return;
-        }
+            .open_kv_selected(&namespace, database_id)?
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::NotFound, "database KV resource not found")
+            })?;
         let handler = self.clone();
-        let cancellation_token = self.cancellation_token.clone();
-        let staging_directory = self.staging_directory.clone();
-        tokio::spawn(async move {
-            let resource_for_guard = handshake.resource.clone();
-            let authorize: FrameAuthorizer = Arc::new(move || {
-                let handler = handler.clone();
-                let resource = resource_for_guard.clone();
-                let connection = connection.clone();
-                Box::pin(async move { handler.authorize_bounded(&resource, &connection).await })
-            });
-            let mut transport = AuthorizedTransport {
-                transport: DatabaseTransport::new(send, recv),
-                authorize: Arc::clone(&authorize),
-            };
-            let apply_cancellation = cancellation_token.clone();
-            let sync_task = tokio::spawn(async move {
-                sync_timeout::run(
-                    operation_timeout,
-                    "database sync operation timed out",
-                    async {
-                        database
-                            .synchronize_with_stage_directory_checked(
-                                &mut transport,
-                                &SessionConfig::default(),
-                                SyncRole::Responder,
-                                &staging_directory,
-                                || check_apply(Arc::clone(&authorize), apply_cancellation.clone()),
-                            )
-                            .await
-                            .map_err(sql_sync_error)?;
-                        kv_store
-                            .synchronize_checked(
-                                &mut KvAuthorizedTransport {
-                                    transport: &mut transport,
-                                },
-                                ofdb_kv::SyncRole::Responder,
-                                ofdb_kv::SyncConfig {
-                                    max_frame_bytes: MAX_SYNC_FRAME_BYTES,
-                                    ..ofdb_kv::SyncConfig::default()
-                                },
-                                || check_apply(Arc::clone(&authorize), apply_cancellation.clone()),
-                            )
-                            .await
-                            .map_err(kv_sync_error)
-                    },
-                )
-                .await
-            });
-            let mut sync_task = sync_task;
-            let result = tokio::select! {
-                () = cancellation_token.cancelled() => {
-                    sync_task.abort();
-                    let _ = sync_task.await;
-                    return;
-                }
-                result = &mut sync_task => match result {
-                    Ok(result) => result,
-                    Err(error) => Err(io::Error::other(error)),
-                },
-            };
-            match result {
-                Ok(()) => {}
-                Err(error) if error.kind() == io::ErrorKind::TimedOut => {
-                    log::warn!("database sync operation timed out")
-                }
-                Err(error) => log::warn!("database sync session ended: {error}"),
-            }
+        let authorize: FrameAuthorizer = Arc::new(move || {
+            let handler = handler.clone();
+            let resource = resource.clone();
+            let connection = connection.clone();
+            Box::pin(async move { handler.authorize(&resource, &connection).await })
         });
+        let mut transport = AuthorizedTransport {
+            transport: DatabaseTransport::new(send, recv),
+            authorize: authorize.clone(),
+        };
+        database
+            .synchronize_with_stage_directory_checked(
+                &mut transport,
+                &SessionConfig::default(),
+                role,
+                &self.staging_directory,
+                || check_apply(authorize.clone(), self.cancellation_token.clone()),
+            )
+            .await
+            .map_err(sql_sync_error)?;
+        kv.synchronize_checked(
+            &mut KvAuthorizedTransport {
+                transport: &mut transport,
+            },
+            match role {
+                SyncRole::Initiator => ofdb_kv::SyncRole::Initiator,
+                SyncRole::Responder => ofdb_kv::SyncRole::Responder,
+            },
+            ofdb_kv::SyncConfig::default(),
+            || check_apply(authorize.clone(), self.cancellation_token.clone()),
+        )
+        .await
+        .map_err(kv_sync_error)
+    }
+}
+
+impl core::fmt::Debug for DatabaseProtocolHandler {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("DatabaseProtocolHandler")
+            .finish_non_exhaustive()
     }
 }
 
 impl ProtocolHandler for DatabaseProtocolHandler {
     async fn accept(&self, connection: Connection) -> Result<(), AcceptError> {
         loop {
-            let (send, mut recv) = connection.accept_bi().await?;
-            let mut kind = [0; 1];
-            if !matches!(
-                tokio::time::timeout(HANDSHAKE_TIMEOUT, recv.read_exact(&mut kind)).await,
-                Ok(Ok(()))
-            ) {
-                continue;
+            let (send, mut recv) = tokio::select! {
+                () = self.cancellation_token.cancelled() => return Ok(()),
+                result = connection.accept_bi() => result?,
+            };
+            let mut kind = [0];
+            tokio::select! {
+                () = self.cancellation_token.cancelled() => return Ok(()),
+                result = recv.read_exact(&mut kind) => if result.is_err() { continue; },
             }
-            if kind[0] != DATABASE_STREAM_KIND {
-                continue;
+            if kind[0] == DATABASE_STREAM_KIND {
+                self.accept_stream(connection.clone(), send, recv).await;
             }
-            self.accept_stream(connection.clone(), send, recv).await;
         }
     }
-}
-
-async fn authorize_with_timeout<F>(timeout: Duration, authorization: F) -> bool
-where
-    F: Future<Output = bool>,
-{
-    tokio::time::timeout(timeout, authorization)
-        .await
-        .unwrap_or(false)
 }
 
 fn descriptor(resource: &SelectedResource) -> DatabaseResourceDescriptor {
@@ -469,62 +318,46 @@ struct AuthorizedTransport<T = DatabaseTransport> {
     transport: T,
     authorize: FrameAuthorizer,
 }
-
 struct KvAuthorizedTransport<'a> {
     transport: &'a mut AuthorizedTransport,
 }
-
 impl ofdb_kv::SyncTransport for KvAuthorizedTransport<'_> {
     type Error = io::Error;
-
-    async fn receive(&mut self) -> Result<Vec<u8>, Self::Error> {
+    async fn receive(&mut self) -> io::Result<Vec<u8>> {
         self.transport.receive().await
     }
-
-    async fn send(&mut self, frame: Vec<u8>) -> Result<(), Self::Error> {
+    async fn send(&mut self, frame: Vec<u8>) -> io::Result<()> {
         self.transport.send(frame).await
     }
 }
-
-impl<T> SyncTransport for AuthorizedTransport<T>
-where
-    T: SyncTransport<Error = io::Error>,
-{
+impl<T: SyncTransport<Error = io::Error>> SyncTransport for AuthorizedTransport<T> {
     type Error = io::Error;
-
-    async fn receive(&mut self) -> Result<Vec<u8>, Self::Error> {
-        if !(self.authorize)().await {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "database sync access revoked",
-            ));
-        }
+    async fn receive(&mut self) -> io::Result<Vec<u8>> {
+        require_frame(&self.authorize).await?;
         let frame = self.transport.receive().await?;
-        if !(self.authorize)().await {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "database sync access revoked",
-            ));
-        }
+        require_frame(&self.authorize).await?;
         Ok(frame)
     }
-
-    async fn send(&mut self, frame: Vec<u8>) -> Result<(), Self::Error> {
-        if !(self.authorize)().await {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "database sync access revoked",
-            ));
-        }
+    async fn send(&mut self, frame: Vec<u8>) -> io::Result<()> {
+        require_frame(&self.authorize).await?;
         self.transport.send(frame).await
     }
 }
-
+async fn require_frame(authorize: &FrameAuthorizer) -> io::Result<()> {
+    if authorize().await {
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "database sync access revoked",
+        ))
+    }
+}
 async fn check_apply(
     authorize: FrameAuthorizer,
     cancellation: CancellationToken,
 ) -> Result<(), String> {
-    let permitted = tokio::select! {
+    let permitted = tokio::select! { biased;
         () = cancellation.cancelled() => return Err("database sync cancelled".into()),
         permitted = authorize() => permitted,
     };
@@ -536,7 +369,6 @@ async fn check_apply(
         Err("database sync access revoked before apply".into())
     }
 }
-
 fn sql_sync_error(error: ofdb_sql::SyncError<io::Error>) -> io::Error {
     match error {
         ofdb_sql::SyncError::PreApply(detail) => {
@@ -545,7 +377,6 @@ fn sql_sync_error(error: ofdb_sql::SyncError<io::Error>) -> io::Error {
         error => io::Error::other(error),
     }
 }
-
 fn kv_sync_error(error: ofdb_kv::SyncError<io::Error>) -> io::Error {
     match error {
         ofdb_kv::SyncError::PreApply(detail) => {
@@ -554,14 +385,6 @@ fn kv_sync_error(error: ofdb_kv::SyncError<io::Error>) -> io::Error {
         error => io::Error::other(format!("database KV sync failed: {error:?}")),
     }
 }
-
-async fn read_handshake(
-    recv: &mut iroh::endpoint::RecvStream,
-) -> io::Result<DatabaseSyncHandshake> {
-    let frame = read_frame(recv, MAX_HANDSHAKE_BYTES).await?;
-    serde_json::from_slice(&frame).map_err(io::Error::other)
-}
-
 async fn read_frame(recv: &mut iroh::endpoint::RecvStream, max: usize) -> io::Result<Vec<u8>> {
     let mut length = [0; 4];
     recv.read_exact(&mut length)
@@ -580,7 +403,6 @@ async fn read_frame(recv: &mut iroh::endpoint::RecvStream, max: usize) -> io::Re
         .map_err(io::Error::other)?;
     Ok(frame)
 }
-
 async fn write_frame(send: &mut iroh::endpoint::SendStream, frame: &[u8]) -> io::Result<()> {
     if frame.len() > MAX_HANDSHAKE_BYTES {
         return Err(io::Error::new(
@@ -593,12 +415,10 @@ async fn write_frame(send: &mut iroh::endpoint::SendStream, frame: &[u8]) -> io:
         .map_err(io::Error::other)?;
     send.write_all(frame).await.map_err(io::Error::other)
 }
-
 struct Namespace {
     owner_subject: String,
     application_id: idp_model::model::Id,
 }
-
 impl StorageNamespace for Namespace {
     fn user_sub(&self) -> &str {
         &self.owner_subject
@@ -611,66 +431,3 @@ impl StorageNamespace for Namespace {
 #[cfg(test)]
 #[path = "database_protocol_tests.rs"]
 mod tests;
-
-#[cfg(test)]
-mod authorization_tests {
-    use model::contract::SelectedResource;
-
-    use super::{DatabaseResourceDescriptor, descriptor_matches_selection};
-
-    fn descriptor() -> DatabaseResourceDescriptor {
-        DatabaseResourceDescriptor {
-            owner_subject: "owner-a".to_owned(),
-            application_id: "app-a".to_owned(),
-            database_id: "db-a".to_owned(),
-        }
-    }
-
-    fn selection() -> SelectedResource {
-        SelectedResource {
-            owner_subject: "owner-a".to_owned(),
-            application_id: "app-a".to_owned(),
-            kind: "database".to_owned(),
-            resource_id: "db-a".to_owned(),
-        }
-    }
-
-    #[test]
-    fn accepts_only_exact_management_selection() {
-        let descriptor = descriptor();
-        let selection = selection();
-        assert!(descriptor_matches_selection(&descriptor, &selection));
-
-        let mut spoofed_descriptor = descriptor.clone();
-        spoofed_descriptor.owner_subject = "owner-b".to_owned();
-        assert!(!descriptor_matches_selection(
-            &spoofed_descriptor,
-            &selection
-        ));
-        let mut spoofed_descriptor = descriptor.clone();
-        spoofed_descriptor.application_id = "app-b".to_owned();
-        assert!(!descriptor_matches_selection(
-            &spoofed_descriptor,
-            &selection
-        ));
-        let mut spoofed_descriptor = descriptor.clone();
-        spoofed_descriptor.database_id = "db-b".to_owned();
-        assert!(!descriptor_matches_selection(
-            &spoofed_descriptor,
-            &selection
-        ));
-
-        let mut spoofed = selection.clone();
-        spoofed.owner_subject = "owner-b".to_owned();
-        assert!(!descriptor_matches_selection(&descriptor, &spoofed));
-        let mut spoofed = selection.clone();
-        spoofed.application_id = "app-b".to_owned();
-        assert!(!descriptor_matches_selection(&descriptor, &spoofed));
-        let mut spoofed = selection.clone();
-        spoofed.kind = "filesystem".to_owned();
-        assert!(!descriptor_matches_selection(&descriptor, &spoofed));
-        let mut spoofed = selection;
-        spoofed.resource_id = "db-b".to_owned();
-        assert!(!descriptor_matches_selection(&descriptor, &spoofed));
-    }
-}

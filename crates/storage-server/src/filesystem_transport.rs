@@ -16,7 +16,7 @@ use iroh::{
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::{
     io::AsyncWriteExt,
-    sync::{Mutex, OwnedSemaphorePermit, Semaphore, broadcast, mpsc, watch},
+    sync::{Mutex, broadcast, mpsc, watch},
 };
 
 use file_system::{
@@ -28,9 +28,9 @@ use file_system::{
 pub(crate) const FILESYSTEM_STREAM_KIND: u8 = 2;
 
 const IROH_FILE_PROTOCOL_VERSION: u8 = 2;
-const MAX_ACTIVE_REQUESTS: usize = 64;
+
 const MAX_PENDING_RESPONSES: usize = 1;
-const MAX_READ_RESPONSE_FRAMES: usize = 512;
+
 const MAX_READ_RESPONSE_CHUNK_BYTES: usize = MAX_FILESYSTEM_SYNC_FRAME_SIZE - 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -68,7 +68,7 @@ struct Inner {
     metadata: StdMutex<Option<broadcast::Sender<IncomingMessage<EndpointId>>>>,
     sessions: StdMutex<Option<broadcast::Sender<SessionRequest<EndpointId>>>>,
     pending: Mutex<BTreeMap<u64, mpsc::Sender<FileResponse<EndpointId>>>>,
-    request_slots: Arc<Semaphore>,
+
     next_id: AtomicU64,
     transport_handles: AtomicUsize,
     shutdown: watch::Sender<bool>,
@@ -141,6 +141,12 @@ impl IrohFileTransport {
             ));
         }
         let (mut send, recv) = connection.open_bi().await.map_err(Error::other)?;
+        if !authorize(resource.clone()).await {
+            return Err(Error::new(
+                ErrorKind::PermissionDenied,
+                "filesystem resource authorization changed before stream write",
+            ));
+        }
         send.write_all(&[FILESYSTEM_STREAM_KIND]).await?;
         let authorize = Arc::new(authorize);
         let authorized_resource = resource.clone();
@@ -153,7 +159,7 @@ impl IrohFileTransport {
             connection.remote_id(),
             send,
             recv,
-            true,
+            Some(resource.clone()),
             Some(authorize_frame),
         );
         transport
@@ -206,7 +212,7 @@ impl IrohFileTransport {
             connection.remote_id(),
             send,
             recv,
-            false,
+            None,
             Some(authorize_frame),
         );
         transport
@@ -223,10 +229,10 @@ impl IrohFileTransport {
         peer: EndpointId,
         send: SendStream,
         recv: RecvStream,
-        expect_hello: bool,
+        expect_hello: Option<IrohResourceDescriptor>,
         authorize_frame: Option<FrameAuthorizer>,
     ) -> Self {
-        let (outgoing, mut outgoing_rx) = mpsc::channel::<Vec<u8>>(64);
+        let (outgoing, outgoing_rx) = mpsc::channel::<Vec<u8>>(64);
         let (metadata, _) = broadcast::channel(64);
         let (sessions, _) = broadcast::channel(64);
         let (shutdown, _) = watch::channel(false);
@@ -237,31 +243,14 @@ impl IrohFileTransport {
             metadata: StdMutex::new(Some(metadata)),
             sessions: StdMutex::new(Some(sessions)),
             pending: Mutex::new(BTreeMap::new()),
-            request_slots: Arc::new(Semaphore::new(MAX_ACTIVE_REQUESTS)),
+
             next_id: AtomicU64::new(1),
             transport_handles: AtomicUsize::new(1),
             shutdown,
         });
         let writer_inner = Arc::clone(&inner);
-        let mut writer_shutdown = inner.shutdown.subscribe();
-        tokio::spawn(async move {
-            let mut send = send;
-            loop {
-                let frame = tokio::select! {
-                    _ = writer_shutdown.changed() => break,
-                    frame = outgoing_rx.recv() => match frame {
-                        Some(frame) => frame,
-                        None => break,
-                    },
-                };
-                if write_frame(&mut send, &frame).await.is_err() {
-                    break;
-                }
-            }
-            let _ = send.finish();
-            close_stream(&writer_inner);
-            fail_pending(&writer_inner).await;
-        });
+        let writer_shutdown = inner.shutdown.subscribe();
+        tokio::spawn(write_loop(writer_inner, send, outgoing_rx, writer_shutdown));
         tokio::spawn(read_loop(
             Arc::clone(&inner),
             recv,
@@ -274,14 +263,7 @@ impl IrohFileTransport {
     async fn request(
         &self,
         operation: FileOperation,
-    ) -> Result<
-        (
-            u64,
-            mpsc::Receiver<FileResponse<EndpointId>>,
-            OwnedSemaphorePermit,
-        ),
-        Error,
-    > {
+    ) -> Result<(u64, mpsc::Receiver<FileResponse<EndpointId>>), Error> {
         if matches!(&operation, FileOperation::Write { data, .. } if data.len() > MAX_FILESYSTEM_SYNC_FRAME_SIZE - 128)
         {
             return Err(Error::new(
@@ -289,10 +271,7 @@ impl IrohFileTransport {
                 "filesystem write exceeds frame size limit",
             ));
         }
-        let permit = Arc::clone(&self.inner.request_slots)
-            .acquire_owned()
-            .await
-            .map_err(|_| Error::new(ErrorKind::BrokenPipe, "Iroh file session is closed"))?;
+
         authorize_frame(&self.inner).await?;
         let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let frame = encode(&WireMessage::<EndpointId>::Request { id, operation })?;
@@ -310,7 +289,7 @@ impl IrohFileTransport {
             self.inner.pending.lock().await.remove(&id);
             return Err(Error::other(error));
         }
-        Ok((id, rx, permit))
+        Ok((id, rx))
     }
 
     async fn rpc(&self, operation: FileOperation) -> Result<Vec<FileResponse<EndpointId>>, Error> {
@@ -320,7 +299,7 @@ impl IrohFileTransport {
             }
             _ => None,
         };
-        let (id, mut rx, _permit) = self.request(operation).await?;
+        let (id, mut rx) = self.request(operation).await?;
         let mut responses = Vec::new();
         let mut read_bytes = 0_usize;
         let mut complete = false;
@@ -334,7 +313,7 @@ impl IrohFileTransport {
                     ));
                 };
                 read_bytes = total;
-                if read_bytes > limit || responses.len() >= MAX_READ_RESPONSE_FRAMES {
+                if read_bytes > limit {
                     self.inner.pending.lock().await.remove(&id);
                     return Err(Error::new(
                         ErrorKind::InvalidData,
@@ -545,16 +524,46 @@ impl FileHandle<EndpointId> for IrohFileHandle {
     }
 }
 
+async fn write_loop(
+    inner: Arc<Inner>,
+    mut send: SendStream,
+    mut outgoing: mpsc::Receiver<Vec<u8>>,
+    mut shutdown: watch::Receiver<bool>,
+) {
+    loop {
+        let frame = tokio::select! {
+            _ = shutdown.changed() => break,
+            frame = outgoing.recv() => match frame {
+                Some(frame) => frame,
+                None => break,
+            },
+        };
+        if authorize_frame(&inner).await.is_err() {
+            break;
+        }
+        let result = tokio::select! {
+            _ = shutdown.changed() => break,
+            result = write_frame(&mut send, &frame) => result,
+        };
+        if result.is_err() {
+            break;
+        }
+    }
+    let _ = send.finish();
+    close_stream(&inner);
+    fail_pending(&inner).await;
+}
+
 async fn read_loop(
     inner: Arc<Inner>,
     mut recv: RecvStream,
-    expect_hello: bool,
+    expect_hello: Option<IrohResourceDescriptor>,
     mut shutdown: watch::Receiver<bool>,
 ) {
-    if expect_hello
+    if let Some(expected) = expect_hello
         && !matches!(
             read_message_or_shutdown::<EndpointId>(&mut recv, &mut shutdown).await,
-            Ok(WireMessage::Hello { version, .. }) if version == IROH_FILE_PROTOCOL_VERSION
+            Ok(WireMessage::Hello { version, resource, deleted: false }) if version == IROH_FILE_PROTOCOL_VERSION && resource == expected
         )
     {
         close_stream(&inner);
@@ -603,11 +612,7 @@ async fn read_loop(
                 {
                     break;
                 }
-                let Ok(permit) = Arc::clone(&inner.request_slots).try_acquire_owned() else {
-                    let _ =
-                        send_response(&inner, id, FileResponse::Error(FileServiceError::Io)).await;
-                    continue;
-                };
+
                 let (tx, mut rx) = mpsc::channel(MAX_PENDING_RESPONSES);
                 let sessions = inner
                     .sessions
@@ -622,7 +627,6 @@ async fn read_loop(
                 }
                 let response_inner = Arc::clone(&inner);
                 tokio::spawn(async move {
-                    let _permit = permit;
                     while let Some(response) = rx.recv().await {
                         let done = !matches!(response, FileResponse::ReadChunk(_));
                         if send_response(&response_inner, id, response).await.is_err() || done {
@@ -639,7 +643,7 @@ async fn read_loop(
 
 fn close_stream(inner: &Inner) {
     inner.shutdown.send_replace(true);
-    inner.request_slots.close();
+
     inner
         .outgoing
         .lock()
@@ -815,6 +819,10 @@ fn service_error(error: FileServiceError) -> Error {
 mod tests;
 
 #[cfg(test)]
+#[path = "execution_authorization_tests.rs"]
+mod execution_authorization_tests;
+
+#[cfg(test)]
 mod authorization_tests {
     use std::{
         collections::BTreeMap,
@@ -825,7 +833,7 @@ mod authorization_tests {
         time::Duration,
     };
 
-    use tokio::sync::{Mutex, Semaphore, broadcast, mpsc, oneshot, watch};
+    use tokio::sync::{Mutex, broadcast, mpsc, oneshot, watch};
 
     use super::{FrameAuthorizer, Inner, close_stream, send_response};
     use file_system::{FileResponse, FileServiceError};
@@ -844,7 +852,6 @@ mod authorization_tests {
             metadata: std::sync::Mutex::new(Some(metadata)),
             sessions: std::sync::Mutex::new(Some(sessions)),
             pending: Mutex::new(BTreeMap::new()),
-            request_slots: Arc::new(Semaphore::new(1)),
             next_id: AtomicU64::new(1),
             transport_handles: AtomicUsize::new(1),
             shutdown: watch::channel(false).0,
@@ -892,7 +899,6 @@ mod authorization_tests {
             metadata: std::sync::Mutex::new(Some(metadata)),
             sessions: std::sync::Mutex::new(Some(sessions)),
             pending: Mutex::new(BTreeMap::new()),
-            request_slots: Arc::new(Semaphore::new(1)),
             next_id: AtomicU64::new(1),
             transport_handles: AtomicUsize::new(1),
             shutdown: watch::channel(false).0,

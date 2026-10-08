@@ -1,4 +1,4 @@
-use std::{future::Future, io, pin::Pin, sync::Arc, time::Duration};
+use std::{future::Future, io, pin::Pin, sync::Arc};
 
 use iroh::{
     endpoint::{Connection, RecvStream, SendStream},
@@ -11,7 +11,6 @@ use crate::{database_protocol::DatabaseProtocolHandler, storage_protocol::Storag
 
 pub(crate) const DATABASE_STREAM_KIND: u8 = 1;
 pub(crate) const FILESYSTEM_STREAM_KIND: u8 = crate::filesystem_transport::FILESYSTEM_STREAM_KIND;
-const STREAM_MARKER_TIMEOUT: Duration = Duration::from_secs(5);
 
 type AdditionalStreamHandler = Arc<
     dyn Fn(
@@ -69,8 +68,8 @@ impl ProtocolHandler for DataProtocolHandler {
                 () = self.cancellation_token.cancelled() => return Ok(()),
                 () = async {
                     let mut kind = [0; 1];
-                    match tokio::time::timeout(STREAM_MARKER_TIMEOUT, recv.read_exact(&mut kind)).await {
-                        Ok(Ok(())) => match kind[0] {
+                    match recv.read_exact(&mut kind).await {
+                        Ok(()) => match kind[0] {
                             DATABASE_STREAM_KIND => self.database.accept_stream(connection.clone(), send, recv).await,
                             FILESYSTEM_STREAM_KIND => self.file_system.accept_stream(connection.clone(), send, recv).await,
                             kind => {
@@ -83,8 +82,7 @@ impl ProtocolHandler for DataProtocolHandler {
                                 }
                             },
                         },
-                        Ok(Err(error)) => log::debug!("rejected data stream without a protocol kind: {error}"),
-                        Err(_) => log::debug!("rejected data stream with a timed-out protocol marker"),
+                        Err(error) => log::debug!("rejected data stream without a protocol kind: {error}"),
                     }
                 } => {}
             }
