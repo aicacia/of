@@ -210,6 +210,14 @@ impl PublicSecurityTable {
         if value.is_null() {
             return self.nullable(column);
         }
+        if column == "public_jwk" {
+            return value.as_str().is_some_and(permits_public_jwk);
+        }
+        if matches!(column, "code_hash" | "token_hash") {
+            return value.as_str().is_some_and(|hash| {
+                hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+            });
+        }
         let uuid = matches!(
             column,
             "id" | "credential_id"
@@ -247,6 +255,25 @@ impl PublicSecurityTable {
         }
     }
 
+    /// Check disclosure safety of an assignment or schema default, not complete-row validity.
+    #[cfg(feature = "replica")]
+    #[must_use]
+    pub fn permits_historical_value(self, column: &str, value: &db::Value) -> bool {
+        if !self.columns().contains(&column) {
+            return false;
+        }
+        let value = match value {
+            db::Value::Null => return true,
+            db::Value::Text(text) => serde_json::Value::String(text.clone()),
+            db::Value::Uuid(id) => {
+                serde_json::Value::String(alloc::string::ToString::to_string(id))
+            }
+            db::Value::Integer(value) => serde_json::Value::Number((*value).into()),
+            _ => return false,
+        };
+        self.permits_value(column, &value)
+    }
+
     /// Validate a complete SQL-shaped public projection, not provenance or import authorization.
     #[must_use]
     pub fn permits_record(
@@ -262,41 +289,24 @@ impl PublicSecurityTable {
         {
             return false;
         }
-        if let Some(public) = record.get("public_jwk").filter(|value| !value.is_null()) {
-            let Some(text) = public.as_str() else {
-                return false;
-            };
-            let Ok(decoded) = serde_json::from_str::<serde_json::Value>(text) else {
-                return false;
-            };
-            let Some(public) = decoded.as_object() else {
-                return false;
-            };
-            if public.keys().any(|field| {
-                !["kid", "use", "alg", "kty", "crv", "x", "y"].contains(&field.as_str())
-            }) {
-                return false;
-            }
-            if serde_json::from_value::<idp_model::contract::JwkPublic>(serde_json::Value::Object(
-                public.clone(),
-            ))
-            .ok()
-            .is_none_or(|jwk| crate::oauth2::verifing_key_from_jwt(&jwk).is_err())
-            {
-                return false;
-            }
-        }
-        for field in ["code_hash", "token_hash"] {
-            if let Some(hash) = record.get(field).filter(|value| !value.is_null())
-                && hash.as_str().is_none_or(|hash| {
-                    hash.len() != 64 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit())
-                })
-            {
-                return false;
-            }
-        }
+
         true
     }
+}
+
+fn permits_public_jwk(text: &str) -> bool {
+    let Ok(decoded) = serde_json::from_str::<serde_json::Value>(text) else {
+        return false;
+    };
+    let Some(public) = decoded.as_object() else {
+        return false;
+    };
+    public
+        .keys()
+        .all(|field| ["kid", "use", "alg", "kty", "crv", "x", "y"].contains(&field.as_str()))
+        && serde_json::from_str::<idp_model::contract::JwkPublic>(text)
+            .ok()
+            .is_some_and(|jwk| crate::oauth2::verifing_key_from_jwt(&jwk).is_ok())
 }
 
 #[must_use]
@@ -322,6 +332,62 @@ mod tests {
     use super::PublicSecurityTable;
     #[cfg(feature = "replica")]
     use super::public_security_tables;
+
+    #[cfg(feature = "replica")]
+    #[test]
+    fn historical_values_reject_private_jwks_and_raw_grants() {
+        let public = serde_json::json!({"kid": "node-key", "use": "sig", "alg": "ES256K", "kty": "Ec", "crv": "secp256k1",
+            "x": "eb5mfvncu6xVoGKVzocLBwKb/NstzijZWfKBWxb4F5g", "y": "SDradyajxGVdpPv8DhEIqP0XtEimhVQZnEfQj/sQ1Lg"});
+        for table in [PublicSecurityTable::Keys, PublicSecurityTable::Signers] {
+            assert!(
+                table.permits_historical_value("public_jwk", &db::Value::Text(public.to_string()))
+            );
+            for field in ["d", "private_key", "secret", "p", "q", "k"] {
+                let mut private = public.clone();
+                private[field] = serde_json::json!("confidential-material");
+                assert!(
+                    !table.permits_historical_value(
+                        "public_jwk",
+                        &db::Value::Text(private.to_string())
+                    ),
+                    "private field {field}"
+                );
+            }
+            let mut invalid_point = public.clone();
+            invalid_point["x"] = serde_json::json!("not-a-point");
+            assert!(!table.permits_historical_value(
+                "public_jwk",
+                &db::Value::Text(invalid_point.to_string())
+            ));
+            assert!(!table.permits_historical_value(
+                "public_jwk",
+                &db::Value::Text(alloc::format!("{} trailing-secret", public))
+            ));
+            assert!(!table.permits_historical_value(
+                "public_jwk",
+                &db::Value::Text(alloc::format!(
+                    "{{\"x\":\"hidden-secret\",{}",
+                    &public.to_string()[1..]
+                ))
+            ));
+            assert!(!table.permits_historical_value("private_key", &db::Value::Null));
+        }
+        assert!(PublicSecurityTable::Keys.permits_historical_value("public_jwk", &db::Value::Null));
+        assert!(
+            PublicSecurityTable::Signers.permits_historical_value("public_jwk", &db::Value::Null),
+            "a null schema default carries no confidential value; complete record validation still rejects it"
+        );
+        for (table, column) in [
+            (PublicSecurityTable::AuthorizationCodes, "code_hash"),
+            (PublicSecurityTable::RefreshTokens, "token_hash"),
+        ] {
+            assert!(table.permits_historical_value(column, &db::Value::Text("a".repeat(64))));
+            for raw in ["raw-bearer", &"a".repeat(63), &"g".repeat(64)] {
+                assert!(!table.permits_historical_value(column, &db::Value::Text(raw.into())));
+            }
+            assert!(!table.permits_historical_value(column, &db::Value::Integer(1)));
+        }
+    }
 
     #[test]
     fn projections_require_complete_typed_records() {

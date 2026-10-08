@@ -7992,6 +7992,7 @@ dependencies = [
  "management-server",
  "management-service",
  "ofdb-sql",
+ "postcard",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

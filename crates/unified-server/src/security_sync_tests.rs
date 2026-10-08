@@ -27,7 +27,7 @@ use crate::{SecurityContext, SecurityProtocol};
 
 const INSTALLATION: &str = "https://installation.example";
 
-async fn sql(database: &Database, statement: &str) -> Vec<db::QueryResult> {
+pub(super) async fn sql(database: &Database, statement: &str) -> Vec<db::QueryResult> {
     database
         .client()
         .translate_and_execute(statement, &SqlTranslator)
@@ -42,7 +42,7 @@ async fn authenticated_equal_peers_exchange_scoped_history_without_local_verifie
         .expect("domain history exchange and shutdown complete");
 }
 
-async fn enroll(idp: Arc<Database>, member: Id, endpoint: iroh::EndpointId, key: Id) {
+pub(super) async fn enroll(idp: Arc<Database>, member: Id, endpoint: iroh::EndpointId, key: Id) {
     DbReplicaSignerRepo::new(idp)
         .enroll(
             &ReplicaMembership {

@@ -9,6 +9,8 @@ mod permission_http_tests;
 mod protocol;
 mod router;
 mod runtime;
+#[cfg(test)]
+mod security_history_tests;
 mod security_sync;
 #[cfg(test)]
 mod security_sync_tests;
