@@ -279,7 +279,7 @@ pub(crate) struct PermissionFixture {
     pub(crate) local_signer: idp_service::oauth2::NodeSignerBinding,
     application_id: idp_model::model::Id,
     other_application_id: idp_model::model::Id,
-    administrator: idp_model::model::Id,
+    pub(crate) administrator: idp_model::model::Id,
     app_administrator: idp_model::model::Id,
     application_role: idp_model::model::Id,
     unassigned_user: idp_model::model::Id,
@@ -603,7 +603,7 @@ pub(crate) async fn seed_permissions(root: &std::path::Path, fixture: &mut Permi
         .expect("assign initial administrator");
 }
 
-async fn user_token(
+pub(crate) async fn user_token(
     client: &reqwest::Client,
     base: &str,
     username: &str,
