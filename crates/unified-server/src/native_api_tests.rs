@@ -26,9 +26,7 @@ use model::contract::{
     AuthorizationDetail, StorageAuthorizationAction, StorageAuthorizationDetail, TokenResponse,
 };
 use storage_model::{StorageRequest, StorageResponse, StorageSession};
-use storage_service::{
-    DatabaseRuntime, FileSystemId, ScopedFileSystemRuntime, ScopedStorageService,
-};
+use storage_service::{DatabaseRuntime, FileSystemId, ScopedFileSystemRuntime};
 use tokio::{
     net::{TcpListener, TcpStream},
     task::JoinHandle,
@@ -36,12 +34,55 @@ use tokio::{
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
 use tokio_util::sync::CancellationToken;
 
-use super::{ScopedFileSystemSocketAuthorizer, StorageNamespace};
-use crate::execution_test_support::{Gate, TestDirectory};
-use crate::{
+use storage_server::{
     IdpClient, RouterState, StorageSocketAccess, StorageSocketAuthorizationError,
-    StorageSocketAuthorizer, resource_router, storage_router,
+    StorageSocketAuthorizer, resource_router, scoped_file_system_socket_authorizer, storage_router,
 };
+
+struct StorageNamespace {
+    user_sub: String,
+    application_id: Id,
+}
+impl storage_model::StorageNamespace for StorageNamespace {
+    fn user_sub(&self) -> &str {
+        &self.user_sub
+    }
+    fn application_id(&self) -> Id {
+        self.application_id
+    }
+}
+
+struct TestDirectory(std::path::PathBuf);
+impl TestDirectory {
+    fn new() -> Self {
+        let root = std::env::temp_dir().join(format!("native-api-{}", Id::now_v7()));
+        std::fs::create_dir_all(&root).expect("isolated owner stores");
+        Self(root)
+    }
+}
+impl Drop for TestDirectory {
+    fn drop(&mut self) {
+        std::fs::remove_dir_all(&self.0).expect("remove isolated owner stores");
+    }
+}
+
+#[derive(Clone, Default)]
+struct Gate {
+    reached: Arc<tokio::sync::Notify>,
+    resume: Arc<tokio::sync::Notify>,
+}
+impl Gate {
+    async fn pause(&self) {
+        self.reached.notify_one();
+        self.resume.notified().await;
+    }
+    async fn reached(&self) {
+        self.reached.notified().await;
+    }
+    fn release(&self) {
+        self.resume.notify_one();
+    }
+}
 
 struct SecretStore(Arc<keyring_core::mock::Store>);
 impl keyring_core::api::CredentialStoreApi for SecretStore {
@@ -290,10 +331,7 @@ impl Fixture {
             .await
             .expect("real resource")
             .id;
-        let actual = ScopedFileSystemSocketAuthorizer {
-            idp_client: client.clone(),
-            file_systems: files.clone(),
-        };
+        let actual = scoped_file_system_socket_authorizer(client.clone(), files.clone());
         let gated = storage_router(Arc::new(GatedAuthorizer { actual, gate }));
         let router = resource_router(
             RouterState::new("https://storage.test").with_idp_client(client.clone()),
@@ -412,16 +450,16 @@ impl Fixture {
     }
 }
 
-struct GatedAuthorizer {
-    actual: ScopedFileSystemSocketAuthorizer,
+struct GatedAuthorizer<A> {
+    actual: A,
     gate: Gate,
 }
-struct GatedSession {
-    actual: ScopedStorageService<iroh::EndpointId, StorageNamespace>,
+struct GatedSession<S> {
+    actual: S,
     gate: Gate,
 }
-impl StorageSocketAuthorizer for GatedAuthorizer {
-    type Session = GatedSession;
+impl<A: StorageSocketAuthorizer> StorageSocketAuthorizer for GatedAuthorizer<A> {
+    type Session = GatedSession<A::Session>;
     async fn authorize(
         &self,
         token: String,
@@ -439,7 +477,7 @@ impl StorageSocketAuthorizer for GatedAuthorizer {
         })
     }
 }
-impl StorageSession for GatedSession {
+impl<S: StorageSession> StorageSession for GatedSession<S> {
     async fn execute_session(&self, request: StorageRequest) -> StorageResponse {
         let result = self.actual.execute_session(request).await;
         self.gate.pause().await;
@@ -565,7 +603,7 @@ async fn native_local_tokens_bound_api_actions_resource_kind_and_existing_socket
         assert_no_response(&mut writer).await;
         assert_eq!(file.read("shared.txt").await.expect("revoked mutation absent"), b"after");
         assert_eq!(fixture.request(reqwest::Method::GET, "/storage/filesystems", &read).await.status(), reqwest::StatusCode::UNAUTHORIZED);
-        assert!(matches!(crate::authorize_storage_token(&fixture.client, &read).await, Err(crate::StorageAuthorizationError::InvalidToken)));
+        assert!(matches!(storage_server::authorize_storage_token(&fixture.client, &read).await, Err(storage_server::StorageAuthorizationError::InvalidToken)));
         drop(reader); drop(writer); fixture.stop().await;
     }).await.expect("native local API actions complete");
 }
@@ -628,8 +666,8 @@ async fn native_local_owner_service_loss_denies_response_and_api_without_cached_
         );
         assert!(
             matches!(
-                crate::authorize_storage_token(&fixture.client, &token).await,
-                Err(crate::StorageAuthorizationError::ServiceUnavailable)
+                storage_server::authorize_storage_token(&fixture.client, &token).await,
+                Err(storage_server::StorageAuthorizationError::ServiceUnavailable)
             ),
             "cached service credential is not cached resource authorization"
         );

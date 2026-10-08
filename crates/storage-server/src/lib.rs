@@ -48,7 +48,7 @@ pub use router::{
 };
 pub use router::{
     StorageAuthorization, StorageAuthorizationError, authorize_storage_token,
-    scoped_file_system_socket_router,
+    scoped_file_system_socket_authorizer, scoped_file_system_socket_router,
 };
 #[cfg(feature = "network")]
 pub use runtime::{StorageRuntime, build_runtime};

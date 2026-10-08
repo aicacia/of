@@ -5,6 +5,8 @@ mod cli;
 mod config;
 mod endpoint;
 #[cfg(test)]
+mod native_api_tests;
+#[cfg(test)]
 mod node_join_bootstrap_tests;
 #[cfg(test)]
 mod permission_http_tests;
