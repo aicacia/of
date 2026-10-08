@@ -156,6 +156,24 @@ fn namespace(
     ))
 }
 
+async fn authorize_response(
+    state: &ResourceState,
+    headers: &HeaderMap,
+    scope: &StorageNamespace,
+    resource: &str,
+    write: bool,
+) -> Result<(), StatusCode> {
+    let (current_scope, can_read, can_write) =
+        namespace(authorization(state, headers).await?, resource)?;
+    if &current_scope != scope {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    if !(if write { can_write } else { can_read }) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    Ok(())
+}
+
 #[utoipa::path(
     post,
     path = "/storage/databases",
@@ -180,9 +198,11 @@ pub(super) async fn create_database(
     }
     let (resource, _) = state
         .databases
+        .as_ref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?
         .create(&scope, request.name)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    authorize_response(&state, &headers, &scope, "storage:databases", true).await?;
     Ok((StatusCode::CREATED, Json(resource)))
 }
 
@@ -206,12 +226,14 @@ pub(super) async fn list_databases(
     if !can_read {
         return Err(StatusCode::FORBIDDEN);
     }
-    state
+    let resources = state
         .databases
+        .as_ref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?
         .list(&scope)
-        .map(Json)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    authorize_response(&state, &headers, &scope, "storage:databases", false).await?;
+    Ok(Json(resources))
 }
 
 #[utoipa::path(
@@ -237,11 +259,14 @@ pub(super) async fn get_database(
     if !can_read {
         return Err(StatusCode::FORBIDDEN);
     }
-    state
+    let resource = state
         .databases
+        .as_ref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?
         .get(&scope, database_id)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    authorize_response(&state, &headers, &scope, "storage:databases", false).await?;
+    resource
         .map(|resource| {
             Json(DatabaseDetailResponse {
                 id: resource.id,
@@ -275,12 +300,14 @@ pub(super) async fn delete_database(
     if !can_write {
         return Err(StatusCode::FORBIDDEN);
     }
-    if state
+    let deleted = state
         .databases
+        .as_ref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?
         .delete(&scope, database_id)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    {
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    authorize_response(&state, &headers, &scope, "storage:databases", true).await?;
+    if deleted {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(StatusCode::NOT_FOUND)
@@ -313,10 +340,12 @@ pub(super) async fn create_file_system(
     }
     let resource = state
         .file_systems
+        .as_ref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?
         .create_resource(&scope, request.name)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    authorize_response(&state, &headers, &scope, "storage:filesystems", true).await?;
     Ok((StatusCode::CREATED, Json(resource.into())))
 }
 
@@ -342,13 +371,15 @@ pub(super) async fn list_file_systems(
     if !can_read {
         return Err(StatusCode::FORBIDDEN);
     }
-    state
+    let resources = state
         .file_systems
+        .as_ref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?
         .list_resources(&scope)
         .await
-        .map(|resources| Json(resources.into_iter().map(Into::into).collect()))
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    authorize_response(&state, &headers, &scope, "storage:filesystems", false).await?;
+    Ok(Json(resources.into_iter().map(Into::into).collect()))
 }
 
 #[utoipa::path(
@@ -377,14 +408,17 @@ pub(super) async fn get_file_system(
         return Err(StatusCode::FORBIDDEN);
     }
     let id = FileSystemId::parse(&id).map_err(|_| StatusCode::NOT_FOUND)?;
-    state
+    let resource = state
         .file_systems
+        .as_ref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?
         .list_resources(&scope)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .into_iter()
-        .find(|resource| resource.id == id)
+        .find(|resource| resource.id == id);
+    authorize_response(&state, &headers, &scope, "storage:filesystems", false).await?;
+    resource
         .map(|resource| {
             Json(FileSystemDetailResponse {
                 id: resource.id.as_uuid().to_string(),
@@ -421,13 +455,15 @@ pub(super) async fn delete_file_system(
         return Err(StatusCode::FORBIDDEN);
     }
     let id = FileSystemId::parse(&id).map_err(|_| StatusCode::NOT_FOUND)?;
-    if state
+    let deleted = state
         .file_systems
+        .as_ref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?
         .delete_resource(&scope, id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    {
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    authorize_response(&state, &headers, &scope, "storage:filesystems", true).await?;
+    if deleted {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(StatusCode::NOT_FOUND)

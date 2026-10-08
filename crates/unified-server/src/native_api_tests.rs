@@ -1,6 +1,9 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, OnceLock},
+    sync::{
+        Arc, OnceLock,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::Duration,
 };
 
@@ -189,6 +192,7 @@ struct Fixture {
     scope: StorageNamespace,
     resource: FileSystemId,
     files: Arc<ScopedFileSystemRuntime<iroh::EndpointId>>,
+    databases: Arc<DatabaseRuntime>,
     client: IdpClient,
     http: reqwest::Client,
     identity: Server,
@@ -198,6 +202,9 @@ struct Fixture {
 }
 impl Fixture {
     async fn new(gate: Gate) -> Self {
+        Self::with_catalog_gate(gate, None).await
+    }
+    async fn with_catalog_gate(gate: Gate, catalog_gate: Option<Gate>) -> Self {
         let directory = TestDirectory::new();
         let secret = SecretKey::generate();
         let identity = Server::bind_with_secret_key(
@@ -306,7 +313,25 @@ impl Fixture {
         )
         .await
         .expect("integrated owner-local IdP runtime");
-        let idp_listener = Listener::start(runtime.router()).await;
+        let mut idp_router = runtime.router();
+        if let Some(gate) = catalog_gate {
+            let calls = Arc::new(AtomicUsize::new(0));
+            idp_router = idp_router.layer(axum::middleware::from_fn(
+                move |request: axum::extract::Request, next: axum::middleware::Next| {
+                    let calls = calls.clone();
+                    let gate = gate.clone();
+                    async move {
+                        if request.uri().path() == "/oauth2/introspect"
+                            && calls.fetch_add(1, Ordering::SeqCst) == 1
+                        {
+                            gate.pause().await;
+                        }
+                        next.run(request).await
+                    }
+                },
+            ));
+        }
+        let idp_listener = Listener::start(idp_router).await;
         let client = IdpClient::new(
             &idp_listener.base,
             "storage-service",
@@ -335,7 +360,7 @@ impl Fixture {
         let gated = storage_router(Arc::new(GatedAuthorizer { actual, gate }));
         let router = resource_router(
             RouterState::new("https://storage.test").with_idp_client(client.clone()),
-            Some(databases),
+            Some(databases.clone()),
             Some(files.clone()),
         )
         .nest("/gated", gated);
@@ -346,6 +371,7 @@ impl Fixture {
             scope,
             resource,
             files,
+            databases,
             client,
             http: reqwest::Client::new(),
             identity,
@@ -680,4 +706,160 @@ async fn native_local_owner_service_loss_denies_response_and_api_without_cached_
     })
     .await
     .expect("failed local owner evaluation denies safely");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn native_catalog_create_response_denies_learned_user_deletion_without_rollback() {
+    tokio::time::timeout(Duration::from_secs(240), async {
+        let gate = Gate::default();
+        let fixture = Fixture::with_catalog_gate(Gate::default(), Some(gate.clone())).await;
+        let token = fixture.token("storage:filesystems", vec![StorageAuthorizationAction::Write]).await;
+        let source = fixture.file().await;
+        source.write("source.txt", b"earlier content").await.expect("existing resource content");
+        let mut request = Box::pin(fixture.request(reqwest::Method::POST, "/storage/filesystems", &token));
+        tokio::select! {
+            response = &mut request => panic!("catalog result transmitted without post-execution authorization: {}", response.status()),
+            () = gate.reached() => {}
+        }
+        assert_eq!(fixture.files.list_resources(&fixture.scope).await.expect("observe completed creation before learned denial").len(), 2);
+        fixture.revoke_user().await;
+        gate.release();
+        let response = request.await;
+        assert_eq!(response.status(), reqwest::StatusCode::UNAUTHORIZED);
+        assert!(response.bytes().await.expect("denial body").is_empty(), "catalog result must not be disclosed");
+        assert_eq!(fixture.files.list_resources(&fixture.scope).await.expect("authorized creation retained").len(), 2);
+        assert_eq!(source.read("source.txt").await.expect("earlier source retained"), b"earlier content");
+        fixture.stop().await;
+    }).await.expect("native catalog response boundary completes");
+}
+
+async fn catalog_response_denial(kind: &str, operation: &str) {
+    let gate = Gate::default();
+    let fixture = Fixture::with_catalog_gate(Gate::default(), Some(gate.clone())).await;
+    let write = matches!(operation, "create" | "delete");
+    let token = fixture
+        .token(
+            &format!("storage:{kind}"),
+            vec![if write {
+                StorageAuthorizationAction::Write
+            } else {
+                StorageAuthorizationAction::Read
+            }],
+        )
+        .await;
+    let source = fixture.file().await;
+    source
+        .write("source.txt", b"earlier source content")
+        .await
+        .expect("prior content");
+    let target = if kind == "databases" {
+        fixture
+            .databases
+            .create(&fixture.scope, Some("target".into()))
+            .expect("native database catalog")
+            .0
+            .id
+            .to_string()
+    } else {
+        fixture
+            .files
+            .create_resource(&fixture.scope, Some("target".into()))
+            .await
+            .expect("native filesystem catalog")
+            .id
+            .as_uuid()
+            .to_string()
+    };
+    let before = if kind == "databases" { 1 } else { 2 };
+    let expected = match operation {
+        "create" => before + 1,
+        "delete" => before - 1,
+        _ => before,
+    };
+    let method = match operation {
+        "create" => reqwest::Method::POST,
+        "delete" => reqwest::Method::DELETE,
+        _ => reqwest::Method::GET,
+    };
+    let path = if matches!(operation, "get" | "delete") {
+        format!("/storage/{kind}/{target}")
+    } else {
+        format!("/storage/{kind}")
+    };
+    let mut request = Box::pin(fixture.request(method, &path, &token));
+    tokio::select! {
+        response = &mut request => panic!("{kind}/{operation} returned before current response authorization: {}", response.status()),
+        () = gate.reached() => {}
+    }
+    let observed = if kind == "databases" {
+        fixture
+            .databases
+            .list(&fixture.scope)
+            .expect("completed database operation")
+            .len()
+    } else {
+        fixture
+            .files
+            .list_resources(&fixture.scope)
+            .await
+            .expect("completed filesystem operation")
+            .len()
+    };
+    assert_eq!(
+        observed, expected,
+        "actual {kind}/{operation} completed before learning denial"
+    );
+    fixture.revoke_user().await;
+    gate.release();
+    let response = request.await;
+    assert_eq!(
+        response.status(),
+        reqwest::StatusCode::UNAUTHORIZED,
+        "current {kind}/{operation} result must deny"
+    );
+    assert!(
+        response.bytes().await.expect("denial body").is_empty(),
+        "catalog data and successful operation status must not disclose"
+    );
+    let retained = if kind == "databases" {
+        fixture
+            .databases
+            .list(&fixture.scope)
+            .expect("retained database mutation")
+            .len()
+    } else {
+        fixture
+            .files
+            .list_resources(&fixture.scope)
+            .await
+            .expect("retained filesystem mutation")
+            .len()
+    };
+    assert_eq!(
+        retained, expected,
+        "response denial must not roll back authorized {kind}/{operation}"
+    );
+    assert_eq!(
+        source
+            .read("source.txt")
+            .await
+            .expect("prior source preserved"),
+        b"earlier source content"
+    );
+    fixture.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn native_catalog_all_result_kinds_recheck_after_execution_and_retain_mutations() {
+    tokio::time::timeout(Duration::from_secs(600), async {
+        for kind in ["databases", "filesystems"] {
+            for operation in ["create", "get", "list", "delete"] {
+                if kind != "filesystems" || operation != "create" {
+                    catalog_response_denial(kind, operation).await;
+                }
+            }
+        }
+    })
+    .await
+    .expect("native catalog result matrix completes");
 }
