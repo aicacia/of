@@ -1,4 +1,8 @@
-use std::{io::ErrorKind, sync::Arc, time::Duration};
+use std::{
+    io::ErrorKind,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use db::{Database, SqlTranslator, Value};
 use idp_model::{
@@ -37,7 +41,8 @@ pub(super) async fn sql(database: &Database, statement: &str) -> Vec<db::QueryRe
 
 #[tokio::test]
 async fn authenticated_equal_peers_exchange_scoped_history_without_local_verifiers() {
-    tokio::time::timeout(Duration::from_secs(240), exchange_history())
+    // Seven sequential native sessions recheck current policy per frame; this bounds the whole fixture.
+    tokio::time::timeout(Duration::from_secs(600), exchange_history())
         .await
         .expect("domain history exchange and shutdown complete");
 }
@@ -77,6 +82,7 @@ pub(super) async fn enroll(idp: Arc<Database>, member: Id, endpoint: iroh::Endpo
 }
 
 async fn exchange_history() {
+    let started = Instant::now();
     let root = std::env::temp_dir().join(format!("of-security-history-{}", Id::now_v7()));
     std::fs::create_dir_all(&root).expect("create native stores");
     let lookup = MemoryLookup::new();
@@ -267,6 +273,10 @@ async fn exchange_history() {
         .connect_direct_with_alpn(server_b.endpoint().id(), DATA_ALPN)
         .await
         .expect("authenticated existing endpoint");
+    eprintln!(
+        "security fixture {:?}: initial IdP exchange starting",
+        started.elapsed()
+    );
     tokio::time::timeout(
         Duration::from_secs(60),
         protocol_a.synchronize(&connection, SecurityContext::Idp),
@@ -274,6 +284,10 @@ async fn exchange_history() {
     .await
     .expect("bounded test exchange")
     .expect("trusted scoped history exchange");
+    eprintln!(
+        "security fixture {:?}: initial IdP exchange complete",
+        started.elapsed()
+    );
     assert!(
         users_b
             .find_user_by_id(user_a.id)
@@ -390,12 +404,17 @@ async fn exchange_history() {
     );
     drop(unsigned);
 
+    eprintln!(
+        "security fixture {:?}: valid identity/replay/secret checks complete",
+        started.elapsed()
+    );
     for request in [
         serde_json::json!({"version": 1, "installation": "https://foreign.example", "member": member_a, "context": "idp"}),
         serde_json::json!({"version": 1, "installation": INSTALLATION, "member": member_b, "context": "idp"}),
         serde_json::json!({"version": 2, "installation": INSTALLATION, "member": member_a, "context": "management"}),
     ] {
         use ofdb_sql::SyncTransport;
+        let before = security_manifests(&idp_a, &idp_b, &management_a, &management_b).await;
         let (mut send, recv) = connection
             .open_bi()
             .await
@@ -406,22 +425,27 @@ async fn exchange_history() {
             .send(serde_json::to_vec(&request).expect("encode claim"))
             .await
             .expect("send claim");
+        assert!(
+            transport.receive().await.is_err(),
+            "bad admission closes without any response/history frame"
+        );
         assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(
-                &transport.receive().await.expect("explicit denial")
-            )
-            .expect("decode denial"),
-            serde_json::json!("Denied")
+            security_manifests(&idp_a, &idp_b, &management_a, &management_b).await,
+            before,
+            "bad claims neither import nor mutate either context"
         );
     }
     sql(&idp_b, &format!("UPDATE devices SET owner_subject = 'unverified-endpoint-subject' WHERE id = CAST('{member_a}' AS UUID)")).await;
+    let before = security_manifests(&idp_a, &idp_b, &management_a, &management_b).await;
+    protocol_a
+        .synchronize(&connection, SecurityContext::Idp)
+        .await
+        .expect_err("receiver denies unverified owner without an unchecked reply");
+    assert_admission_closed(&connection, member_a, SecurityContext::Idp).await;
     assert_eq!(
-        protocol_a
-            .synchronize(&connection, SecurityContext::Idp)
-            .await
-            .expect_err("endpoint is never an actor")
-            .kind(),
-        ErrorKind::PermissionDenied
+        security_manifests(&idp_a, &idp_b, &management_a, &management_b).await,
+        before,
+        "unverified owner imports no history and preserves source data"
     );
     sql(
         &idp_b,
@@ -431,6 +455,10 @@ async fn exchange_history() {
     )
     .await;
 
+    eprintln!(
+        "security fixture {:?}: rejected claims/owner complete; Management exchange starting",
+        started.elapsed()
+    );
     let restricted = Id::now_v7();
     let ambiguous = Id::now_v7();
     let selection_a = management_service::replica::DbSelectionPolicyRepo::new(management_a.clone());
@@ -454,6 +482,10 @@ async fn exchange_history() {
         .synchronize(&connection, SecurityContext::Management)
         .await
         .expect("separate policy exchange");
+    eprintln!(
+        "security fixture {:?}: Management namespace exchange complete",
+        started.elapsed()
+    );
     assert_eq!(
         sql(
             &management_b,
@@ -500,6 +532,10 @@ async fn exchange_history() {
         .synchronize(&connection, SecurityContext::Management)
         .await
         .expect("preserve concurrent restriction histories");
+    eprintln!(
+        "security fixture {:?}: concurrent restriction history exchange complete",
+        started.elapsed()
+    );
 
     assert!(
         selection_a.get(ambiguous, "alice", actor).await.is_err(),
@@ -518,6 +554,10 @@ async fn exchange_history() {
         .synchronize(&connection, SecurityContext::Management)
         .await
         .expect("resolution delta exchange");
+    eprintln!(
+        "security fixture {:?}: restrictive resolution delta exchange complete",
+        started.elapsed()
+    );
 
     assert!(
         !selection_b
@@ -538,6 +578,10 @@ async fn exchange_history() {
         .synchronize(&connection, SecurityContext::Management)
         .await
         .expect("policy tombstone transfer");
+    eprintln!(
+        "security fixture {:?}: policy tombstone transfer complete",
+        started.elapsed()
+    );
 
     protocol_a
         .synchronize(&connection, SecurityContext::Management)
@@ -552,18 +596,25 @@ async fn exchange_history() {
             .rows
             .is_empty()
     );
+    eprintln!(
+        "security fixture {:?}: conflicts/resolution/tombstones complete",
+        started.elapsed()
+    );
     sql(
         &management_b,
         "UPDATE permissions SET revoked_at = 2 WHERE name = 'idp.security.sync'",
     )
     .await;
+    let before = security_manifests(&idp_a, &idp_b, &management_a, &management_b).await;
+    protocol_a
+        .synchronize(&connection, SecurityContext::Idp)
+        .await
+        .expect_err("current receiver permission denies existing connection");
+    assert_admission_closed(&connection, member_a, SecurityContext::Idp).await;
     assert_eq!(
-        protocol_a
-            .synchronize(&connection, SecurityContext::Idp)
-            .await
-            .expect_err("current permission denies existing connection")
-            .kind(),
-        ErrorKind::PermissionDenied
+        security_manifests(&idp_a, &idp_b, &management_a, &management_b).await,
+        before,
+        "learned permission denial imports no history and preserves source data"
     );
 
     sql(
@@ -669,4 +720,47 @@ async fn exchange_history() {
         reopened_management,
     ));
     std::fs::remove_dir_all(root).expect("remove native fixture");
+    eprintln!(
+        "security fixture {:?}: native reopen/shutdown complete",
+        started.elapsed()
+    );
+}
+
+async fn security_manifests(
+    idp_a: &Database,
+    idp_b: &Database,
+    management_a: &Database,
+    management_b: &Database,
+) -> impl PartialEq + std::fmt::Debug + use<> {
+    (
+        idp_a.sync_manifest().await.expect("source IdP manifest"),
+        idp_b.sync_manifest().await.expect("recipient IdP manifest"),
+        management_a
+            .sync_manifest()
+            .await
+            .expect("source Management manifest"),
+        management_b
+            .sync_manifest()
+            .await
+            .expect("recipient Management manifest"),
+    )
+}
+
+async fn assert_admission_closed(
+    connection: &iroh::endpoint::Connection,
+    member: Id,
+    context: SecurityContext,
+) {
+    use ofdb_sql::SyncTransport;
+    let (mut send, recv) = connection
+        .open_bi()
+        .await
+        .expect("fresh stream on same connection");
+    send.write_all(&[3]).await.expect("security marker");
+    let mut transport = storage_server::DatabaseTransport::new(send, recv);
+    transport.send(serde_json::to_vec(&serde_json::json!({"version": 1, "installation": INSTALLATION, "member": member, "context": context})).expect("authenticated claim")).await.expect("send admission probe");
+    assert!(
+        transport.receive().await.is_err(),
+        "denied receiver discloses no response/history frame"
+    );
 }
