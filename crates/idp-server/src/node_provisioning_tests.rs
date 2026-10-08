@@ -23,9 +23,9 @@ use model::contract::StandardClaims;
 use crate::{AppConfig, OwnerProvisioner};
 
 #[derive(Clone, Default)]
-struct Secrets {
+pub(crate) struct Secrets {
     values: Arc<Mutex<HashMap<(String, String), String>>>,
-    fail: Arc<AtomicBool>,
+    pub(crate) fail: Arc<AtomicBool>,
     fail_delete: Arc<AtomicBool>,
 }
 

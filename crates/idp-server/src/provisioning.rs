@@ -1,4 +1,8 @@
-use std::{fs, io, path::Path, sync::Arc};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use db::Database;
 use idp_model::{
@@ -39,6 +43,7 @@ pub struct OwnerProvisioner<P: PrivateKeyRepo + Send + Sync = PrivateKeyKeyringR
     pub(crate) oauth2: NativeOAuth2Service<P>,
     pub(crate) engine: Arc<Database>,
     pub(crate) key_namespace: String,
+    pub(crate) data_dir: PathBuf,
 }
 
 impl OwnerProvisioner {
@@ -78,6 +83,7 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             oauth2,
             engine,
             key_namespace: config.key_namespace.clone(),
+            data_dir: data_dir.to_path_buf(),
         })
     }
 

@@ -1,4 +1,5 @@
 mod middleware;
+mod node_join_approval;
 mod openapi;
 mod openapi_router;
 mod pairing_acceptance;

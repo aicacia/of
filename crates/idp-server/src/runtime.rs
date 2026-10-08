@@ -28,9 +28,18 @@ pub struct IdpRuntime {
     issuer: String,
     devices: Arc<DbDeviceRepo>,
     users: DbUserRepo,
+    join_state: RouterState,
 }
 
 impl IdpRuntime {
+    pub async fn approve_node_join(
+        &self,
+        offer: &iroh_chain::PairingOffer,
+        bearer: &str,
+    ) -> io::Result<crate::NodeJoinApproval> {
+        self.join_state.approve_node_join(offer, bearer).await
+    }
+
     pub fn router(&self) -> Router {
         self.router.clone()
     }
@@ -238,7 +247,7 @@ pub async fn build_runtime(
         .map_err(io::Error::other)?;
 
     let bootstrap_protocol = BootstrapProtocolHandler;
-    let router = openapi_router(router_state, config.server.prefix())
+    let router = openapi_router(router_state.clone(), config.server.prefix())
         .split_for_parts()
         .0;
 
@@ -249,5 +258,6 @@ pub async fn build_runtime(
         issuer: config.oauth2.issuer.clone(),
         devices,
         users: DbUserRepo::new(engine, config.password.clone()),
+        join_state: router_state,
     })
 }
