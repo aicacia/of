@@ -50,10 +50,20 @@ pub fn scoped_file_system_socket_router(
     idp_client: IdpClient,
     file_systems: Arc<ScopedFileSystemRuntime<EndpointId>>,
 ) -> Router {
-    storage_router(Arc::new(ScopedFileSystemSocketAuthorizer {
+    storage_router(Arc::new(scoped_file_system_socket_authorizer(
         idp_client,
         file_systems,
-    }))
+    )))
+}
+
+pub fn scoped_file_system_socket_authorizer(
+    idp_client: IdpClient,
+    file_systems: Arc<ScopedFileSystemRuntime<EndpointId>>,
+) -> impl StorageSocketAuthorizer {
+    ScopedFileSystemSocketAuthorizer {
+        idp_client,
+        file_systems,
+    }
 }
 
 struct ScopedFileSystemSocketAuthorizer {
@@ -162,10 +172,6 @@ fn storage_authorization(
         can_write,
     })
 }
-
-#[cfg(all(test, feature = "network"))]
-#[path = "api_execution_tests.rs"]
-mod api_execution_tests;
 
 #[cfg(test)]
 mod tests {
