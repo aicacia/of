@@ -16,14 +16,15 @@ use idp_model::{
     },
     model::Id,
 };
-use idp_server::{AppConfig as IdpAppConfig, OwnerProvisioner, delete_device_identity};
+use idp_server::{AppConfig as IdpAppConfig, OwnerProvisioner};
+use idp_service::oauth2::NodeSignerBinding;
 use management_server::{AppConfig as ManagementAppConfig, MANAGEMENT_APPLICATION_URI};
 use model::contract::{MANAGEMENT_REPLICATION_ADMIT_SCOPE, MANAGEMENT_REPLICATION_READ_SCOPE};
 use serde_json::{Value, json};
 use storage_server::AppConfig as StorageAppConfig;
 use tauri::{AppHandle, Manager, Wry, async_runtime::Mutex};
 use tokio::net::TcpListener;
-use unified_server::{ServiceClientCredentials, UnifiedConfig, UnifiedRuntime};
+use unified_server::{ServiceClientCredentials, UnifiedConfig, UnifiedEndpoint, UnifiedRuntime};
 
 use crate::localhost_server::{
     LocalhostServer, localhost_server_base_url, reserve_localhost_listener,
@@ -34,8 +35,9 @@ use crate::{local_api, service_secrets, service_secrets::ServiceRelationship, se
 static SETUP_IDS_LOCK: StdMutex<()> = StdMutex::new(());
 
 const SETUP_READY_FILE: &str = "setup-ready";
+const DEVICE_READY_FILE: &str = "device-setup-ready";
 
-const INITIAL_ADMIN_ACTIONS: [IdentityAction; 19] = [
+const INITIAL_ADMIN_ACTIONS: [IdentityAction; 24] = [
     IdentityAction::InfrastructureClientsRead,
     IdentityAction::InfrastructureClientsCreate,
     IdentityAction::InfrastructureClientsUpdate,
@@ -55,6 +57,11 @@ const INITIAL_ADMIN_ACTIONS: [IdentityAction; 19] = [
     IdentityAction::KeysRevoke,
     IdentityAction::DevicePairingRead,
     IdentityAction::DevicePairingUpdate,
+    IdentityAction::ReplicaSignersEnroll,
+    IdentityAction::ReplicaSignersRotate,
+    IdentityAction::ReplicaSignersRevoke,
+    IdentityAction::IdpSecuritySync,
+    IdentityAction::ManagementSecuritySync,
 ];
 
 #[derive(Debug)]
@@ -62,6 +69,8 @@ struct SetupIds {
     installation_id: Id,
     administrator_id: Id,
     credential_id: Id,
+    member_id: Id,
+    signer_key_id: Id,
     role_id: Id,
     permission_ids: Vec<Id>,
     management_to_idp_client_id: Id,
@@ -122,7 +131,14 @@ pub async fn provision_initial_administrator(
     if base_url.is_empty() {
         return Err("local HTTPS listener is not ready".to_owned());
     }
+    if setup_ready(&app_data_dir).map_err(|error| error.to_string())? {
+        return Err("Installation setup is already complete; use authenticated administration or explicit reset".into());
+    }
     let ids = load_or_create_setup_ids(&app_data_dir).map_err(|error| error.to_string())?;
+    let endpoint = UnifiedEndpoint::open(&app_data_dir.join("services/unified-endpoint"))
+        .await
+        .map_err(|error| error.to_string())?;
+    endpoint.close().await;
 
     let mut idp_config = IdpAppConfig::default();
     idp_config.data_dir = app_data_dir
@@ -167,6 +183,20 @@ pub async fn provision_initial_administrator(
     .await
     .map_err(|error| error.to_string())?;
 
+    management_server::provision_initial_device(
+        &management_config,
+        ids.member_id,
+        administrator_id,
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    idp.ensure_initial_node(
+        &node_binding(&app_data_dir, &ids).map_err(|error| error.to_string())?,
+        administrator_id,
+        "Local Node",
+    )
+    .await
+    .map_err(|error| error.to_string())?;
     provision_service_clients(
         &idp,
         &ids,
@@ -322,6 +352,7 @@ fn unified_runtime_config(
         .to_string_lossy()
         .into_owned();
     idp.oauth2.issuer = idp_api.clone();
+    idp.oauth2.local_signer = Some(node_binding(app_data_dir, ids)?);
     idp.api_public_uri = idp_api.clone();
     idp.service_audience = Some(idp_api.clone());
     idp.ui_public_uri = base_url.to_owned();
@@ -384,6 +415,17 @@ fn unified_runtime_config(
     })
 }
 
+fn node_binding(app_data_dir: &Path, ids: &SetupIds) -> io::Result<NodeSignerBinding> {
+    Ok(NodeSignerBinding {
+        member_id: ids.member_id,
+        key_id: ids.signer_key_id,
+        endpoint_id: UnifiedEndpoint::persisted_endpoint_id(
+            &app_data_dir.join("services/unified-endpoint"),
+        )?
+        .to_string(),
+    })
+}
+
 fn load_service_credentials(
     ids: &SetupIds,
     relationship: ServiceRelationship,
@@ -437,21 +479,17 @@ fn service_client_registration(
 }
 
 pub fn setup_ready(app_data_dir: &Path) -> io::Result<bool> {
-    let marker_path = app_data_dir.join(SETUP_READY_FILE);
-    let metadata = match fs::symlink_metadata(&marker_path) {
-        Ok(metadata) => metadata,
+    match fs::symlink_metadata(app_data_dir.join(SETUP_READY_FILE)) {
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
         Err(error) => return Err(error),
-    };
-    if !metadata.file_type().is_file() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "setup readiness marker is not a regular file",
-        ));
+        Ok(_) => {}
     }
     let ids = read_setup_ids(&app_data_dir.join("setup-ids.json"))?;
-    verify_setup_ready_marker(app_data_dir, ids.installation_id)?;
-    Ok(true)
+    crate::setup_completion::read(
+        app_data_dir,
+        SETUP_READY_FILE,
+        &ids.installation_id.to_string(),
+    )
 }
 
 pub async fn start_persisted_unified_runtime(
@@ -470,7 +508,11 @@ async fn start_composed_unified_runtime(
 ) -> io::Result<()> {
     let app_data_dir = app_handle.path().app_data_dir().map_err(io::Error::other)?;
     let ids = read_setup_ids(&app_data_dir.join("setup-ids.json"))?;
-    verify_setup_ready_marker(&app_data_dir, ids.installation_id)?;
+    crate::setup_completion::read(
+        &app_data_dir,
+        SETUP_READY_FILE,
+        &ids.installation_id.to_string(),
+    )?;
     let config = unified_runtime_config(&app_data_dir, listener.local_addr()?, &base_url, &ids)?;
     let mut runtime = UnifiedRuntime::build_on_listener(config, listener, base_url.clone()).await?;
     let router = runtime.router();
@@ -498,68 +540,16 @@ async fn start_composed_unified_runtime(
     }
     store_unified_runtime(app_handle, runtime).await;
     if persist_ready {
-        if let Err(error) = write_setup_ready_marker(&app_data_dir, ids.installation_id) {
+        if let Err(error) = crate::setup_completion::write(
+            &app_data_dir,
+            SETUP_READY_FILE,
+            &ids.installation_id.to_string(),
+        ) {
             close(app_handle).await?;
             return Err(error);
         }
     }
     Ok(())
-}
-
-fn verify_setup_ready_marker(app_data_dir: &Path, installation_id: Id) -> io::Result<()> {
-    let path = app_data_dir.join(SETUP_READY_FILE);
-    let metadata = match fs::symlink_metadata(&path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(error),
-    };
-    if !metadata.file_type().is_file() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "setup readiness marker is not a regular file",
-        ));
-    }
-    let marker = fs::read_to_string(path)?;
-    if marker.trim() != installation_id.to_string() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "setup readiness marker does not match the installation manifest",
-        ));
-    }
-    Ok(())
-}
-
-fn write_setup_ready_marker(app_data_dir: &Path, installation_id: Id) -> io::Result<()> {
-    let marker_path = app_data_dir.join(SETUP_READY_FILE);
-    if fs::symlink_metadata(&marker_path).is_ok() {
-        return verify_setup_ready_marker(app_data_dir, installation_id);
-    }
-    let temporary_path = app_data_dir.join(format!(".{SETUP_READY_FILE}-{installation_id}.tmp"));
-    if let Ok(metadata) = fs::symlink_metadata(&temporary_path) {
-        if !metadata.file_type().is_file() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "setup readiness temporary path is not a regular file",
-            ));
-        }
-        if fs::read_to_string(&temporary_path)?.trim() != installation_id.to_string() {
-            fs::remove_file(&temporary_path)?;
-        } else {
-            fs::rename(&temporary_path, &marker_path)?;
-            return fs::File::open(app_data_dir)?.sync_all();
-        }
-    }
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temporary_path)?;
-    if let Err(error) = writeln!(file, "{installation_id}").and_then(|()| file.sync_all()) {
-        drop(file);
-        let _ = fs::remove_file(&temporary_path);
-        return Err(error);
-    }
-    fs::rename(&temporary_path, &marker_path)?;
-    fs::File::open(app_data_dir)?.sync_all()
 }
 
 async fn set_localhost_server(app_handle: &AppHandle<Wry>, server: LocalhostServer) {
@@ -606,6 +596,8 @@ fn load_or_create_setup_ids(app_data_dir: &Path) -> io::Result<SetupIds> {
         installation_id: Id::now_v7(),
         administrator_id: Id::now_v7(),
         credential_id: Id::now_v7(),
+        member_id: Id::now_v7(),
+        signer_key_id: Id::now_v7(),
         role_id: Id::now_v7(),
         permission_ids: INITIAL_ADMIN_ACTIONS.iter().map(|_| Id::now_v7()).collect(),
         management_to_idp_client_id: Id::now_v7(),
@@ -614,10 +606,12 @@ fn load_or_create_setup_ids(app_data_dir: &Path) -> io::Result<SetupIds> {
         idp_to_management_client_id: Id::now_v7(),
     };
     let value = json!({
-        "version": 1,
+        "version": 2,
         "installation_id": ids.installation_id.to_string(),
         "administrator_id": ids.administrator_id.to_string(),
         "credential_id": ids.credential_id.to_string(),
+        "member_id": ids.member_id.to_string(),
+        "signer_key_id": ids.signer_key_id.to_string(),
         "role_id": ids.role_id.to_string(),
         "permission_ids": ids.permission_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
         "service_client_ids": {
@@ -641,6 +635,7 @@ fn load_or_create_setup_ids(app_data_dir: &Path) -> io::Result<SetupIds> {
         let _ = fs::remove_file(&temporary_path);
         return Err(error);
     }
+    fs::File::open(app_data_dir)?.sync_all()?;
     Ok(ids)
 }
 
@@ -651,7 +646,7 @@ fn read_setup_ids(path: &Path) -> io::Result<SetupIds> {
             format!("setup manifest is corrupt ({error}); explicit reset is required"),
         )
     })?;
-    if value.get("version").and_then(Value::as_u64) != Some(1) {
+    if value.get("version").and_then(Value::as_u64) != Some(2) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "unsupported setup manifest version; explicit reset is required",
@@ -682,6 +677,11 @@ fn read_setup_ids(path: &Path) -> io::Result<SetupIds> {
         credential_id: parse_setup_id(
             value.get("credential_id").unwrap_or(&Value::Null),
             "credential ID",
+        )?,
+        member_id: parse_setup_id(value.get("member_id").unwrap_or(&Value::Null), "member ID")?,
+        signer_key_id: parse_setup_id(
+            value.get("signer_key_id").unwrap_or(&Value::Null),
+            "signer key ID",
         )?,
         role_id: parse_setup_id(value.get("role_id").unwrap_or(&Value::Null), "role ID")?,
         permission_ids,
@@ -741,8 +741,41 @@ pub async fn get_setup_stage(app_handle: AppHandle<Wry>) -> Result<String, Strin
         .app_data_dir()
         .map_err(|error| error.to_string())?;
     setup_ready(&app_data_dir)
-        .map(|ready| if ready { "ready" } else { "installation" }.to_owned())
+        .and_then(|ready| {
+            if !ready {
+                return Ok("installation".to_owned());
+            }
+            let ids = read_setup_ids(&app_data_dir.join("setup-ids.json"))?;
+            crate::setup_completion::read(
+                &app_data_dir,
+                DEVICE_READY_FILE,
+                &ids.installation_id.to_string(),
+            )
+            .map(|complete| if complete { "ready" } else { "device" }.to_owned())
+        })
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn complete_device_setup(app_handle: AppHandle<Wry>) -> Result<(), String> {
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    if !setup_ready(&data_dir).map_err(|error| error.to_string())? {
+        return Err("Installation setup is incomplete".into());
+    }
+    let ids =
+        read_setup_ids(&data_dir.join("setup-ids.json")).map_err(|error| error.to_string())?;
+    if localhost_server_base_url_for(&app_handle).await.is_empty() {
+        return Err("local services are unavailable; Device setup remains incomplete".into());
+    }
+    crate::setup_completion::write(
+        &data_dir,
+        DEVICE_READY_FILE,
+        &ids.installation_id.to_string(),
+    )
+    .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -765,7 +798,30 @@ pub async fn reset_device(app_handle: AppHandle<Wry>) -> Result<(), String> {
     close(&app_handle)
         .await
         .map_err(|error| error.to_string())?;
-    delete_device_identity().map_err(|error| error.to_string())?;
+    if let Some(ids) = setup_ids.as_ref() {
+        let mut config = IdpAppConfig::default();
+        config.data_dir = data_dir.join("services/idp").to_string_lossy().into_owned();
+        let port =
+            fs::read_to_string(data_dir.join("https-port")).map_err(|error| error.to_string())?;
+        config.oauth2.issuer = format!("https://localhost:{}/idp", port.trim());
+        let owner = OwnerProvisioner::open(&config)
+            .await
+            .map_err(|error| error.to_string())?;
+        owner
+            .delete_local_secrets(
+                ids.member_id,
+                ids.signer_key_id,
+                ids.administrator_id,
+                &[
+                    ids.management_to_idp_client_id,
+                    ids.storage_to_idp_client_id,
+                    ids.storage_to_management_client_id,
+                    ids.idp_to_management_client_id,
+                ],
+            )
+            .await
+            .map_err(|error| error.to_string())?;
+    }
     reset_local_installation(
         &data_dir,
         &config_dir,
@@ -816,6 +872,7 @@ fn remove_local_reset_data(data_dir: &Path, config_dir: &Path) -> io::Result<()>
     remove_path(&data_dir.join("services"))?;
     remove_path(&data_dir.join("setup-ids.json"))?;
     remove_path(&data_dir.join(SETUP_READY_FILE))?;
+    remove_path(&data_dir.join(DEVICE_READY_FILE))?;
     remove_path(&data_dir.join("https-port"))
 }
 
@@ -909,9 +966,29 @@ mod tests {
     use idp_model::model::Id;
 
     use super::{
-        load_or_create_setup_ids, reject_legacy_state, remove_local_reset_data,
-        reset_local_installation, setup_ready, verify_setup_ready_marker, write_setup_ready_marker,
+        SETUP_READY_FILE, load_or_create_setup_ids, reject_legacy_state, remove_local_reset_data,
+        reset_local_installation, setup_ready,
     };
+
+    #[test]
+    fn initial_administrator_has_exact_security_sync_and_signer_grants() {
+        use idp_model::contract::IdentityAction;
+        for action in [
+            IdentityAction::ReplicaSignersEnroll,
+            IdentityAction::IdpSecuritySync,
+            IdentityAction::ManagementSecuritySync,
+        ] {
+            assert!(
+                super::INITIAL_ADMIN_ACTIONS.contains(&action),
+                "initial administrator needs exact {action:?} grant"
+            );
+        }
+        assert!(
+            super::INITIAL_ADMIN_ACTIONS
+                .iter()
+                .all(|action| !action.application_scoped() && action.permission() != "*")
+        );
+    }
 
     #[test]
     fn rejects_legacy_shared_database_without_deleting_it() {
@@ -938,12 +1015,23 @@ mod tests {
         assert!(
             !setup_ready(&data_dir).expect("missing readiness marker means setup is incomplete")
         );
-        write_setup_ready_marker(&data_dir, ids.installation_id)
-            .expect("write installation readiness marker");
+        crate::setup_completion::write(
+            &data_dir,
+            SETUP_READY_FILE,
+            &ids.installation_id.to_string(),
+        )
+        .expect("write installation readiness marker");
         assert!(setup_ready(&data_dir).expect("valid marker and manifest mean setup is ready"));
-        verify_setup_ready_marker(&data_dir, ids.installation_id)
-            .expect("verify readiness marker for this installation");
-        assert!(verify_setup_ready_marker(&data_dir, Id::now_v7()).is_err());
+        crate::setup_completion::read(
+            &data_dir,
+            SETUP_READY_FILE,
+            &ids.installation_id.to_string(),
+        )
+        .expect("verify readiness marker for this installation");
+        assert!(
+            crate::setup_completion::read(&data_dir, SETUP_READY_FILE, &Id::now_v7().to_string())
+                .is_err()
+        );
         fs::remove_dir_all(data_dir).expect("remove readiness marker fixture");
     }
 

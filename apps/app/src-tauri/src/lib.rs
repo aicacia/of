@@ -7,5 +7,6 @@ mod runtime;
 mod service_secrets;
 
 mod setup;
+mod setup_completion;
 
 pub use runtime::run;

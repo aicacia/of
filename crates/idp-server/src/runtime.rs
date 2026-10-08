@@ -2,14 +2,14 @@ use std::{io, sync::Arc, time::Duration};
 
 use axum::Router;
 use db::Database;
-use idp_model::contract::DeviceState;
+use idp_model::contract::DeviceEndpointIdentity;
 use idp_service::{
     oauth2::OAuth2Service,
     replica::{
         DbApplicationRepo, DbClientRepo, DbKeyRepo, DbOAuth2AuthorizationCodeRepo,
-        DbOAuth2RefreshTokenRepo, DbOAuth2UserConsentRepo, DbUserRepo,
+        DbOAuth2RefreshTokenRepo, DbOAuth2UserConsentRepo, DbReplicaSignerRepo, DbUserRepo,
     },
-    repo::{KeyService, PrivateKeyKeyringRepo},
+    repo::{KeyService, PrivateKeyKeyringRepo, UserRepo},
 };
 use iroh::EndpointId;
 use iroh::protocol::{ProtocolHandler, Router as IrohRouter};
@@ -18,15 +18,16 @@ use management_service::{DeviceRepo, HostedControlPlane, LocalPermissions, repli
 
 use crate::{
     AppConfig, BootstrapProtocolHandler, DeviceIdentity, RouterState,
-    TimedPairingAcceptanceController,
-    bootstrap::BOOTSTRAP_ALPN,
-    router::{NativeDeviceRepo, openapi_router},
+    TimedPairingAcceptanceController, bootstrap::BOOTSTRAP_ALPN, router::openapi_router,
 };
 
 pub struct IdpRuntime {
     router: Router,
     bootstrap_protocol: BootstrapProtocolHandler,
-    devices: Arc<NativeDeviceRepo>,
+    signers: DbReplicaSignerRepo,
+    issuer: String,
+    devices: Arc<DbDeviceRepo>,
+    users: DbUserRepo,
 }
 
 impl IdpRuntime {
@@ -45,16 +46,68 @@ impl IdpRuntime {
         server.router_with_protocol(data_protocol, BOOTSTRAP_ALPN, self.bootstrap_protocol())
     }
 
-    pub async fn approved_peer_ids(&self) -> io::Result<Vec<EndpointId>> {
-        Ok(self
+    pub async fn approved_device_owner(
+        &self,
+        endpoint: EndpointId,
+    ) -> io::Result<DeviceEndpointIdentity> {
+        if !self.approved_peer_ids().await?.contains(&endpoint) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "endpoint is not a trusted Node",
+            ));
+        }
+        let device = self
             .devices
-            .list()
+            .find_approved_by_public_key(&endpoint.to_string())
+            .await
+            .map_err(io::Error::other)?
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "Device is not uniquely approved",
+                )
+            })?;
+        let owner = device.owner_subject.parse().map_err(io::Error::other)?;
+        if self
+            .users
+            .find_user_by_id(owner)
+            .await
+            .map_err(io::Error::other)?
+            .is_none()
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Device owner is not locally active",
+            ));
+        }
+        Ok(DeviceEndpointIdentity {
+            device_id: device.id,
+            owner_subject: device.owner_subject,
+            endpoint_id: endpoint.to_string(),
+        })
+    }
+
+    pub async fn approved_peer_ids(&self) -> io::Result<Vec<EndpointId>> {
+        self.signers
+            .trusted_signers(
+                &self.issuer,
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_err(io::Error::other)?
+                    .as_secs()
+                    .try_into()
+                    .map_err(io::Error::other)?,
+            )
             .await
             .map_err(io::Error::other)?
             .into_iter()
-            .filter(|device| device.state == DeviceState::Approved)
-            .filter_map(|device| device.public_key.parse::<EndpointId>().ok())
-            .collect())
+            .map(|(member, _)| {
+                member
+                    .endpoint_id
+                    .parse::<EndpointId>()
+                    .map_err(io::Error::other)
+            })
+            .collect::<io::Result<Vec<_>>>()
     }
 }
 
@@ -93,6 +146,18 @@ pub async fn build_runtime(
         PrivateKeyKeyringRepo::new(&config.oauth2.issuer).map_err(io::Error::other)?,
         config.key_namespace.clone(),
     ));
+    if let Some(binding) = config.oauth2.local_signer.as_ref() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(io::Error::other)?
+            .as_secs()
+            .try_into()
+            .map_err(io::Error::other)?;
+        key_service
+            .load_node_signer(binding, &config.oauth2.issuer, now)
+            .await
+            .map_err(io::Error::other)?;
+    }
     let devices = Arc::new(DbDeviceRepo::new(Arc::clone(&engine)));
     let oauth2_service = Arc::new(OAuth2Service::new(
         DbApplicationRepo::new(Arc::clone(&engine)),
@@ -175,12 +240,14 @@ pub async fn build_runtime(
     let bootstrap_protocol = BootstrapProtocolHandler;
     let router = openapi_router(router_state, config.server.prefix())
         .split_for_parts()
-        .0
-        .into();
+        .0;
 
     Ok(IdpRuntime {
         router,
         bootstrap_protocol,
+        signers: DbReplicaSignerRepo::new(Arc::clone(&engine)),
+        issuer: config.oauth2.issuer.clone(),
         devices,
+        users: DbUserRepo::new(engine, config.password.clone()),
     })
 }

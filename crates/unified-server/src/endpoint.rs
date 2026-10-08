@@ -61,6 +61,15 @@ impl UnifiedEndpoint {
         Ok(())
     }
 
+    pub fn persisted_endpoint_id(data_dir: &Path) -> io::Result<EndpointId> {
+        let bytes: [u8; 32] = fs::read(data_dir.join(ENDPOINT_KEY_FILE))?
+            .try_into()
+            .map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "invalid unified endpoint key")
+            })?;
+        Ok(SecretKey::from_bytes(&bytes).public())
+    }
+
     pub fn key_path(&self) -> &Path {
         &self.key_path
     }

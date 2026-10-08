@@ -24,7 +24,8 @@ pub fn run() {
             app::get_localhost_server_base_url,
             app::get_setup_stage,
             app::provision_initial_administrator,
-            app::reset_device
+            app::reset_device,
+            app::complete_device_setup
         ])
         .setup(|app| {
             let app_data_dir = app.handle().path().app_data_dir()?;

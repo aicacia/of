@@ -7,6 +7,9 @@ mod config;
 mod bootstrap;
 
 mod device_identity;
+mod node_provisioning;
+#[cfg(test)]
+mod node_provisioning_tests;
 mod provisioning;
 mod router;
 mod runtime;

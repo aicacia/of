@@ -13,5 +13,4 @@ pub use pairing_acceptance::{
     PairingAcceptanceController, PairingAcceptanceControllerSlot, TimedPairingAcceptanceController,
 };
 
-pub use state::NativeDeviceRepo;
 pub use state::{DeviceIdentity, RouterState};

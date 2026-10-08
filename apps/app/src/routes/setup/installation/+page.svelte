@@ -1,5 +1,7 @@
 <script lang="ts">
     import { invoke, isTauri } from "@tauri-apps/api/core";
+    import { goto } from "$app/navigation";
+    import { resolve } from "$app/paths";
 
     let name = $state("");
     let password = $state("");
@@ -19,8 +21,8 @@
                 password,
             });
             password = "";
-            result =
-                "The initial administrator is provisioned. Service credentials and unified runtime setup are still incomplete.";
+            result = "All local services are ready. Continue to Device Setup.";
+            await goto(resolve("/setup/device"));
         } catch (cause) {
             error = cause instanceof Error ? cause.message : String(cause);
         } finally {
@@ -39,7 +41,8 @@
         {:else}
             <p>
                 This creates the first IdP user and grants explicit installation
-                administration permissions. It does not complete service setup.
+                administration permissions, an independent local signer, and all
+                three local services. Once complete, this Node works offline.
             </p>
             <form onsubmit={provision}>
                 <label>
@@ -62,7 +65,7 @@
                     />
                 </label>
                 <button type="submit" disabled={busy}>
-                    {busy ? "Provisioning…" : "Provision administrator"}
+                    {busy ? "Preparing Node…" : "Create local Node"}
                 </button>
             </form>
             {#if error}
