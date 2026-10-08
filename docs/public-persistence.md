@@ -157,6 +157,48 @@ or GUI/process-restart qualification.
   stable retries, learned revocation non-resurrection and offline issuance/reopen at
   this actual import seam. Current receipt/denial tests do not satisfy this acceptance.
 
+### Receive-only bootstrap retry limitation
+
+Owner13's candidate observation and ordinary marker-3 guards are delivered. A separate
+one-way execution limitation remains: the current scoped session is bidirectional on
+both `SyncRole`s. `Initiator`/`Responder` select turn ordering, not publication direction.
+Before manifest comparison or outbound selection, it exports/preflights **all** retained
+selected local rows. A joining-side candidate guard rejecting outgoing application rows
+therefore permits the first import into empty tables but rejects a subsequent exact
+retry once any imported application history is retained. This happens even when that
+history already exists at the source and no reverse row transfer would be necessary.
+
+The focused native `bootstrap_receive_only_guard_allows_empty_import_but_blocks_native_retry`
+regression consumes `synchronize_tables_with_stage_directory_candidate_validated_checked`
+with the same eleven public IdP tables and owner-native stages. Incoming application
+candidates at the source and outgoing application candidates at the receiver reject;
+catalog/control exchange remains permitted. The initial import succeeds with no receiver
+application State/Changes frames. After native receiver reopen, exact retry rejects at
+outgoing preflight, retaining both manifests. Adding another source User still cannot
+resume: neither side publishes receiver application data, no additional User imports,
+and prior receiver progress/source updates remain intact. This is an in-process transport
+fixture testing the public persistence boundary, not authenticated domain bootstrap.
+
+**Concrete owner follow-up:** provide a supported source-to-receiver scoped session
+that excludes receiver application-history export/preflight/build/recovery publication
+while retaining its real persisted progress for source inventory/delta/snapshot recovery.
+The source must not apply receiver application rows, including on malicious or resumed
+exchanges. Reuse the same candidate/historical validation, fixed schemas, native stages,
+complete histories/conflicts/tombstones, atomic pre-apply checks and failure cleanup.
+Qualify empty import, retained partial progress after cancellation/native reopen, exact
+retry, fresh source updates, hostile reverse publication and learned local revocation
+non-resurrection. No method signature or new consumer transport/persistence is prescribed.
+This is a capability absent from the current public session, not a defect in owner13's
+candidate evidence or a demand for an authorship ledger.
+
+A rejecting candidate callback is not a filter: it aborts the session. Allowing retained
+receiver rows during preflight could permit arbitrary receiver history publication;
+the current row/conflict view does not establish that every historical assignment came
+from the pinned source. Suppressing frames, pretending the receiver is empty, clearing
+retained progress, or copying/projecting source state would violate the owner protocol
+or retry/history requirements. Production purpose-bound bootstrap/readiness is not
+implemented until this execution boundary can preserve progress without reverse publication.
+
 Whole-database export, unchecked apply, source database copying, projected LWW baseline
 inserts, receipt-derived grants and parallel staging are not bootstrap substitutes.
 Private/local credential tables remain excluded; complete public history, tombstones
