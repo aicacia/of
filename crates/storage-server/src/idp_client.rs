@@ -30,6 +30,8 @@ pub struct IdpClient {
     audience: String,
     client: Client,
     cached_token: std::sync::Arc<Mutex<Option<CachedToken>>>,
+    #[cfg(feature = "network")]
+    local_device_policy: Option<(EndpointId, crate::LocalReplicationAuthorizer)>,
 }
 
 struct CachedToken {
@@ -77,7 +79,19 @@ impl IdpClient {
             audience: audience.to_owned(),
             client,
             cached_token: std::sync::Arc::new(Mutex::new(None)),
+            #[cfg(feature = "network")]
+            local_device_policy: None,
         })
+    }
+
+    #[cfg(feature = "network")]
+    pub fn with_local_device_policy(
+        mut self,
+        endpoint: EndpointId,
+        policy: crate::LocalReplicationAuthorizer,
+    ) -> Self {
+        self.local_device_policy = Some((endpoint, policy));
+        self
     }
 
     async fn service_access_token(&self) -> Result<String, String> {
@@ -188,7 +202,19 @@ impl IdpClient {
         let body = read_limited_body(&mut response, "IdP introspection response")
             .await
             .map_err(|_| IdpIntrospectionError::ServiceUnavailable)?;
-        serde_json::from_slice(&body).map_err(|_| IdpIntrospectionError::ServiceUnavailable)
+        let response: IntrospectionResponse =
+            serde_json::from_slice(&body).map_err(|_| IdpIntrospectionError::ServiceUnavailable)?;
+        #[cfg(feature = "network")]
+        if let Some((endpoint, policy)) = &self.local_device_policy {
+            let owner = policy
+                .local_owner(*endpoint)
+                .await
+                .map_err(|_| IdpIntrospectionError::InvalidToken)?;
+            if response.claims.sub != owner {
+                return Err(IdpIntrospectionError::InvalidToken);
+            }
+        }
+        Ok(response)
     }
 
     pub async fn approved_storage_endpoints(&self) -> Result<Vec<String>, String> {

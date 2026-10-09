@@ -45,6 +45,13 @@ impl SelectionKind {
         }
     }
 
+    fn storage_audience(&self) -> &'static str {
+        match self {
+            Self::Database => "storage:databases",
+            Self::Filesystem => "storage:filesystems",
+        }
+    }
+
     fn policy_kind(&self) -> &'static str {
         match self {
             Self::Database => "database",
@@ -91,7 +98,7 @@ pub(crate) async fn put_device_selection(
         .validate_storage_resource(
             &body.storage_access_token,
             &owner,
-            &state.storage_audience,
+            body.kind.storage_audience(),
             body.application_id,
             body.kind.resource_kind(),
             &body.id.to_string(),

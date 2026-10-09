@@ -82,6 +82,7 @@ impl DatabaseProtocolHandler {
         if let Err(error) = self
             .databases
             .reconcile_selected_copies(&selected_databases)
+            .await
         {
             log::warn!("database local-copy cleanup is pending: {error}");
         }

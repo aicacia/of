@@ -40,6 +40,9 @@ impl StorageReplicationRuntime {
             file_systems,
             cancellation_token.clone(),
         );
+        file_system
+            .install_passthrough_reader()
+            .expect("new filesystem content-reader lock is unpoisoned");
         let data_handler =
             DataProtocolHandler::new(database.clone(), file_system.clone(), cancellation_token);
         Self {

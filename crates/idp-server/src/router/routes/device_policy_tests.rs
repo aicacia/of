@@ -21,6 +21,128 @@ use crate::{
 use super::{enroll_device, revoke_device, update_device};
 
 #[tokio::test]
+async fn device_transfer_http_requires_exact_action_and_active_new_owner() {
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use idp_service::repo::UserRepo;
+    use tower::ServiceExt;
+    let fixture = approval_fixture().await;
+    let token = user_token(&fixture, "idp-services").await;
+    let device = fixture
+        .state
+        .devices
+        .find_approved_by_public_key(&fixture.server.endpoint().id().to_string())
+        .await
+        .expect("local binding")
+        .expect("approved Device");
+    let new = fixture
+        .state
+        .oauth2_service
+        .user_repo
+        .create_user_with_password("new-owner", "valid-password")
+        .await
+        .expect("active local target User");
+    let router: axum::Router = crate::openapi_router(fixture.state.clone(), "").into();
+    let call = |target: Id| {
+        Request::builder()
+            .method("PUT")
+            .uri(format!("/devices/{}/owner", device.id))
+            .header("authorization", format!("Bearer {token}"))
+            .header("content-type", "application/json")
+            .body(Body::from(format!(r#"{{"ownerSubject":"{target}"}}"#)))
+            .expect("typed transfer request")
+    };
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(call(new.id))
+            .await
+            .expect("real denied route")
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    let service = ManagementService::new(
+        DbPermissionRepo::new(Arc::clone(&fixture.management)),
+        DbRoleRepo::new(Arc::clone(&fixture.management)),
+    );
+    let role = service
+        .create_role(Id::nil(), "transfer", None)
+        .await
+        .expect("role");
+    let permission = service
+        .create_permission(
+            Id::nil(),
+            IdentityAction::DevicesTransfer.permission(),
+            None,
+        )
+        .await
+        .expect("exact action");
+    service
+        .add_permission_to_role(Id::nil(), role.id, permission.id)
+        .await
+        .expect("grant");
+    service
+        .add_role_to_user(Id::nil(), fixture.owner, role.id)
+        .await
+        .expect("actor");
+    assert!(
+        !router
+            .clone()
+            .oneshot(call(Id::now_v7()))
+            .await
+            .expect("unknown target")
+            .status()
+            .is_success()
+    );
+    assert_eq!(
+        fixture
+            .state
+            .devices
+            .find_approved_by_public_key(&device.public_key)
+            .await
+            .expect("owner intact")
+            .expect("Device")
+            .owner_subject,
+        fixture.owner.to_string()
+    );
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(call(new.id))
+            .await
+            .expect("real transfer route")
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        fixture
+            .state
+            .devices
+            .find_approved_by_public_key(&device.public_key)
+            .await
+            .expect("new binding")
+            .expect("Device")
+            .owner_subject,
+        new.id.to_string()
+    );
+    assert!(
+        !router
+            .oneshot(call(fixture.owner))
+            .await
+            .expect("old actor cannot take it back")
+            .status()
+            .is_success()
+    );
+    fixture.server.endpoint().close().await;
+    let root = fixture.root.clone();
+    drop(service);
+    drop(fixture);
+    std::fs::remove_dir_all(root).expect("fixture cleanup");
+}
+
+#[tokio::test]
 async fn management_device_identity_uses_real_local_idp_and_learned_revocation() {
     use idp_model::contract::{
         ApplicationRegistration, ClientProfile, ClientRegistration, ClientType, GrantType,

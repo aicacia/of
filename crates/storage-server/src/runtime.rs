@@ -12,9 +12,14 @@ pub struct StorageRuntime {
     router: Router,
     replication: Option<StorageReplicationRuntime>,
     cancellation_token: CancellationToken,
+    copies: Option<crate::StorageCopyRetirement>,
 }
 
 impl StorageRuntime {
+    pub fn copy_retirement(&self) -> Option<crate::StorageCopyRetirement> {
+        self.copies.clone()
+    }
+
     pub fn router(&self) -> Router {
         self.router.clone()
     }
@@ -40,7 +45,7 @@ impl StorageRuntime {
 }
 
 pub fn build_runtime(
-    state: RouterState,
+    mut state: RouterState,
     data_dir: &Path,
     api_prefix: &str,
     resource_prefix: &str,
@@ -59,6 +64,23 @@ pub fn build_runtime(
         })
         .transpose()
         .map_err(io::Error::other)?;
+
+    if let (Some(server), Some(management), Some(idp)) = (
+        server.as_ref(),
+        state.management_client.as_ref(),
+        state.idp_client.clone(),
+    ) {
+        state.idp_client = Some(match management.local_replication_authorizer() {
+            Some(policy) => idp.with_local_device_policy(server.endpoint().id(), policy.clone()),
+            None => idp,
+        });
+    }
+    let copies = file_systems
+        .as_ref()
+        .map(|file_systems| crate::StorageCopyRetirement {
+            databases: Arc::clone(&databases),
+            file_systems: Arc::clone(file_systems),
+        });
 
     let replication = match (
         server,
@@ -97,6 +119,7 @@ pub fn build_runtime(
         router,
         replication,
         cancellation_token,
+        copies,
     })
 }
 

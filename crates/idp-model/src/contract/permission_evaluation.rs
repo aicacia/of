@@ -47,6 +47,7 @@ pub enum IdentityAction {
     DevicesEnroll,
     DevicesRename,
     DevicesRevoke,
+    DevicesTransfer,
     DeviceRestrictionsRead,
     DeviceRestrictionsUpdate,
     DevicePairingRead,
@@ -85,6 +86,7 @@ impl IdentityAction {
             Self::DevicesEnroll => "idp.devices.enroll",
             Self::DevicesRename => "idp.devices.rename",
             Self::DevicesRevoke => "idp.devices.revoke",
+            Self::DevicesTransfer => "idp.devices.transfer",
             Self::DeviceRestrictionsRead => "management.device_restrictions.read",
             Self::DeviceRestrictionsUpdate => "management.device_restrictions.update",
             Self::DevicePairingRead => "idp.device_pairing.read",
@@ -222,6 +224,7 @@ impl PermissionEvaluationRequest {
             (
                 A::DevicesRename
                 | A::DevicesRevoke
+                | A::DevicesTransfer
                 | A::DeviceRestrictionsRead
                 | A::DeviceRestrictionsUpdate,
                 IdentityResource::Device { id: Some(id) },

@@ -25,6 +25,51 @@ use crate::router::{
 #[path = "device_policy_tests.rs"]
 mod policy_tests;
 
+#[utoipa::path(put, path = "/devices/{device_id}/owner", params(("device_id" = String, Path)), request_body = idp_model::contract::DeviceTransferRequest,
+    responses((status = 204, description = "Ownership updated; each Node must finish learned local cleanup before new-owner use")), security(("authorization" = [])))]
+pub(crate) async fn transfer_device(
+    State(state): State<RouterState>,
+    Path(device_id): Path<Id>,
+    actor: StandardAuthorization,
+    Json(request): Json<idp_model::contract::DeviceTransferRequest>,
+) -> Result<axum::http::StatusCode, ErrorResponse> {
+    require_identity_permission(
+        &state,
+        &actor,
+        IdentityAction::DevicesTransfer,
+        PermissionTarget::Installation {
+            resource: IdentityResource::Device {
+                id: Some(device_id),
+            },
+        },
+    )
+    .await?;
+    if request.owner_subject.is_nil() || request.owner_subject.to_string() == actor.claims.sub {
+        return Err(ErrorResponse::new(ErrorCode::InvalidRequest));
+    }
+    let identity = trusted_device_identity(&state, device_id).await?;
+    if identity.owner_subject != actor.claims.sub {
+        return Err(ErrorResponse::new(ErrorCode::AccessDenied));
+    }
+    state
+        .oauth2_service
+        .find_user_info(request.owner_subject)
+        .await?;
+    if !state
+        .devices
+        .transfer_owned(
+            device_id,
+            &actor.claims.sub,
+            &request.owner_subject.to_string(),
+        )
+        .await
+        .map_err(ErrorResponse::from)?
+    {
+        return Err(ErrorResponse::new(ErrorCode::AccessDenied));
+    }
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
 const DEVICE_LOOKUP_SCOPE: &str = IDP_DEVICE_LOOKUP_SCOPE;
 const DEVICE_LIST_SCOPE: &str = IDP_DEVICE_LIST_SCOPE;
 
@@ -107,6 +152,13 @@ pub(crate) async fn lookup_device_identity(
     {
         return Err(ErrorResponse::new(ErrorCode::AccessDenied));
     }
+    trusted_device_identity(&state, device_id).await.map(Json)
+}
+
+async fn trusted_device_identity(
+    state: &RouterState,
+    device_id: Id,
+) -> Result<DeviceEndpointIdentity, ErrorResponse> {
     let device = state
         .devices
         .list()
@@ -142,11 +194,11 @@ pub(crate) async fn lookup_device_identity(
         .parse::<Id>()
         .map_err(|_| ErrorResponse::new(ErrorCode::AccessDenied))?;
     state.oauth2_service.find_user_info(owner).await?;
-    Ok(Json(DeviceEndpointIdentity {
+    Ok(DeviceEndpointIdentity {
         device_id,
         owner_subject: device.owner_subject,
         endpoint_id: device.public_key,
-    }))
+    })
 }
 
 #[utoipa::path(

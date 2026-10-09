@@ -462,7 +462,7 @@ impl DbSelectionPolicyRepo {
     }
 
     /// The caller supplies current trusted IdP ownership, never a peer claim.
-    /// An owner change remains gated until whole-resource owner cleanup is available.
+    /// An owner change remains gated until the local host records public owner cleanup completion.
     pub async fn reconcile_owner_prevalidated(
         &self,
         device_id: Uuid,
@@ -526,6 +526,101 @@ impl DbSelectionPolicyRepo {
             .await
             .map_err(db_error)?;
         Ok(results.iter().any(|result| !result.rows.is_empty()))
+    }
+
+    /// Only the local host may use this intent to orchestrate Storage retirement.
+    pub async fn pending_cleanup_owner(&self, device_id: Uuid) -> ManagementResult<Option<String>> {
+        if !self.local_cleanup_pending(device_id).await? {
+            return Ok(None);
+        }
+        Ok(Some(
+            self.record(device_id)
+                .await?
+                .ok_or_else(|| invalid("cleanup policy missing"))?
+                .owner_subject,
+        ))
+    }
+
+    /// Caller must finish both public Storage owner cleanups and revalidate current IdP ownership.
+    pub async fn complete_owner_cleanup_prevalidated(
+        &self,
+        device_id: Uuid,
+        old_owner: &str,
+        new_owner: &str,
+    ) -> ManagementResult<bool> {
+        if new_owner.parse::<Uuid>().is_err() || new_owner == old_owner {
+            return Ok(false);
+        }
+        let Some(policy) = self.record(device_id).await? else {
+            return Ok(false);
+        };
+        if !self.local_cleanup_pending(device_id).await? {
+            return Ok(policy.owner_subject == new_owner);
+        }
+        if policy.owner_subject != old_owner {
+            return Ok(false);
+        }
+        let mut transaction = self.engine.client().transaction().await.map_err(db_error)?;
+        let results = transaction
+            .execute(vec![Statement::Query(Query::Select(QuerySelect {
+                from: from(),
+                projection: COLUMNS.into_iter().map(column).collect(),
+                distinct: false,
+                predicate: Some(QueryExpr::And(
+                    Box::new(equals("device_id", Value::Uuid(device_id))),
+                    Box::new(equals("owner_subject", Value::Text(old_owner.to_owned()))),
+                )),
+                aggregates: vec![],
+                text_concats: vec![],
+                group_by: vec![],
+                order_by: vec![],
+                limit: None,
+                offset: None,
+                having: None,
+            }))])
+            .await
+            .map_err(db_error)?;
+        if results.iter().all(|result| result.rows.is_empty()) {
+            return Ok(false);
+        }
+        transaction
+            .execute(vec![
+                Statement::Query(Query::Update(QueryUpdate {
+                    from: from(),
+                    assignments: vec![
+                        assignment("owner_subject", Value::Text(new_owner.to_owned())),
+                        assignment("admin_allowed", Value::Bool(false)),
+                        assignment("application_id", Value::Null),
+                        assignment("selected_kind", Value::Null),
+                        assignment("selected_id", Value::Null),
+                    ],
+                    predicate: Some(QueryExpr::And(
+                        Box::new(equals("device_id", Value::Uuid(device_id))),
+                        Box::new(equals("owner_subject", Value::Text(old_owner.to_owned()))),
+                    )),
+                    returning: None,
+                })),
+                Statement::Query(Query::Delete(db::QueryDelete {
+                    from: QueryFrom {
+                        table: "local_device_copy_cleanup".into(),
+                        joins: vec![],
+                    },
+                    predicate: Some(QueryExpr::Equals(
+                        Box::new(QueryExpr::Value(QueryExprValue::Column(QueryColumn::new(
+                            "local_device_copy_cleanup".into(),
+                            "device_id".into(),
+                        )))),
+                        Box::new(QueryExpr::Value(QueryExprValue::Value(Value::Uuid(
+                            device_id,
+                        )))),
+                    )),
+                    returning: None,
+                })),
+            ])
+            .await
+            .map_err(db_error)?;
+        transaction.commit().await.map_err(db_error)?;
+        Ok(true)
     }
 
     pub async fn get(
@@ -1528,6 +1623,81 @@ mod tests {
             );
         }
         std::fs::remove_file(root).expect("remove policy fixture");
+    }
+
+    #[tokio::test]
+    async fn completed_local_transfer_rebinds_empty_policy_without_lifting_restriction() {
+        let engine = Arc::new(db::Database::in_memory());
+        super::super::up(&engine).await.expect("schema");
+        let repo = super::DbSelectionPolicyRepo::new(engine);
+        let device = db::Uuid::now_v7();
+        let old = db::Uuid::now_v7().to_string();
+        let new = db::Uuid::now_v7().to_string();
+        repo.set_prevalidated(super::SelectionPolicy {
+            device_id: device,
+            owner_subject: old.clone(),
+            application_id: Some(db::Uuid::now_v7()),
+            selected_kind: Some("database".into()),
+            selected_id: Some(db::Uuid::now_v7()),
+            admin_allowed: true,
+        })
+        .await
+        .expect("old selection");
+        assert!(
+            !repo
+                .reconcile_owner_prevalidated(device, &new)
+                .await
+                .expect("learn transfer")
+        );
+        assert_eq!(
+            repo.pending_cleanup_owner(device).await.expect("intent"),
+            Some(old.clone())
+        );
+        assert!(
+            !repo
+                .complete_owner_cleanup_prevalidated(device, &new, &old)
+                .await
+                .expect("wrong intent denies")
+        );
+        assert!(
+            repo.local_cleanup_pending(device)
+                .await
+                .expect("still pending")
+        );
+        assert!(
+            repo.complete_owner_cleanup_prevalidated(device, &old, &new)
+                .await
+                .expect("trusted host completed both owners")
+        );
+        assert!(
+            !repo
+                .local_cleanup_pending(device)
+                .await
+                .expect("completed atomically")
+        );
+        assert!(
+            repo.reconcile_owner_prevalidated(device, &new)
+                .await
+                .expect("new binding ready")
+        );
+        let policy = repo
+            .get(device, &new, db::Uuid::nil())
+            .await
+            .expect("rebound")
+            .expect("policy");
+        assert!(!policy.admin_allowed);
+        assert!(policy.selected_id.is_none());
+        assert!(
+            repo.selected_resources_for_device(device)
+                .await
+                .expect("old selections gone")
+                .is_empty()
+        );
+        assert!(
+            repo.complete_owner_cleanup_prevalidated(device, &old, &new)
+                .await
+                .expect("idempotent completion")
+        );
     }
 
     #[tokio::test]

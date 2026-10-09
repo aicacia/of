@@ -37,6 +37,7 @@ struct Fixture {
     peers: IrohPair,
     nodes: [DomainNode; 2],
     files: [Arc<FileSystem<EndpointId>>; 2],
+    runtimes: [Arc<ScopedFileSystemRuntime<EndpointId>>; 2],
     resource: SelectedResource,
     _directory: TestDirectory,
 }
@@ -84,10 +85,14 @@ impl Fixture {
             owner: owner.to_string(),
             application: Id::now_v7(),
         };
-        let left = ScopedFileSystemRuntime::new(nodes[0].root.join("storage"), peers.ids()[0])
-            .expect("left Storage");
-        let right = ScopedFileSystemRuntime::new(nodes[1].root.join("storage"), peers.ids()[1])
-            .expect("right Storage");
+        let left = Arc::new(
+            ScopedFileSystemRuntime::new(nodes[0].root.join("storage"), peers.ids()[0])
+                .expect("left Storage"),
+        );
+        let right = Arc::new(
+            ScopedFileSystemRuntime::new(nodes[1].root.join("storage"), peers.ids()[1])
+                .expect("right Storage"),
+        );
         let catalog = left
             .create_resource(&scope, None)
             .await
@@ -118,6 +123,7 @@ impl Fixture {
             peers,
             nodes,
             files,
+            runtimes: [left, right],
             resource,
             _directory: directory,
         }
@@ -225,6 +231,152 @@ impl Fixture {
         assert!(!deleted);
         [left, right]
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn real_passthrough_read_uses_authorized_reachable_full_peer_without_local_content() {
+    tokio::time::timeout(Duration::from_secs(120), async {
+        let fixture = Fixture::new().await;
+        fixture.files[1]
+            .write("remote.txt", b"authorized Full content")
+            .await
+            .expect("source Full");
+        let scope = Scope {
+            owner: fixture.resource.owner_subject.clone(),
+            application: fixture
+                .resource
+                .application_id
+                .parse()
+                .expect("Application"),
+        };
+        let id =
+            file_system::FileSystemId::parse(&fixture.resource.resource_id).expect("resource ID");
+        fixture.runtimes[0]
+            .set_resource_residency(&scope, id, file_system::Residency::Passthrough)
+            .await
+            .expect("local Passthrough");
+        let cancellation = CancellationToken::new();
+        let handlers = (0..2)
+            .map(|side| {
+                let peers = EndpointIdStore::default();
+                peers.add(fixture.peers.ids()[1 - side]);
+                let server = Server::new(fixture.peers.endpoints[side].clone(), peers);
+                let management = crate::ManagementClient::new(
+                    "http://127.0.0.1:9/management",
+                    "http://127.0.0.1:9/idp",
+                    "storage",
+                    "isolated-secret",
+                    "https://of03-installation.example",
+                    "management",
+                )
+                .expect("remote authority unavailable")
+                .with_local_replication_authorizer(fixture.nodes[side].authorizer());
+                crate::storage_protocol::StorageProtocolHandler::new(
+                    server,
+                    management,
+                    Arc::clone(&fixture.runtimes[side]),
+                    cancellation.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let database = crate::database_protocol::DatabaseProtocolHandler::new(
+            Server::new(
+                fixture.peers.endpoints[1].clone(),
+                EndpointIdStore::default(),
+            ),
+            crate::ManagementClient::new(
+                "http://127.0.0.1:9/management",
+                "http://127.0.0.1:9/idp",
+                "storage",
+                "isolated-secret",
+                "https://of03-installation.example",
+                "management",
+            )
+            .expect("local facade")
+            .with_local_replication_authorizer(fixture.nodes[1].authorizer()),
+            Arc::new(
+                DatabaseRuntime::new(fixture.nodes[1].root.join("unused-sql")).expect("runtime"),
+            ),
+            fixture.nodes[1].root.join("staging"),
+            cancellation.clone(),
+        );
+        let data =
+            crate::DataProtocolHandler::new(database, handlers[1].clone(), cancellation.clone());
+        let router = iroh::protocol::Router::builder(fixture.peers.endpoints[1].clone())
+            .accept(iroh_chain::DATA_ALPN, data)
+            .spawn();
+        handlers[0]
+            .install_passthrough_reader()
+            .expect("production reader wiring");
+        let session =
+            storage_service::ScopedStorageService::open_resource(&fixture.runtimes[0], scope, id)
+                .await
+                .expect("scoped Passthrough");
+        let read = || storage_model::StorageRequest::Read {
+            path: "remote.txt".into(),
+        };
+        let result = session.execute(read()).await;
+        if result.is_err() {
+            eprintln!(
+                "remote read failure: {result:?}; source read: {:?}",
+                fixture.files[1].read("remote.txt").await
+            );
+            let source_handle = fixture.files[1]
+                .open_handle(OpenRequest {
+                    path: "remote.txt".into(),
+                    revision: None,
+                })
+                .await;
+            match source_handle {
+                Ok(mut handle) => eprintln!(
+                    "source public handle Read: {:?}",
+                    handle.read(0, file_system::MAX_FILE_READ_LENGTH).await
+                ),
+                Err(error) => eprintln!("source public handle Open: {error:?}"),
+            }
+        }
+        assert_eq!(
+            result.expect("real authorized DATA content"),
+            storage_model::StorageResponse::Read {
+                content: b"authorized Full content".to_vec()
+            }
+        );
+        assert!(
+            fixture.files[0].read("remote.txt").await.is_err(),
+            "remote read does not materialize a Full copy"
+        );
+        fixture.nodes[0].restrict(1, false).await;
+        assert!(
+            session.execute(read()).await.is_err(),
+            "learned native permission denies existing peer"
+        );
+        fixture.nodes[0].restrict(1, true).await;
+        fixture.runtimes[1]
+            .set_resource_residency(
+                &Scope {
+                    owner: fixture.resource.owner_subject.clone(),
+                    application: fixture
+                        .resource
+                        .application_id
+                        .parse()
+                        .expect("Application"),
+                },
+                id,
+                file_system::Residency::Passthrough,
+            )
+            .await
+            .expect("provider no longer Full");
+        assert!(
+            session.execute(read()).await.is_err(),
+            "reachable Passthrough peer cannot provide content"
+        );
+        cancellation.cancel();
+        router.shutdown().await.expect("router shutdown");
+        drop(session);
+        fixture.peers.close().await;
+    })
+    .await
+    .expect("bounded public Passthrough integration");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

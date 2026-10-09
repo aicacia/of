@@ -419,7 +419,7 @@ impl HostedControlPlane {
             || claims.nbf > now
             || claims.sub.is_empty()
             || claims.aud.is_empty()
-            || !claims.scope.iter().any(|scope| scope == "storage")
+            || claims.principal_type != model::contract::PrincipalType::User
         {
             return Err("invalid storage access token".to_owned());
         }

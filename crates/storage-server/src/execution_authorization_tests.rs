@@ -108,7 +108,7 @@ async fn queued_write_fixture(in_flight: bool) {
         let (queued, received) = mpsc::channel(2);
         let (metadata, _) = broadcast::channel(1);
         let (sessions, _) = broadcast::channel(1);
-        let inner = Arc::new(Inner { peer: remote, authorize_frame: Some(authorize), outgoing: StdMutex::new(Some(queued)), metadata: StdMutex::new(Some(metadata)), sessions: StdMutex::new(Some(sessions)), pending: Mutex::new(BTreeMap::new()),  next_id: AtomicU64::new(1), transport_handles: AtomicUsize::new(1), shutdown: watch::channel(false).0 });
+        let inner = Arc::new(Inner { peer: remote, authorize_frame: Some(authorize), outgoing: StdMutex::new(Some(queued)), metadata: StdMutex::new(Some(metadata)), sessions: StdMutex::new(Some(sessions)), sessions_ready: watch::channel(false).0, pending: Mutex::new(BTreeMap::new()),  next_id: AtomicU64::new(1), transport_handles: AtomicUsize::new(1), shutdown: watch::channel(false).0 });
         send_response(&inner, 1, FileResponse::ReadChunk(bytes::Bytes::from_static(b"must-not-disclose"))).await.expect("enqueue while locally granted");
         assert!(LocalPermissions::new(management.clone()).evaluate(&request).await.expect("grant read"));
         let writer = if in_flight {
