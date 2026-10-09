@@ -24,7 +24,7 @@
         rejectAuthorizationRequest,
         resolveAuthorizationRequest,
     } from "./_utils";
-    import type { ApplicationRegistration } from "@aicacia/management-client";
+    import type { ApplicationRegistration } from "@aicacia/idp-client";
 
     let { userInfo, authorizationRequest, registration }: AuthorizeProps =
         $props();

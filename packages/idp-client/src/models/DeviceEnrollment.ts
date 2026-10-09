@@ -34,7 +34,7 @@ export interface DeviceEnrollment {
     /**
      *
      */
-    id: number;
+    id: string;
     /**
      *
      */

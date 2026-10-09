@@ -22,7 +22,7 @@ export interface RoleResponse {
     /**
      *
      */
-    applicationId: number;
+    applicationId: string;
     /**
      *
      */
@@ -34,7 +34,7 @@ export interface RoleResponse {
     /**
      *
      */
-    id: number;
+    id: string;
     /**
      *
      */

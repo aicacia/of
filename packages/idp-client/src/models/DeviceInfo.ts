@@ -38,7 +38,7 @@ export interface DeviceInfo {
     /**
      *
      */
-    id: number;
+    id: string;
     /**
      *
      */

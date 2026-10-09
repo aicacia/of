@@ -24,6 +24,7 @@ pub fn run() {
             app::get_localhost_server_base_url,
             app::get_setup_stage,
             app::get_setup_intent,
+            app::get_desktop_client_id,
             app::node_join_accepting,
             app::pending_node_joins,
             app::approve_pending_node_join,
@@ -33,6 +34,9 @@ pub fn run() {
             app::cancel_installation_setup,
             app::retry_local_runtime,
             app::reset_device,
+            app::recover_reset_references,
+            app::revoke_reset_on_peer,
+            app::pending_reset_revocations,
             app::complete_device_setup
         ])
         .setup(|app| {

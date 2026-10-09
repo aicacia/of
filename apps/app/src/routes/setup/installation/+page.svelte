@@ -3,6 +3,7 @@
     import { onMount } from "svelte";
     import { goto } from "$app/navigation";
     import { resolve } from "$app/paths";
+    import { getOidcClient } from "$lib/common/state/oidc.svelte";
 
     let { data }: { data: { stage: string } } = $props();
     type Intent = {
@@ -18,6 +19,24 @@
     let issuer = $state("");
     let peer = $state("");
     let confirmation = $state("");
+    let revocationPeer = $state("");
+    let revocationStatus = $state("");
+    type ResetTarget = {
+        member_id: string;
+        issuer: string;
+        status: "pending" | "acknowledged";
+    };
+    let revocationTargets = $state.raw<ResetTarget[]>([]);
+    let revocationMember = $state("");
+    let peerBearer = $state("");
+    async function loadRevocationTargets() {
+        revocationTargets = await invoke<ResetTarget[]>(
+            "pending_reset_revocations",
+        );
+        revocationMember ||=
+            revocationTargets.find((target) => target.status === "pending")
+                ?.member_id ?? "";
+    }
     let busy = $state(false);
     let loading = $state(true);
     let error = $state("");
@@ -27,6 +46,9 @@
             loading = false;
             return;
         }
+        void loadRevocationTargets().catch((cause) => {
+            error = String(cause);
+        });
         invoke<Intent | null>("get_setup_intent")
             .then((intent) => {
                 if (intent) {
@@ -88,6 +110,55 @@
         } catch (cause) {
             error = String(cause);
         } finally {
+            busy = false;
+        }
+    }
+
+    async function recoverReferences() {
+        busy = true;
+        error = "";
+        try {
+            await invoke("recover_reset_references");
+            error =
+                "Deletion references recovered. Damaged files were archived. This does not restore trust; explicitly retry reset.";
+        } catch (cause) {
+            error = String(cause);
+        } finally {
+            busy = false;
+        }
+    }
+
+    async function revokeOnPeer() {
+        const bearer =
+            peerBearer ||
+            getOidcClient().getStoredTokenResponse()?.access_token;
+        if (!bearer) {
+            error =
+                "Sign in with an authorized User session before revoking on a peer.";
+            return;
+        }
+        if (
+            !confirm(
+                `Revoke this Node's signer and Device on trusted peer ${revocationPeer}?`,
+            )
+        )
+            return;
+        busy = true;
+        error = "";
+        revocationStatus = "";
+        try {
+            await invoke("revoke_reset_on_peer", {
+                peerApi: revocationPeer,
+                bearer,
+                memberId: revocationMember,
+            });
+            await loadRevocationTargets();
+            revocationStatus =
+                "The surviving peer acknowledged signer and Device revocation. Other peers learn it through ordinary scoped security synchronization. Local data and secrets are still retained.";
+        } catch (cause) {
+            error = String(cause);
+        } finally {
+            peerBearer = "";
             busy = false;
         }
     }
@@ -237,6 +308,57 @@
                     deletion retains retry state. The app exits after successful
                     reset.
                 </p>
+                <p>
+                    Offline local reset does not revoke membership on surviving
+                    peers. When an authorized User session and trusted peer are
+                    available, revoke there first or retry after reset using the
+                    retained public member reference. This uses no persisted
+                    bearer and never treats a local reset as remote
+                    acknowledgement.
+                </p>
+                <label
+                    >Revocation target
+                    <select bind:value={revocationMember} disabled={busy}>
+                        <option value="">Select retained member</option>
+                        {#each revocationTargets as target (target.member_id)}
+                            <option value={target.member_id}
+                                >{target.member_id} — {target.issuer} ({target.status})</option
+                            >
+                        {/each}
+                    </select>
+                </label>
+                <label
+                    >Authorized peer User access token (optional while signed
+                    in)
+                    <input
+                        type="password"
+                        bind:value={peerBearer}
+                        autocomplete="off"
+                        disabled={busy}
+                    />
+                </label>
+                <p>
+                    This transient token is sent only to the explicitly selected
+                    trusted HTTPS peer after its Installation issuer matches. It
+                    is cleared after the attempt and never stored with the reset
+                    record.
+                </p>
+                <label
+                    >Trusted surviving peer IdP URL<input
+                        type="url"
+                        bind:value={revocationPeer}
+                        placeholder="https://peer.example/idp"
+                        disabled={busy}
+                    /></label
+                >
+                <button
+                    onclick={revokeOnPeer}
+                    disabled={busy || !revocationPeer || !revocationMember}
+                    >Revoke on surviving peer</button
+                >
+                {#if revocationStatus}<p role="status">
+                        {revocationStatus}
+                    </p>{/if}
                 <label
                     >Type RESET to confirm <input
                         bind:value={confirmation}
@@ -249,6 +371,16 @@
                     disabled={busy || confirmation !== "RESET"}
                     >Reset / retry pending reset</button
                 >
+                <button
+                    onclick={recoverReferences}
+                    disabled={busy || confirmation !== "RESET"}
+                    >Recover deletion references from durable backup</button
+                >
+                <p>
+                    Recovery is reset-only: it preserves damaged evidence and
+                    does not restore readiness, regenerate a key, or create new
+                    trust. Without a valid durable backup, it fails closed.
+                </p>
             </details>
             {#if error}<p role="alert">{error}</p>{/if}
         {/if}

@@ -6,6 +6,7 @@ use super::{SetupIds, parse_setup_ids, read_setup_ids, read_setup_intent};
 
 pub(super) const JOURNAL: &str = "reset-state.json";
 const TEMPORARY: &str = ".reset-state.tmp";
+const REFERENCES: &str = "setup-reference-backup.json";
 const DATA_PATHS: [&str; 10] = [
     "lidp.redb",
     "vaults",
@@ -176,8 +177,206 @@ fn begin_with(
     };
     let record = json!({"version": 1, "phase": if issuer.is_some() { "secrets-pending" } else { "data-pending" }, "issuer": issuer, "ids": ids});
     fs::create_dir_all(data)?;
+    if issuer.is_some() {
+        retain(data)?;
+    }
     write(&record, data, checkpoint)?;
     Ok(record)
+}
+
+pub(super) fn retain(data: &Path) -> io::Result<()> {
+    let ids = optional_json(&data.join("setup-ids.json"))?
+        .ok_or_else(|| io::Error::other("cannot retain missing setup identities"))?;
+    parse_setup_ids(&ids)?;
+    let intent = read_setup_intent(data)?;
+    let record =
+        json!({"version": 1, "phase": "secrets-pending", "issuer": intent["issuer"], "ids": ids});
+    validate(&record)?;
+    if let Some(existing) = optional_json(&data.join(REFERENCES))? {
+        validate(&existing)?;
+        if existing != record {
+            return Err(io::Error::other(
+                "retained reset references conflict; explicit recovery required",
+            ));
+        }
+        return sync_directory(data);
+    }
+    let temporary = data.join(format!(
+        ".setup-references-{}.tmp",
+        idp_model::model::Id::now_v7()
+    ));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)?;
+    file.write_all(&serde_json::to_vec(&record)?)?;
+    file.sync_all()?;
+    fs::hard_link(&temporary, data.join(REFERENCES))?;
+    sync_directory(data)?;
+    fs::remove_file(temporary)?;
+    sync_directory(data)
+}
+
+fn validate_revocation(record: &Value) -> io::Result<()> {
+    if record.as_object().map(|fields| fields.len()) != Some(4)
+        || record["version"] != 1
+        || !matches!(record["status"].as_str(), Some("pending" | "acknowledged"))
+    {
+        return Err(io::Error::other("invalid retained revocation target"));
+    }
+    super::validate_setup_intent(&json!({"purpose": "create", "issuer": record["issuer"]}))?;
+    super::parse_setup_id(&record["member_id"], "revoked member ID")?;
+    Ok(())
+}
+
+pub(super) fn revocations(data: &Path) -> io::Result<Vec<Value>> {
+    let directory = data.join("reset-revocations");
+    if !exists(&directory)? {
+        return Ok(Vec::new());
+    }
+    if !fs::symlink_metadata(&directory)?.file_type().is_dir() {
+        return Err(io::Error::other(
+            "revocation targets must be a local directory",
+        ));
+    }
+    let mut records = Vec::new();
+    for entry in fs::read_dir(directory)? {
+        let path = entry?.path();
+        if path
+            .extension()
+            .is_some_and(|extension| extension == "json")
+        {
+            let record =
+                optional_json(&path)?.ok_or_else(|| io::Error::other("lost revocation target"))?;
+            validate_revocation(&record)?;
+            if path.file_stem().and_then(|name| name.to_str()) != record["member_id"].as_str() {
+                return Err(io::Error::other(
+                    "revocation target filename conflicts with member",
+                ));
+            }
+            records.push(record);
+        }
+    }
+    Ok(records)
+}
+
+fn publish_revocation(data: &Path, record: &Value) -> io::Result<()> {
+    validate_revocation(record)?;
+    let directory = data.join("reset-revocations");
+    fs::create_dir_all(&directory)?;
+    if !fs::symlink_metadata(&directory)?.file_type().is_dir() {
+        return Err(io::Error::other(
+            "revocation targets must be a local directory",
+        ));
+    }
+    let member = record["member_id"].as_str().expect("validated member ID");
+    let path = directory.join(format!("{member}.json"));
+    if let Some(existing) = optional_json(&path)? {
+        validate_revocation(&existing)?;
+        if existing["issuer"] != record["issuer"] || existing["member_id"] != record["member_id"] {
+            return Err(io::Error::other("retained revocation target conflicts"));
+        }
+        if existing["status"] == "acknowledged" {
+            return sync_directory(&directory);
+        }
+    }
+    let temporary = directory.join(format!(".{}.tmp", idp_model::model::Id::now_v7()));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)?;
+    file.write_all(&serde_json::to_vec(record)?)?;
+    file.sync_all()?;
+    fs::rename(temporary, path)?;
+    sync_directory(&directory)?;
+    sync_directory(data)
+}
+
+pub(super) fn queue_revocation(data: &Path, references: &Value) -> io::Result<()> {
+    validate(references)?;
+    if references["issuer"].is_null() {
+        return Ok(());
+    }
+    let ids = parse_setup_ids(&references["ids"])?;
+    publish_revocation(
+        data,
+        &json!({"version":1,"issuer": references["issuer"],"member_id":ids.member_id.to_string(),"status":"pending"}),
+    )
+}
+
+pub(super) fn acknowledge_revocation(data: &Path, target: &Value) -> io::Result<()> {
+    let mut record = target.clone();
+    record["status"] = json!("acknowledged");
+    publish_revocation(data, &record)
+}
+
+pub(super) fn recovery_references(data: &Path) -> io::Result<Value> {
+    let record = optional_json(&data.join(REFERENCES))?
+        .ok_or_else(|| io::Error::other("no durable reference backup; supply independently verified owner references before reset; no keys or journals were removed"))?;
+    validate(&record)?;
+    if record["phase"] != "secrets-pending" {
+        return Err(io::Error::other("invalid reference backup phase"));
+    }
+    Ok(record)
+}
+
+pub(super) fn recover(data: &Path) -> io::Result<()> {
+    let record = recovery_references(data)?;
+    if let Ok(Some(ids)) = optional_json(&data.join("setup-ids.json"))
+        && parse_setup_ids(&ids).is_ok()
+        && ids != record["ids"]
+    {
+        return Err(io::Error::other(
+            "valid setup identities conflict with backup; recovery refused",
+        ));
+    }
+    if let Ok(intent) = read_setup_intent(data)
+        && intent["issuer"] != record["issuer"]
+    {
+        return Err(io::Error::other(
+            "valid Installation issuer conflicts with backup; recovery refused",
+        ));
+    }
+    if let Ok(Some(current)) = optional_json(&data.join(JOURNAL))
+        && validate(&current).is_ok()
+    {
+        if current["issuer"] != record["issuer"] || current["ids"] != record["ids"] {
+            return Err(io::Error::other(
+                "valid reset journal conflicts with backup; recovery refused",
+            ));
+        }
+        return sync_directory(data);
+    }
+    let archive = data.join("reset-recovery");
+    fs::create_dir_all(&archive)?;
+    if !fs::symlink_metadata(&archive)?.file_type().is_dir() {
+        return Err(io::Error::other(
+            "recovery archive must be a local directory",
+        ));
+    }
+    let attempt = archive.join(idp_model::model::Id::now_v7().to_string());
+    fs::create_dir(&attempt)?;
+    for name in [JOURNAL, TEMPORARY, "setup-ids.json", "node-setup.json"] {
+        let path = data.join(name);
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.file_type().is_file() => {
+                let bytes = fs::read(&path)?;
+                let mut copy = fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(attempt.join(name))?;
+                copy.write_all(&bytes)?;
+                copy.sync_all()?;
+            }
+            Ok(_) => return Err(io::Error::other("recovery refuses non-regular references")),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => (),
+            Err(error) => return Err(error),
+        }
+    }
+    sync_directory(&attempt)?;
+    sync_directory(&archive)?;
+    sync_directory(data)?;
+    write(&record, data, &mut |_| Ok(()))
 }
 
 pub(super) fn begin(data: &Path, config: &Path) -> io::Result<()> {
@@ -216,7 +415,19 @@ async fn run_with<F: Future<Output = io::Result<()>>>(
     mut checkpoint: impl FnMut(&str) -> io::Result<()>,
 ) -> io::Result<()> {
     let mut record = begin_with(data, config, &mut checkpoint)?;
+    checkpoint("revocation:before-retain")?;
+    queue_revocation(data, &record)?;
+    checkpoint("revocation:retained")?;
     if record["phase"] == "secrets-pending" {
+        let database = data.join("services/idp/idp.redb");
+        if !fs::symlink_metadata(&database)
+            .map(|metadata| metadata.file_type().is_file())
+            .unwrap_or(false)
+        {
+            return Err(io::Error::other(
+                "local IdP owner metadata is missing or non-regular; internal Client key references cannot be guessed. No database was recreated or secrets removed. Retry setup only if owner provisioning never ran; otherwise restore independently verified metadata before reset",
+            ));
+        }
         checkpoint("secrets:before-delete")?;
         delete_secrets(ResetSecrets {
             ids: parse_setup_ids(&record["ids"])?,
@@ -242,6 +453,7 @@ async fn run_with<F: Future<Output = io::Result<()>>>(
         record["phase"] = json!("complete");
         write(&record, data, &mut checkpoint)?;
     }
+    remove(&data.join(REFERENCES), REFERENCES, &mut checkpoint)?;
     remove(&data.join(JOURNAL), JOURNAL, &mut checkpoint)
 }
 
@@ -266,6 +478,11 @@ mod tests {
         .expect("canonical issuer before owners");
         fs::create_dir_all(data.join("services/idp")).expect("owner data");
         fs::write(data.join("services/idp/retained"), b"owner data").expect("owner fixture");
+        fs::write(
+            data.join("services/idp/idp.redb"),
+            b"injected owner metadata",
+        )
+        .expect("retained metadata fixture, not a real database");
         for name in [
             "vaults",
             "storage-residency.json",
@@ -282,6 +499,98 @@ mod tests {
             .expect("secret fixture");
         serde_json::from_slice(&fs::read(data.join("setup-ids.json")).expect("retained IDs"))
             .expect("ID snapshot")
+    }
+
+    #[tokio::test]
+    async fn lost_owner_metadata_preserves_secret_references_without_recreating_a_database() {
+        let root = std::env::temp_dir().join(format!("reset-owner-loss-{}", Id::now_v7()));
+        fixture(&root);
+        let data = root.join("data");
+        let config = root.join("config");
+        super::begin(&data, &config).expect("capture reset prerequisites");
+        fs::remove_file(data.join("services/idp/idp.redb")).expect("lose owner metadata");
+        run(&data, &config, |_| async {
+            panic!("lost owner metadata must not reach secret deletion or database creation")
+        })
+        .await
+        .expect_err("unknown internal Client key namespaces require verified metadata recovery");
+        assert!(data.join(JOURNAL).is_file());
+        assert!(data.join("setup-reference-backup.json").is_file());
+        assert!(!data.join("services/idp/idp.redb").exists());
+        assert!(root.join("secret").is_file());
+        fs::remove_dir_all(root).expect("remove owned loss fixture");
+    }
+
+    #[tokio::test]
+    async fn explicit_recovery_preserves_corruption_and_never_restores_trust() {
+        let root = std::env::temp_dir().join(format!("reset-reference-recovery-{}", Id::now_v7()));
+        let ids = fixture(&root);
+        let data = root.join("data");
+        let config = root.join("config");
+        super::begin(&data, &config).expect("retain durable deletion prerequisites");
+        let mut wrong = ids.clone();
+        wrong["member_id"] = json!(Id::now_v7().to_string());
+        fs::write(
+            data.join("setup-ids.json"),
+            serde_json::to_vec(&wrong).expect("conflicting identities"),
+        )
+        .expect("conflicting valid references");
+        assert!(super::recover(&data).is_err());
+        fs::write(
+            data.join("setup-ids.json"),
+            serde_json::to_vec(&ids).expect("exact backup"),
+        )
+        .expect("restore fixture references");
+        fs::write(data.join("setup-ids.json"), b"corrupt ids").expect("corrupt references");
+        fs::remove_file(data.join("node-setup.json")).expect("lose issuer reference");
+        fs::write(data.join(JOURNAL), b"corrupt journal").expect("corrupt journal");
+        assert!(super::begin(&data, &config).is_err());
+        super::recover(&data).expect("explicit reset-only recovery");
+        assert_eq!(
+            fs::read(data.join("setup-ids.json")).expect("original preserved"),
+            b"corrupt ids"
+        );
+        assert!(!data.join("node-setup.json").exists());
+        let record: super::Value = serde_json::from_slice(
+            &fs::read(data.join(JOURNAL)).expect("recovered deletion journal"),
+        )
+        .expect("valid reset-only recovery");
+        assert_eq!(record["ids"], ids);
+        assert_eq!(record["phase"], "secrets-pending");
+        assert!(data.join("reset-recovery").is_dir());
+        let expected_ids = ids.clone();
+        run(&data, &config, |references| async move {
+            assert_eq!(
+                references.ids.member_id.to_string(),
+                expected_ids["member_id"].as_str().expect("member")
+            );
+            assert_eq!(references.issuer, "https://reset.test/idp");
+            Ok(())
+        })
+        .await
+        .expect("delete with recovered references, not new keys");
+        assert!(!data.join("setup-reference-backup.json").exists());
+        let targets = super::revocations(&data)
+            .expect("public targets survive local secret and reference deletion");
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0]["member_id"], ids["member_id"]);
+        assert_eq!(targets[0]["status"], "pending");
+        assert_eq!(targets[0].as_object().expect("public fields only").len(), 4);
+        super::acknowledge_revocation(&data, &targets[0])
+            .expect("record later authorized peer acknowledgement");
+        assert_eq!(
+            super::revocations(&data).expect("retained acknowledgement")[0]["status"],
+            "acknowledged"
+        );
+        assert!(data.join("reset-recovery").is_dir());
+        fs::write(data.join(JOURNAL), b"unknown journal without backup")
+            .expect("lost backup boundary");
+        assert!(super::recover(&data).is_err());
+        assert_eq!(
+            fs::read(data.join(JOURNAL)).expect("unknown journal preserved"),
+            b"unknown journal without backup"
+        );
+        fs::remove_dir_all(root).expect("remove owned recovery fixture");
     }
 
     #[tokio::test]

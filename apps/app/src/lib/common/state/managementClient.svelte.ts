@@ -10,8 +10,11 @@ import { resolve } from "$app/paths";
 import { page } from "$app/state";
 import { env } from "$env/dynamic/public";
 import { afterSigninRedirect } from "./afterSigninRedirect.svelte";
-import { loadLocalhostBaseUrl } from "./localhostBaseUrl.svelte";
-import { getOidcClient } from "./oidc.svelte";
+import {
+  ensureLocalhostBaseUrl,
+  loadLocalhostBaseUrl,
+} from "./localhostBaseUrl.svelte";
+import { ownerAccessToken } from "./idpClient.svelte";
 
 const managementApiUrl = createStorage<string | null>(
   "management-api-url",
@@ -31,12 +34,8 @@ async function hydrateTauriManagementApiUrl(): Promise<void> {
 
 void hydrateTauriManagementApiUrl();
 
-function readAccessToken(): string {
-  const oidcClient = getOidcClient();
-  if (!oidcClient) {
-    return "";
-  }
-  return oidcClient.getStoredTokenResponse()?.access_token ?? "";
+function readAccessToken(): Promise<string> {
+  return ownerAccessToken("idp-management");
 }
 
 function readBasePath(): string | undefined {
@@ -65,7 +64,7 @@ const defaultConfigurationParameters: ConfigurationParameters = {
       },
     },
   ],
-  accessToken(): string {
+  accessToken(): Promise<string> {
     return readAccessToken();
   },
   get basePath(): string | undefined {
@@ -85,6 +84,11 @@ export const managementApi = new DefaultApi(lidpManagementConfiguration);
 
 export function setManagementApiUrl(newManagementApiUrl: string) {
   managementApiUrl.item = newManagementApiUrl;
+}
+
+export async function ensureTauriManagementApiUrl(): Promise<void> {
+  if (isTauri())
+    managementApiUrl.item = `${await ensureLocalhostBaseUrl()}/management`;
 }
 
 export function getManagementApiUrl(): string | null {

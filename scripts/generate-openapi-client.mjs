@@ -36,9 +36,8 @@ const backupDir = path.join(packageDir, `.src-backup-${randomUUID()}`);
 
 try {
   const result = spawnSync(
-    process.execPath,
+    pnpmPath,
     [
-      pnpmPath,
       "exec",
       "openapi-generator-cli",
       "generate",

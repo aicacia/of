@@ -1,18 +1,25 @@
 <script lang="ts">
-  import { resolve } from "$app/paths";
+    import { goto } from "$app/navigation";
+    import { resolve } from "$app/paths";
+    let clientId = $state("");
+    function openClient(event: SubmitEvent) {
+        event.preventDefault();
+        if (clientId.trim())
+            void goto(
+                resolve(`/clients/${encodeURIComponent(clientId.trim())}`),
+            );
+    }
 </script>
 
 <div class="flex flex-col gap-4">
-  <h1 class="mb-0 text-4xl">Clients</h1>
-  <div class="card secondary flex flex-col gap-3">
-    <h2 class="mb-0 text-2xl">Clients are managed per application</h2>
-    <p class="mb-0 text-sm opacity-80">
-      Open an application to list and create clients in that application.
+    <h1>Clients</h1>
+    <p>
+        Create clients from an <a href={resolve("/applications")}>application</a
+        >. The IdP supports authorized lookup by client ID, not a client
+        directory.
     </p>
-    <div>
-      <a class="btn primary" href={resolve("/applications")}
-        >Go to applications</a
-      >
-    </div>
-  </div>
+    <form class="card flex flex-col gap-3" onsubmit={openClient}>
+        <label>Client ID<input bind:value={clientId} required /></label>
+        <button class="btn primary" type="submit">Open client</button>
+    </form>
 </div>

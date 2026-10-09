@@ -65,6 +65,10 @@ export interface ClientRegistration {
     /**
      *
      */
+    allowedAudiences?: Array<string>;
+    /**
+     *
+     */
     allowedGrantTypes?: Array<GrantType>;
     /**
      *
@@ -191,6 +195,10 @@ export function ClientRegistrationFromJSONTyped(
         return json;
     }
     return {
+        allowedAudiences:
+            json["allowed_audiences"] == null
+                ? undefined
+                : json["allowed_audiences"],
         allowedGrantTypes:
             json["allowed_grant_types"] == null
                 ? undefined
@@ -300,6 +308,7 @@ export function ClientRegistrationToJSONTyped(
     }
 
     return {
+        allowed_audiences: value["allowedAudiences"],
         allowed_grant_types:
             value["allowedGrantTypes"] == null
                 ? undefined

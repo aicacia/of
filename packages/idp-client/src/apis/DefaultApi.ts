@@ -14,413 +14,523 @@
 
 import * as runtime from "../runtime.js";
 import {
-  type ApproveForUserRequest,
-  ApproveForUserRequestFromJSON,
-  ApproveForUserRequestToJSON,
+    type ApplicationRegistration,
+    ApplicationRegistrationFromJSON,
+    ApplicationRegistrationToJSON,
+} from "../models/ApplicationRegistration.js";
+import {
+    type ApproveForUserRequest,
+    ApproveForUserRequestFromJSON,
+    ApproveForUserRequestToJSON,
 } from "../models/ApproveForUserRequest.js";
 import {
-  type AuthorizationCodeResponse,
-  AuthorizationCodeResponseFromJSON,
-  AuthorizationCodeResponseToJSON,
+    type AuthorizationCodeResponse,
+    AuthorizationCodeResponseFromJSON,
+    AuthorizationCodeResponseToJSON,
 } from "../models/AuthorizationCodeResponse.js";
 import {
-  type AuthorizationRequest,
-  AuthorizationRequestFromJSON,
-  AuthorizationRequestToJSON,
+    type AuthorizationDetail,
+    AuthorizationDetailFromJSON,
+    AuthorizationDetailToJSON,
+} from "../models/AuthorizationDetail.js";
+import {
+    type AuthorizationRequest,
+    AuthorizationRequestFromJSON,
+    AuthorizationRequestToJSON,
 } from "../models/AuthorizationRequest.js";
 import {
-  type AuthorizationServerMetadata,
-  AuthorizationServerMetadataFromJSON,
-  AuthorizationServerMetadataToJSON,
+    type AuthorizationServerMetadata,
+    AuthorizationServerMetadataFromJSON,
+    AuthorizationServerMetadataToJSON,
 } from "../models/AuthorizationServerMetadata.js";
 import {
-  type ClientRegistration,
-  ClientRegistrationFromJSON,
-  ClientRegistrationToJSON,
+    type ClientRegistration,
+    ClientRegistrationFromJSON,
+    ClientRegistrationToJSON,
 } from "../models/ClientRegistration.js";
 import {
-  type CodeChallengeMethod,
-  CodeChallengeMethodFromJSON,
-  CodeChallengeMethodToJSON,
+    type CodeChallengeMethod,
+    CodeChallengeMethodFromJSON,
+    CodeChallengeMethodToJSON,
 } from "../models/CodeChallengeMethod.js";
 import { type Device, DeviceFromJSON, DeviceToJSON } from "../models/Device.js";
 import {
-  type DeviceAuthorization,
-  DeviceAuthorizationFromJSON,
-  DeviceAuthorizationToJSON,
+    type DeviceAuthorization,
+    DeviceAuthorizationFromJSON,
+    DeviceAuthorizationToJSON,
 } from "../models/DeviceAuthorization.js";
 import {
-  type DeviceEnrollment,
-  DeviceEnrollmentFromJSON,
-  DeviceEnrollmentToJSON,
+    type DeviceEndpointIdentity,
+    DeviceEndpointIdentityFromJSON,
+    DeviceEndpointIdentityToJSON,
+} from "../models/DeviceEndpointIdentity.js";
+import {
+    type DeviceEnrollment,
+    DeviceEnrollmentFromJSON,
+    DeviceEnrollmentToJSON,
 } from "../models/DeviceEnrollment.js";
 import {
-  type DeviceEnrollmentRequest,
-  DeviceEnrollmentRequestFromJSON,
-  DeviceEnrollmentRequestToJSON,
+    type DeviceEnrollmentRequest,
+    DeviceEnrollmentRequestFromJSON,
+    DeviceEnrollmentRequestToJSON,
 } from "../models/DeviceEnrollmentRequest.js";
 import {
-  type DeviceInfo,
-  DeviceInfoFromJSON,
-  DeviceInfoToJSON,
+    type DeviceInfo,
+    DeviceInfoFromJSON,
+    DeviceInfoToJSON,
 } from "../models/DeviceInfo.js";
 import {
-  type DevicePairingApprovalPayload,
-  DevicePairingApprovalPayloadFromJSON,
-  DevicePairingApprovalPayloadToJSON,
-} from "../models/DevicePairingApprovalPayload.js";
+    type DeviceSelfRevocationRequest,
+    DeviceSelfRevocationRequestFromJSON,
+    DeviceSelfRevocationRequestToJSON,
+} from "../models/DeviceSelfRevocationRequest.js";
 import {
-  type DevicePairingApprovalRequest,
-  DevicePairingApprovalRequestFromJSON,
-  DevicePairingApprovalRequestToJSON,
-} from "../models/DevicePairingApprovalRequest.js";
-import {
-  type DevicePairingRequest,
-  DevicePairingRequestFromJSON,
-  DevicePairingRequestToJSON,
-} from "../models/DevicePairingRequest.js";
-import {
-  type DeviceSignature,
-  DeviceSignatureFromJSON,
-  DeviceSignatureToJSON,
-} from "../models/DeviceSignature.js";
-import {
-  type HealthResponse,
-  HealthResponseFromJSON,
-  HealthResponseToJSON,
+    type HealthResponse,
+    HealthResponseFromJSON,
+    HealthResponseToJSON,
 } from "../models/HealthResponse.js";
 import {
-  type IsAllowedForUserRequest,
-  IsAllowedForUserRequestFromJSON,
-  IsAllowedForUserRequestToJSON,
+    type IsAllowedForUserRequest,
+    IsAllowedForUserRequestFromJSON,
+    IsAllowedForUserRequestToJSON,
 } from "../models/IsAllowedForUserRequest.js";
 import {
-  type IsAllowedForUserResponse,
-  IsAllowedForUserResponseFromJSON,
-  IsAllowedForUserResponseToJSON,
+    type IsAllowedForUserResponse,
+    IsAllowedForUserResponseFromJSON,
+    IsAllowedForUserResponseToJSON,
 } from "../models/IsAllowedForUserResponse.js";
 import { type Jwks, JwksFromJSON, JwksToJSON } from "../models/Jwks.js";
 import {
-  type PairingAcceptance,
-  PairingAcceptanceFromJSON,
-  PairingAcceptanceToJSON,
+    type PairingAcceptance,
+    PairingAcceptanceFromJSON,
+    PairingAcceptanceToJSON,
 } from "../models/PairingAcceptance.js";
 import {
-  type ResponseMode,
-  ResponseModeFromJSON,
-  ResponseModeToJSON,
+    type ResetPassword,
+    ResetPasswordFromJSON,
+    ResetPasswordToJSON,
+} from "../models/ResetPassword.js";
+import {
+    type ResponseMode,
+    ResponseModeFromJSON,
+    ResponseModeToJSON,
 } from "../models/ResponseMode.js";
 import {
-  type ResponseType,
-  ResponseTypeFromJSON,
-  ResponseTypeToJSON,
+    type ResponseType,
+    ResponseTypeFromJSON,
+    ResponseTypeToJSON,
 } from "../models/ResponseType.js";
 import {
-  type SignDeviceMessage,
-  SignDeviceMessageFromJSON,
-  SignDeviceMessageToJSON,
-} from "../models/SignDeviceMessage.js";
-
-import {
-  type SubjectTokenType,
-  SubjectTokenTypeFromJSON,
-  SubjectTokenTypeToJSON,
+    type SubjectTokenType,
+    SubjectTokenTypeFromJSON,
+    SubjectTokenTypeToJSON,
 } from "../models/SubjectTokenType.js";
 import {
-  type TokenResponse,
-  TokenResponseFromJSON,
-  TokenResponseToJSON,
+    type TokenResponse,
+    TokenResponseFromJSON,
+    TokenResponseToJSON,
 } from "../models/TokenResponse.js";
 import {
-  type TrustedDevice,
-  TrustedDeviceFromJSON,
-  TrustedDeviceToJSON,
+    type TrustedDevice,
+    TrustedDeviceFromJSON,
+    TrustedDeviceToJSON,
 } from "../models/TrustedDevice.js";
-
 import {
-  type UpdateDeviceRequest,
-  UpdateDeviceRequestFromJSON,
-  UpdateDeviceRequestToJSON,
+    type UpdateDeviceRequest,
+    UpdateDeviceRequestFromJSON,
+    UpdateDeviceRequestToJSON,
 } from "../models/UpdateDeviceRequest.js";
 import {
-  type UserInfo,
-  UserInfoFromJSON,
-  UserInfoToJSON,
+    type UserInfo,
+    UserInfoFromJSON,
+    UserInfoToJSON,
 } from "../models/UserInfo.js";
 import {
-  type VersionResponse,
-  VersionResponseFromJSON,
-  VersionResponseToJSON,
+    type VersionResponse,
+    VersionResponseFromJSON,
+    VersionResponseToJSON,
 } from "../models/VersionResponse.js";
 
-export interface ApproveDeviceRequest {
-  /**
-   * Pending device enrollment ID
-   */
-  id: number;
-  /**
-   *
-   */
-  devicePairingApprovalRequest: DevicePairingApprovalRequest;
-}
-
 export interface ApproveForUserOperationRequest {
-  /**
-   *
-   */
-  approveForUserRequest: ApproveForUserRequest;
+    /**
+     *
+     */
+    approveForUserRequest: ApproveForUserRequest;
 }
 
 export interface AuthorizeJsonRequest {
-  /**
-   *
-   */
-  authorizationRequest: AuthorizationRequest;
+    /**
+     *
+     */
+    authorizationRequest: AuthorizationRequest;
 }
 
 export interface AuthorizeQueryRequest {
-  /**
-   *
-   */
-  responseType: ResponseType;
-  /**
-   *
-   */
-  clientId: string;
-  /**
-   * redirect URI is optional if the client has only one registered redirect URI
-   */
-  redirectUri: string | null;
-  /**
-   *
-   */
-  scope: string | null;
-  /**
-   *
-   */
-  state: string | null;
-  /**
-   * Audience parameter (RFC 8707) to specify the intended recipients of the token.
-   */
-  resource: string | null;
-  /**
-   * PKCE parameters (RFC 7636) for public clients and enhanced security
-   */
-  codeChallenge: string | null;
-  /**
-   * The method used to derive the code challenge (e.g., "S256" or "plain").
-   * only required if `code_challenge` is present. "S256" is strongly recommended in OAuth 2.1 for better security.
-   */
-  codeChallengeMethod: CodeChallengeMethod | null;
-  /**
-   *
-   */
-  nonce: string | null;
-  /**
-   *
-   */
-  prompt: string | null;
-  /**
-   *
-   */
-  responseMode: ResponseMode | null;
-  /**
-   *
-   */
-  loginHint: string | null;
-  /**
-   *
-   */
-  idTokenHint: string | null;
-  /**
-   *
-   */
-  uiLocales: string | null;
+    /**
+     *
+     */
+    responseType: ResponseType;
+    /**
+     *
+     */
+    clientId: string;
+    /**
+     * redirect URI is optional if the client has only one registered redirect URI
+     */
+    redirectUri: string | null;
+    /**
+     *
+     */
+    scope: string | null;
+    /**
+     *
+     */
+    state: string | null;
+    /**
+     * Audience parameter (RFC 8707) to specify the intended recipients of the token.
+     */
+    resource: string | null;
+    /**
+     * PKCE parameters (RFC 7636) for public clients and enhanced security
+     */
+    codeChallenge: string | null;
+    /**
+     * The method used to derive the code challenge (e.g., "S256" or "plain").
+     * only required if `code_challenge` is present. "S256" is strongly recommended in OAuth 2.1 for better security.
+     */
+    codeChallengeMethod: CodeChallengeMethod | null;
+    /**
+     *
+     */
+    nonce: string | null;
+    /**
+     *
+     */
+    prompt: string | null;
+    /**
+     *
+     */
+    responseMode: ResponseMode | null;
+    /**
+     *
+     */
+    loginHint: string | null;
+    /**
+     *
+     */
+    idTokenHint: string | null;
+    /**
+     *
+     */
+    uiLocales: string | null;
+}
+
+export interface CreateApplicationRequest {
+    /**
+     *
+     */
+    applicationRegistration: ApplicationRegistration;
+}
+
+export interface DeleteApplicationRequest {
+    /**
+     *
+     */
+    applicationId: string;
 }
 
 export interface DeleteRegisterRequest {
-  /**
-   * Client ID
-   */
-  clientId: string;
+    /**
+     *
+     */
+    clientId: string;
+}
+
+export interface DeleteUserRequest {
+    /**
+     *
+     */
+    userId: string;
 }
 
 export interface DeviceAuthRequest {
-  /**
-   *
-   */
-  clientId?: string | null;
-  /**
-   *
-   */
-  scope?: string | null;
+    /**
+     *
+     */
+    clientId?: string | null;
+    /**
+     *
+     */
+    scope?: string | null;
 }
 
 export interface EnrollDeviceRequest {
-  /**
-   *
-   */
-  deviceEnrollmentRequest: DeviceEnrollmentRequest;
+    /**
+     *
+     */
+    deviceEnrollmentRequest: DeviceEnrollmentRequest;
+}
+
+export interface GetApplicationRequest {
+    /**
+     *
+     */
+    applicationId: string;
 }
 
 export interface GetRegisterRequest {
-  /**
-   * Client ID
-   */
-  clientId: string;
+    /**
+     *
+     */
+    clientId: string;
+}
+
+export interface GetUserRequest {
+    /**
+     *
+     */
+    userId: string;
 }
 
 export interface IsAllowedForUserOperationRequest {
-  /**
-   *
-   */
-  isAllowedForUserRequest: IsAllowedForUserRequest;
+    /**
+     *
+     */
+    isAllowedForUserRequest: IsAllowedForUserRequest;
 }
 
-export interface PairingApprovalPayloadRequest {
-  /**
-   * Pending device enrollment ID
-   */
-  id: number;
+export interface ListApplicationsRequest {
+    /**
+     *
+     */
+    offset: number;
+    /**
+     *
+     */
+    limit: number;
+}
+
+export interface ListClientKeysRequest {
+    /**
+     *
+     */
+    clientId: string;
+}
+
+export interface ListConsentsRequest {
+    /**
+     *
+     */
+    userId: string;
+    /**
+     *
+     */
+    offset: number;
+    /**
+     *
+     */
+    limit: number;
+}
+
+export interface LookupDeviceIdentityRequest {
+    /**
+     * Device ID
+     */
+    deviceId: string;
 }
 
 export interface PutRegisterRequest {
-  /**
-   * Client ID
-   */
-  clientId: string;
-  /**
-   *
-   */
-  clientRegistration: ClientRegistration;
+    /**
+     *
+     */
+    clientId: string;
+    /**
+     *
+     */
+    clientRegistration: ClientRegistration;
 }
 
 export interface RegisterRequest {
-  /**
-   *
-   */
-  clientRegistration: ClientRegistration;
+    /**
+     *
+     */
+    clientRegistration: ClientRegistration;
 }
 
-export interface RequestPairingRequest {
-  /**
-   *
-   */
-  devicePairingRequest: DevicePairingRequest;
+export interface ResetPasswordRequest {
+    /**
+     *
+     */
+    userId: string;
+    /**
+     *
+     */
+    resetPassword: ResetPassword;
 }
 
 export interface RevokeRequest {
-  /**
-   *
-   */
-  token: string;
-  /**
-   *
-   */
-  tokenTypeHint?: string | null;
+    /**
+     *
+     */
+    token: string;
+    /**
+     *
+     */
+    tokenTypeHint?: string | null;
+}
+
+export interface RevokeClientKeysRequest {
+    /**
+     *
+     */
+    clientId: string;
+}
+
+export interface RevokeConsentRequest {
+    /**
+     *
+     */
+    userId: string;
+    /**
+     *
+     */
+    consentId: string;
 }
 
 export interface RevokeDeviceRequest {
-  /**
-   * Device ID
-   */
-  id: number;
+    /**
+     * Device ID
+     */
+    id: string;
+}
+
+export interface RevokeSelfRequest {
+    /**
+     *
+     */
+    deviceSelfRevocationRequest: DeviceSelfRevocationRequest;
+}
+
+export interface RotateClientKeyRequest {
+    /**
+     *
+     */
+    clientId: string;
 }
 
 export interface SetPairingAcceptanceRequest {
-  /**
-   *
-   */
-  pairingAcceptance: PairingAcceptance;
-}
-
-export interface SignDeviceMessageRequest {
-  /**
-   *
-   */
-  signDeviceMessage: SignDeviceMessage;
+    /**
+     *
+     */
+    pairingAcceptance: PairingAcceptance;
 }
 
 export interface TokenRequest {
-  /**
-   *
-   */
-  clientId?: string;
-  /**
-   *
-   */
-  password?: string;
-  /**
-   *
-   */
-  resource?: string | null;
-  /**
-   *
-   */
-  scope?: string | null;
-  /**
-   *
-   */
-  username?: string;
-  /**
-   *
-   */
-  grantType?: TokenGrantTypeEnum;
-  /**
-   * The authorization code received from the authorization server.
-   */
-  code?: string;
-  /**
-   * PKCE parameters (if the client used PKCE during the authorization request)
-   */
-  codeVerifier?: string;
-  /**
-   *
-   */
-  redirectUri?: string | null;
-  /**
-   *
-   */
-  audience?: string | null;
-  /**
-   *
-   */
-  clientSecret?: string;
-  /**
-   *
-   */
-  refreshToken?: string;
-  /**
-   *
-   */
-  actorToken?: string | null;
-  /**
-   *
-   */
-  actorTokenType?: string | null;
-  /**
-   *
-   */
-  requestedTokenType?: string | null;
-  /**
-   *
-   */
-  subjectToken?: string;
-  /**
-   *
-   */
-  subjectTokenType?: SubjectTokenType;
+    /**
+     *
+     */
+    clientId?: string;
+    /**
+     *
+     */
+    password?: string;
+    /**
+     *
+     */
+    resource?: string | null;
+    /**
+     *
+     */
+    scope?: string | null;
+    /**
+     *
+     */
+    username?: string;
+    /**
+     *
+     */
+    grantType?: TokenGrantTypeEnum;
+    /**
+     * The authorization code received from the authorization server.
+     */
+    code?: string;
+    /**
+     * PKCE parameters (if the client used PKCE during the authorization request)
+     */
+    codeVerifier?: string;
+    /**
+     *
+     */
+    redirectUri?: string | null;
+    /**
+     *
+     */
+    audience?: string | null;
+    /**
+     *
+     */
+    clientSecret?: string;
+    /**
+     *
+     */
+    refreshToken?: string;
+    /**
+     *
+     */
+    actorToken?: string | null;
+    /**
+     *
+     */
+    actorTokenType?: string | null;
+    /**
+     *
+     */
+    authorizationDetails?: Array<AuthorizationDetail> | null;
+    /**
+     *
+     */
+    requestedTokenType?: string | null;
+    /**
+     *
+     */
+    subjectToken?: string;
+    /**
+     *
+     */
+    subjectTokenType?: SubjectTokenType;
+}
+
+export interface UpdateApplicationRequest {
+    /**
+     *
+     */
+    applicationId: string;
+    /**
+     *
+     */
+    applicationRegistration: ApplicationRegistration;
 }
 
 export interface UpdateDeviceOperationRequest {
-  /**
-   * Device ID
-   */
-  id: number;
-  /**
-   *
-   */
-  updateDeviceRequest: UpdateDeviceRequest;
+    /**
+     * Device ID
+     */
+    id: string;
+    /**
+     *
+     */
+    updateDeviceRequest: UpdateDeviceRequest;
+}
+
+export interface UpdateUserRequest {
+    /**
+     *
+     */
+    userId: string;
+    /**
+     *
+     */
+    body: object;
 }
 
 /**
@@ -430,2917 +540,4141 @@ export interface UpdateDeviceOperationRequest {
  * @interface DefaultApiInterface
  */
 export interface DefaultApiInterface {
-  /**
-   * Creates request options for approveDevice without sending the request
-   * @param {number} id Pending device enrollment ID
-   * @param {DevicePairingApprovalRequest} devicePairingApprovalRequest
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  approveDeviceRequestOpts(
-    requestParameters: ApproveDeviceRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {number} id Pending device enrollment ID
-   * @param {DevicePairingApprovalRequest} devicePairingApprovalRequest
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  approveDeviceRaw(
-    requestParameters: ApproveDeviceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<DeviceInfo>>;
-
-  /**
-   */
-  approveDevice(
-    requestParameters: ApproveDeviceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<DeviceInfo>;
-
-  /**
-   * Creates request options for approveForUser without sending the request
-   * @param {ApproveForUserRequest} approveForUserRequest
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  approveForUserRequestOpts(
-    requestParameters: ApproveForUserOperationRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {ApproveForUserRequest} approveForUserRequest
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  approveForUserRaw(
-    requestParameters: ApproveForUserOperationRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<IsAllowedForUserResponse>>;
-
-  /**
-   */
-  approveForUser(
-    requestParameters: ApproveForUserOperationRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<IsAllowedForUserResponse>;
-
-  /**
-   * Creates request options for authorizeJson without sending the request
-   * @param {AuthorizationRequest} authorizationRequest
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  authorizeJsonRequestOpts(
-    requestParameters: AuthorizeJsonRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {AuthorizationRequest} authorizationRequest
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  authorizeJsonRaw(
-    requestParameters: AuthorizeJsonRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<AuthorizationCodeResponse>>;
-
-  /**
-   */
-  authorizeJson(
-    requestParameters: AuthorizeJsonRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<AuthorizationCodeResponse>;
-
-  /**
-   * Creates request options for authorizeQuery without sending the request
-   * @param {ResponseType} responseType
-   * @param {string} clientId
-   * @param {string} redirectUri redirect URI is optional if the client has only one registered redirect URI
-   * @param {string} scope
-   * @param {string} state
-   * @param {string} resource Audience parameter (RFC 8707) to specify the intended recipients of the token.
-   * @param {string} codeChallenge PKCE parameters (RFC 7636) for public clients and enhanced security
-   * @param {CodeChallengeMethod} codeChallengeMethod The method used to derive the code challenge (e.g., \&quot;S256\&quot; or \&quot;plain\&quot;). only required if &#x60;code_challenge&#x60; is present. \&quot;S256\&quot; is strongly recommended in OAuth 2.1 for better security.
-   * @param {string} nonce
-   * @param {string} prompt
-   * @param {ResponseMode} responseMode
-   * @param {string} loginHint
-   * @param {string} idTokenHint
-   * @param {string} uiLocales
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  authorizeQueryRequestOpts(
-    requestParameters: AuthorizeQueryRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {ResponseType} responseType
-   * @param {string} clientId
-   * @param {string} redirectUri redirect URI is optional if the client has only one registered redirect URI
-   * @param {string} scope
-   * @param {string} state
-   * @param {string} resource Audience parameter (RFC 8707) to specify the intended recipients of the token.
-   * @param {string} codeChallenge PKCE parameters (RFC 7636) for public clients and enhanced security
-   * @param {CodeChallengeMethod} codeChallengeMethod The method used to derive the code challenge (e.g., \&quot;S256\&quot; or \&quot;plain\&quot;). only required if &#x60;code_challenge&#x60; is present. \&quot;S256\&quot; is strongly recommended in OAuth 2.1 for better security.
-   * @param {string} nonce
-   * @param {string} prompt
-   * @param {ResponseMode} responseMode
-   * @param {string} loginHint
-   * @param {string} idTokenHint
-   * @param {string} uiLocales
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  authorizeQueryRaw(
-    requestParameters: AuthorizeQueryRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<void>>;
-
-  /**
-   */
-  authorizeQuery(
-    requestParameters: AuthorizeQueryRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<void>;
-
-  /**
-   * Creates request options for deleteRegister without sending the request
-   * @param {string} clientId Client ID
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  deleteRegisterRequestOpts(
-    requestParameters: DeleteRegisterRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {string} clientId Client ID
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  deleteRegisterRaw(
-    requestParameters: DeleteRegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<void>>;
-
-  /**
-   */
-  deleteRegister(
-    requestParameters: DeleteRegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<void>;
-
-  /**
-   * Creates request options for device without sending the request
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  deviceRequestOpts(): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  deviceRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<Device>>;
-
-  /**
-   */
-  device(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<Device>;
-
-  /**
-   * Creates request options for deviceAuth without sending the request
-   * @param {string} [clientId]
-   * @param {string} [scope]
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  deviceAuthRequestOpts(
-    requestParameters: DeviceAuthRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {string} [clientId]
-   * @param {string} [scope]
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  deviceAuthRaw(
-    requestParameters: DeviceAuthRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<DeviceAuthorization>>;
-
-  /**
-   */
-  deviceAuth(
-    requestParameters: DeviceAuthRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<DeviceAuthorization>;
-
-  /**
-   * Creates request options for deviceVerify without sending the request
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  deviceVerifyRequestOpts(): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  deviceVerifyRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<void>>;
-
-  /**
-   */
-  deviceVerify(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<void>;
-
-  /**
-   * Creates request options for enrollDevice without sending the request
-   * @param {DeviceEnrollmentRequest} deviceEnrollmentRequest
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  enrollDeviceRequestOpts(
-    requestParameters: EnrollDeviceRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {DeviceEnrollmentRequest} deviceEnrollmentRequest
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  enrollDeviceRaw(
-    requestParameters: EnrollDeviceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<DeviceEnrollment>>;
-
-  /**
-   */
-  enrollDevice(
-    requestParameters: EnrollDeviceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<DeviceEnrollment>;
-
-  /**
-   * Creates request options for getRegister without sending the request
-   * @param {string} clientId Client ID
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  getRegisterRequestOpts(
-    requestParameters: GetRegisterRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {string} clientId Client ID
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  getRegisterRaw(
-    requestParameters: GetRegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<ClientRegistration>>;
-
-  /**
-   */
-  getRegister(
-    requestParameters: GetRegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<ClientRegistration>;
-
-  /**
-   * Creates request options for health without sending the request
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  healthRequestOpts(): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  healthRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<HealthResponse>>;
-
-  /**
-   */
-  health(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<HealthResponse>;
-
-  /**
-   * Creates request options for isAllowedForUser without sending the request
-   * @param {IsAllowedForUserRequest} isAllowedForUserRequest
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  isAllowedForUserRequestOpts(
-    requestParameters: IsAllowedForUserOperationRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {IsAllowedForUserRequest} isAllowedForUserRequest
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  isAllowedForUserRaw(
-    requestParameters: IsAllowedForUserOperationRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<IsAllowedForUserResponse>>;
-
-  /**
-   */
-  isAllowedForUser(
-    requestParameters: IsAllowedForUserOperationRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<IsAllowedForUserResponse>;
-
-  /**
-   * Creates request options for jwks without sending the request
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  jwksRequestOpts(): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  jwksRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<Jwks>>;
-
-  /**
-   */
-  jwks(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<Jwks>;
-
-  /**
-   * Creates request options for listDevices without sending the request
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  listDevicesRequestOpts(): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  listDevicesRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<Array<DeviceInfo>>>;
-
-  /**
-   */
-  listDevices(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<Array<DeviceInfo>>;
-
-  /**
-   * Creates request options for openapiJson without sending the request
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  openapiJsonRequestOpts(): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  openapiJsonRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<void>>;
-
-  /**
-   */
-  openapiJson(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<void>;
-
-  /**
-   * Creates request options for openidConfiguration without sending the request
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  openidConfigurationRequestOpts(): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  openidConfigurationRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<AuthorizationServerMetadata>>;
-
-  /**
-   */
-  openidConfiguration(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<AuthorizationServerMetadata>;
-
-  /**
-   * Creates request options for pairingAcceptance without sending the request
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  pairingAcceptanceRequestOpts(): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  pairingAcceptanceRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<PairingAcceptance>>;
-
-  /**
-   */
-  pairingAcceptance(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<PairingAcceptance>;
-
-  /**
-   * Creates request options for pairingApprovalPayload without sending the request
-   * @param {number} id Pending device enrollment ID
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  pairingApprovalPayloadRequestOpts(
-    requestParameters: PairingApprovalPayloadRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {number} id Pending device enrollment ID
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  pairingApprovalPayloadRaw(
-    requestParameters: PairingApprovalPayloadRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<DevicePairingApprovalPayload>>;
-
-  /**
-   */
-  pairingApprovalPayload(
-    requestParameters: PairingApprovalPayloadRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<DevicePairingApprovalPayload>;
-
-  /**
-   * Creates request options for putRegister without sending the request
-   * @param {string} clientId Client ID
-   * @param {ClientRegistration} clientRegistration
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  putRegisterRequestOpts(
-    requestParameters: PutRegisterRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {string} clientId Client ID
-   * @param {ClientRegistration} clientRegistration
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  putRegisterRaw(
-    requestParameters: PutRegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<ClientRegistration>>;
-
-  /**
-   */
-  putRegister(
-    requestParameters: PutRegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<ClientRegistration>;
-
-  /**
-   * Creates request options for register without sending the request
-   * @param {ClientRegistration} clientRegistration
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  registerRequestOpts(
-    requestParameters: RegisterRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {ClientRegistration} clientRegistration
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  registerRaw(
-    requestParameters: RegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<ClientRegistration>>;
-
-  /**
-   */
-  register(
-    requestParameters: RegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<ClientRegistration>;
-
-  /**
-   * Creates request options for requestPairing without sending the request
-   * @param {DevicePairingRequest} devicePairingRequest
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  requestPairingRequestOpts(
-    requestParameters: RequestPairingRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {DevicePairingRequest} devicePairingRequest
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  requestPairingRaw(
-    requestParameters: RequestPairingRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<DeviceEnrollment>>;
-
-  /**
-   */
-  requestPairing(
-    requestParameters: RequestPairingRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<DeviceEnrollment>;
-
-  /**
-   * Creates request options for revoke without sending the request
-   * @param {string} token
-   * @param {string} [tokenTypeHint]
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  revokeRequestOpts(
-    requestParameters: RevokeRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {string} token
-   * @param {string} [tokenTypeHint]
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  revokeRaw(
-    requestParameters: RevokeRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<void>>;
-
-  /**
-   */
-  revoke(
-    requestParameters: RevokeRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<void>;
-
-  /**
-   * Creates request options for revokeDevice without sending the request
-   * @param {number} id Device ID
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  revokeDeviceRequestOpts(
-    requestParameters: RevokeDeviceRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {number} id Device ID
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  revokeDeviceRaw(
-    requestParameters: RevokeDeviceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<void>>;
-
-  /**
-   */
-  revokeDevice(
-    requestParameters: RevokeDeviceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<void>;
-
-  /**
-   * Creates request options for sessionsLogout without sending the request
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  sessionsLogoutRequestOpts(): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  sessionsLogoutRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<void>>;
-
-  /**
-   */
-  sessionsLogout(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<void>;
-
-  /**
-   * Creates request options for setPairingAcceptance without sending the request
-   * @param {PairingAcceptance} pairingAcceptance
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  setPairingAcceptanceRequestOpts(
-    requestParameters: SetPairingAcceptanceRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {PairingAcceptance} pairingAcceptance
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  setPairingAcceptanceRaw(
-    requestParameters: SetPairingAcceptanceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<PairingAcceptance>>;
-
-  /**
-   */
-  setPairingAcceptance(
-    requestParameters: SetPairingAcceptanceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<PairingAcceptance>;
-
-  /**
-   * Creates request options for signDeviceMessage without sending the request
-   * @param {SignDeviceMessage} signDeviceMessage
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  signDeviceMessageRequestOpts(
-    requestParameters: SignDeviceMessageRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {SignDeviceMessage} signDeviceMessage
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  signDeviceMessageRaw(
-    requestParameters: SignDeviceMessageRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<DeviceSignature>>;
-
-  /**
-   */
-  signDeviceMessage(
-    requestParameters: SignDeviceMessageRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<DeviceSignature>;
-
-  /**
-   * Creates request options for token without sending the request
-   * @param {string} [clientId]
-   * @param {string} [password]
-   * @param {string} [resource]
-   * @param {string} [scope]
-   * @param {string} [username]
-   * @param {string} [grantType]
-   * @param {string} [code] The authorization code received from the authorization server.
-   * @param {string} [codeVerifier] PKCE parameters (if the client used PKCE during the authorization request)
-   * @param {string} [redirectUri]
-   * @param {string} [audience]
-   * @param {string} [clientSecret]
-   * @param {string} [refreshToken]
-   * @param {string} [actorToken]
-   * @param {string} [actorTokenType]
-   * @param {string} [requestedTokenType]
-   * @param {string} [subjectToken]
-   * @param {SubjectTokenType} [subjectTokenType]
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  tokenRequestOpts(
-    requestParameters: TokenRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {string} [clientId]
-   * @param {string} [password]
-   * @param {string} [resource]
-   * @param {string} [scope]
-   * @param {string} [username]
-   * @param {string} [grantType]
-   * @param {string} [code] The authorization code received from the authorization server.
-   * @param {string} [codeVerifier] PKCE parameters (if the client used PKCE during the authorization request)
-   * @param {string} [redirectUri]
-   * @param {string} [audience]
-   * @param {string} [clientSecret]
-   * @param {string} [refreshToken]
-   * @param {string} [actorToken]
-   * @param {string} [actorTokenType]
-   * @param {string} [requestedTokenType]
-   * @param {string} [subjectToken]
-   * @param {SubjectTokenType} [subjectTokenType]
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  tokenRaw(
-    requestParameters: TokenRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<TokenResponse>>;
-
-  /**
-   */
-  token(
-    requestParameters: TokenRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<TokenResponse>;
-
-  /**
-   * Creates request options for trustedDevices without sending the request
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  trustedDevicesRequestOpts(): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  trustedDevicesRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<Array<TrustedDevice>>>;
-
-  /**
-   */
-  trustedDevices(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<Array<TrustedDevice>>;
-
-  /**
-   * Creates request options for updateDevice without sending the request
-   * @param {number} id Device ID
-   * @param {UpdateDeviceRequest} updateDeviceRequest
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  updateDeviceRequestOpts(
-    requestParameters: UpdateDeviceOperationRequest,
-  ): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {number} id Device ID
-   * @param {UpdateDeviceRequest} updateDeviceRequest
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  updateDeviceRaw(
-    requestParameters: UpdateDeviceOperationRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<DeviceInfo>>;
-
-  /**
-   */
-  updateDevice(
-    requestParameters: UpdateDeviceOperationRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<DeviceInfo>;
-
-  /**
-   * Creates request options for userinfo without sending the request
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  userinfoRequestOpts(): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  userinfoRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<UserInfo>>;
-
-  /**
-   */
-  userinfo(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<UserInfo>;
-
-  /**
-   * Creates request options for version without sending the request
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  versionRequestOpts(): Promise<runtime.RequestOpts>;
-
-  /**
-   *
-   * @param {*} [options] Override http request option.
-   * @throws {RequiredError}
-   * @memberof DefaultApiInterface
-   */
-  versionRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<VersionResponse>>;
-
-  /**
-   */
-  version(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<VersionResponse>;
+    /**
+     * Creates request options for approveForUser without sending the request
+     * @param {ApproveForUserRequest} approveForUserRequest
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    approveForUserRequestOpts(
+        requestParameters: ApproveForUserOperationRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {ApproveForUserRequest} approveForUserRequest
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    approveForUserRaw(
+        requestParameters: ApproveForUserOperationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<IsAllowedForUserResponse>>;
+
+    /**
+     */
+    approveForUser(
+        requestParameters: ApproveForUserOperationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<IsAllowedForUserResponse>;
+
+    /**
+     * Creates request options for authorizeJson without sending the request
+     * @param {AuthorizationRequest} authorizationRequest
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    authorizeJsonRequestOpts(
+        requestParameters: AuthorizeJsonRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {AuthorizationRequest} authorizationRequest
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    authorizeJsonRaw(
+        requestParameters: AuthorizeJsonRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<AuthorizationCodeResponse>>;
+
+    /**
+     */
+    authorizeJson(
+        requestParameters: AuthorizeJsonRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<AuthorizationCodeResponse>;
+
+    /**
+     * Creates request options for authorizeQuery without sending the request
+     * @param {ResponseType} responseType
+     * @param {string} clientId
+     * @param {string} redirectUri redirect URI is optional if the client has only one registered redirect URI
+     * @param {string} scope
+     * @param {string} state
+     * @param {string} resource Audience parameter (RFC 8707) to specify the intended recipients of the token.
+     * @param {string} codeChallenge PKCE parameters (RFC 7636) for public clients and enhanced security
+     * @param {CodeChallengeMethod} codeChallengeMethod The method used to derive the code challenge (e.g., \&quot;S256\&quot; or \&quot;plain\&quot;). only required if &#x60;code_challenge&#x60; is present. \&quot;S256\&quot; is strongly recommended in OAuth 2.1 for better security.
+     * @param {string} nonce
+     * @param {string} prompt
+     * @param {ResponseMode} responseMode
+     * @param {string} loginHint
+     * @param {string} idTokenHint
+     * @param {string} uiLocales
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    authorizeQueryRequestOpts(
+        requestParameters: AuthorizeQueryRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {ResponseType} responseType
+     * @param {string} clientId
+     * @param {string} redirectUri redirect URI is optional if the client has only one registered redirect URI
+     * @param {string} scope
+     * @param {string} state
+     * @param {string} resource Audience parameter (RFC 8707) to specify the intended recipients of the token.
+     * @param {string} codeChallenge PKCE parameters (RFC 7636) for public clients and enhanced security
+     * @param {CodeChallengeMethod} codeChallengeMethod The method used to derive the code challenge (e.g., \&quot;S256\&quot; or \&quot;plain\&quot;). only required if &#x60;code_challenge&#x60; is present. \&quot;S256\&quot; is strongly recommended in OAuth 2.1 for better security.
+     * @param {string} nonce
+     * @param {string} prompt
+     * @param {ResponseMode} responseMode
+     * @param {string} loginHint
+     * @param {string} idTokenHint
+     * @param {string} uiLocales
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    authorizeQueryRaw(
+        requestParameters: AuthorizeQueryRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    authorizeQuery(
+        requestParameters: AuthorizeQueryRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for createApplication without sending the request
+     * @param {ApplicationRegistration} applicationRegistration
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    createApplicationRequestOpts(
+        requestParameters: CreateApplicationRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {ApplicationRegistration} applicationRegistration
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    createApplicationRaw(
+        requestParameters: CreateApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    createApplication(
+        requestParameters: CreateApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for deleteApplication without sending the request
+     * @param {string} applicationId
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    deleteApplicationRequestOpts(
+        requestParameters: DeleteApplicationRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} applicationId
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    deleteApplicationRaw(
+        requestParameters: DeleteApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    deleteApplication(
+        requestParameters: DeleteApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for deleteRegister without sending the request
+     * @param {string} clientId
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    deleteRegisterRequestOpts(
+        requestParameters: DeleteRegisterRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} clientId
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    deleteRegisterRaw(
+        requestParameters: DeleteRegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    deleteRegister(
+        requestParameters: DeleteRegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for deleteUser without sending the request
+     * @param {string} userId
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    deleteUserRequestOpts(
+        requestParameters: DeleteUserRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} userId
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    deleteUserRaw(
+        requestParameters: DeleteUserRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    deleteUser(
+        requestParameters: DeleteUserRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for device without sending the request
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    deviceRequestOpts(): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    deviceRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<Device>>;
+
+    /**
+     */
+    device(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<Device>;
+
+    /**
+     * Creates request options for deviceAuth without sending the request
+     * @param {string} [clientId]
+     * @param {string} [scope]
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    deviceAuthRequestOpts(
+        requestParameters: DeviceAuthRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} [clientId]
+     * @param {string} [scope]
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    deviceAuthRaw(
+        requestParameters: DeviceAuthRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<DeviceAuthorization>>;
+
+    /**
+     */
+    deviceAuth(
+        requestParameters: DeviceAuthRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<DeviceAuthorization>;
+
+    /**
+     * Creates request options for deviceVerify without sending the request
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    deviceVerifyRequestOpts(): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    deviceVerifyRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    deviceVerify(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for enrollDevice without sending the request
+     * @param {DeviceEnrollmentRequest} deviceEnrollmentRequest
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    enrollDeviceRequestOpts(
+        requestParameters: EnrollDeviceRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {DeviceEnrollmentRequest} deviceEnrollmentRequest
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    enrollDeviceRaw(
+        requestParameters: EnrollDeviceRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<DeviceEnrollment>>;
+
+    /**
+     */
+    enrollDevice(
+        requestParameters: EnrollDeviceRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<DeviceEnrollment>;
+
+    /**
+     * Creates request options for getApplication without sending the request
+     * @param {string} applicationId
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    getApplicationRequestOpts(
+        requestParameters: GetApplicationRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} applicationId
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    getApplicationRaw(
+        requestParameters: GetApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    getApplication(
+        requestParameters: GetApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for getRegister without sending the request
+     * @param {string} clientId
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    getRegisterRequestOpts(
+        requestParameters: GetRegisterRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} clientId
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    getRegisterRaw(
+        requestParameters: GetRegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<ClientRegistration>>;
+
+    /**
+     */
+    getRegister(
+        requestParameters: GetRegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<ClientRegistration>;
+
+    /**
+     * Creates request options for getUser without sending the request
+     * @param {string} userId
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    getUserRequestOpts(
+        requestParameters: GetUserRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} userId
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    getUserRaw(
+        requestParameters: GetUserRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<UserInfo>>;
+
+    /**
+     */
+    getUser(
+        requestParameters: GetUserRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<UserInfo>;
+
+    /**
+     * Creates request options for health without sending the request
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    healthRequestOpts(): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    healthRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<HealthResponse>>;
+
+    /**
+     */
+    health(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<HealthResponse>;
+
+    /**
+     * Creates request options for isAllowedForUser without sending the request
+     * @param {IsAllowedForUserRequest} isAllowedForUserRequest
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    isAllowedForUserRequestOpts(
+        requestParameters: IsAllowedForUserOperationRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {IsAllowedForUserRequest} isAllowedForUserRequest
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    isAllowedForUserRaw(
+        requestParameters: IsAllowedForUserOperationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<IsAllowedForUserResponse>>;
+
+    /**
+     */
+    isAllowedForUser(
+        requestParameters: IsAllowedForUserOperationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<IsAllowedForUserResponse>;
+
+    /**
+     * Creates request options for jwks without sending the request
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    jwksRequestOpts(): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    jwksRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<Jwks>>;
+
+    /**
+     */
+    jwks(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<Jwks>;
+
+    /**
+     * Creates request options for listApplications without sending the request
+     * @param {number} offset
+     * @param {number} limit
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    listApplicationsRequestOpts(
+        requestParameters: ListApplicationsRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {number} offset
+     * @param {number} limit
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    listApplicationsRaw(
+        requestParameters: ListApplicationsRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    listApplications(
+        requestParameters: ListApplicationsRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for listClientKeys without sending the request
+     * @param {string} clientId
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    listClientKeysRequestOpts(
+        requestParameters: ListClientKeysRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} clientId
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    listClientKeysRaw(
+        requestParameters: ListClientKeysRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    listClientKeys(
+        requestParameters: ListClientKeysRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for listConsents without sending the request
+     * @param {string} userId
+     * @param {number} offset
+     * @param {number} limit
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    listConsentsRequestOpts(
+        requestParameters: ListConsentsRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} userId
+     * @param {number} offset
+     * @param {number} limit
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    listConsentsRaw(
+        requestParameters: ListConsentsRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    listConsents(
+        requestParameters: ListConsentsRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for listDevices without sending the request
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    listDevicesRequestOpts(): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    listDevicesRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<Array<DeviceInfo>>>;
+
+    /**
+     */
+    listDevices(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<Array<DeviceInfo>>;
+
+    /**
+     * Creates request options for lookupDeviceIdentity without sending the request
+     * @param {string} deviceId Device ID
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    lookupDeviceIdentityRequestOpts(
+        requestParameters: LookupDeviceIdentityRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} deviceId Device ID
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    lookupDeviceIdentityRaw(
+        requestParameters: LookupDeviceIdentityRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<DeviceEndpointIdentity>>;
+
+    /**
+     */
+    lookupDeviceIdentity(
+        requestParameters: LookupDeviceIdentityRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<DeviceEndpointIdentity>;
+
+    /**
+     * Creates request options for openapiJson without sending the request
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    openapiJsonRequestOpts(): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    openapiJsonRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    openapiJson(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for openidConfiguration without sending the request
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    openidConfigurationRequestOpts(): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    openidConfigurationRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<AuthorizationServerMetadata>>;
+
+    /**
+     */
+    openidConfiguration(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<AuthorizationServerMetadata>;
+
+    /**
+     * Creates request options for pairingAcceptance without sending the request
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    pairingAcceptanceRequestOpts(): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    pairingAcceptanceRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<PairingAcceptance>>;
+
+    /**
+     */
+    pairingAcceptance(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<PairingAcceptance>;
+
+    /**
+     * Creates request options for putRegister without sending the request
+     * @param {string} clientId
+     * @param {ClientRegistration} clientRegistration
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    putRegisterRequestOpts(
+        requestParameters: PutRegisterRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} clientId
+     * @param {ClientRegistration} clientRegistration
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    putRegisterRaw(
+        requestParameters: PutRegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<ClientRegistration>>;
+
+    /**
+     */
+    putRegister(
+        requestParameters: PutRegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<ClientRegistration>;
+
+    /**
+     * Creates request options for register without sending the request
+     * @param {ClientRegistration} clientRegistration
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    registerRequestOpts(
+        requestParameters: RegisterRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {ClientRegistration} clientRegistration
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    registerRaw(
+        requestParameters: RegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<ClientRegistration>>;
+
+    /**
+     */
+    register(
+        requestParameters: RegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<ClientRegistration>;
+
+    /**
+     * Creates request options for resetPassword without sending the request
+     * @param {string} userId
+     * @param {ResetPassword} resetPassword
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    resetPasswordRequestOpts(
+        requestParameters: ResetPasswordRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} userId
+     * @param {ResetPassword} resetPassword
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    resetPasswordRaw(
+        requestParameters: ResetPasswordRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    resetPassword(
+        requestParameters: ResetPasswordRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for revoke without sending the request
+     * @param {string} token
+     * @param {string} [tokenTypeHint]
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    revokeRequestOpts(
+        requestParameters: RevokeRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} token
+     * @param {string} [tokenTypeHint]
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    revokeRaw(
+        requestParameters: RevokeRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    revoke(
+        requestParameters: RevokeRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for revokeClientKeys without sending the request
+     * @param {string} clientId
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    revokeClientKeysRequestOpts(
+        requestParameters: RevokeClientKeysRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} clientId
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    revokeClientKeysRaw(
+        requestParameters: RevokeClientKeysRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    revokeClientKeys(
+        requestParameters: RevokeClientKeysRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for revokeConsent without sending the request
+     * @param {string} userId
+     * @param {string} consentId
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    revokeConsentRequestOpts(
+        requestParameters: RevokeConsentRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} userId
+     * @param {string} consentId
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    revokeConsentRaw(
+        requestParameters: RevokeConsentRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    revokeConsent(
+        requestParameters: RevokeConsentRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for revokeDevice without sending the request
+     * @param {string} id Device ID
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    revokeDeviceRequestOpts(
+        requestParameters: RevokeDeviceRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} id Device ID
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    revokeDeviceRaw(
+        requestParameters: RevokeDeviceRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    revokeDevice(
+        requestParameters: RevokeDeviceRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for revokeSelf without sending the request
+     * @param {DeviceSelfRevocationRequest} deviceSelfRevocationRequest
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    revokeSelfRequestOpts(
+        requestParameters: RevokeSelfRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {DeviceSelfRevocationRequest} deviceSelfRevocationRequest
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    revokeSelfRaw(
+        requestParameters: RevokeSelfRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    revokeSelf(
+        requestParameters: RevokeSelfRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for rotateClientKey without sending the request
+     * @param {string} clientId
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    rotateClientKeyRequestOpts(
+        requestParameters: RotateClientKeyRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} clientId
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    rotateClientKeyRaw(
+        requestParameters: RotateClientKeyRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    rotateClientKey(
+        requestParameters: RotateClientKeyRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for sessionsLogout without sending the request
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    sessionsLogoutRequestOpts(): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    sessionsLogoutRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    sessionsLogout(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for setPairingAcceptance without sending the request
+     * @param {PairingAcceptance} pairingAcceptance
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    setPairingAcceptanceRequestOpts(
+        requestParameters: SetPairingAcceptanceRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {PairingAcceptance} pairingAcceptance
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    setPairingAcceptanceRaw(
+        requestParameters: SetPairingAcceptanceRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<PairingAcceptance>>;
+
+    /**
+     */
+    setPairingAcceptance(
+        requestParameters: SetPairingAcceptanceRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<PairingAcceptance>;
+
+    /**
+     * Creates request options for token without sending the request
+     * @param {string} [clientId]
+     * @param {string} [password]
+     * @param {string} [resource]
+     * @param {string} [scope]
+     * @param {string} [username]
+     * @param {string} [grantType]
+     * @param {string} [code] The authorization code received from the authorization server.
+     * @param {string} [codeVerifier] PKCE parameters (if the client used PKCE during the authorization request)
+     * @param {string} [redirectUri]
+     * @param {string} [audience]
+     * @param {string} [clientSecret]
+     * @param {string} [refreshToken]
+     * @param {string} [actorToken]
+     * @param {string} [actorTokenType]
+     * @param {Array<AuthorizationDetail>} [authorizationDetails]
+     * @param {string} [requestedTokenType]
+     * @param {string} [subjectToken]
+     * @param {SubjectTokenType} [subjectTokenType]
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    tokenRequestOpts(
+        requestParameters: TokenRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} [clientId]
+     * @param {string} [password]
+     * @param {string} [resource]
+     * @param {string} [scope]
+     * @param {string} [username]
+     * @param {string} [grantType]
+     * @param {string} [code] The authorization code received from the authorization server.
+     * @param {string} [codeVerifier] PKCE parameters (if the client used PKCE during the authorization request)
+     * @param {string} [redirectUri]
+     * @param {string} [audience]
+     * @param {string} [clientSecret]
+     * @param {string} [refreshToken]
+     * @param {string} [actorToken]
+     * @param {string} [actorTokenType]
+     * @param {Array<AuthorizationDetail>} [authorizationDetails]
+     * @param {string} [requestedTokenType]
+     * @param {string} [subjectToken]
+     * @param {SubjectTokenType} [subjectTokenType]
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    tokenRaw(
+        requestParameters: TokenRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<TokenResponse>>;
+
+    /**
+     */
+    token(
+        requestParameters: TokenRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<TokenResponse>;
+
+    /**
+     * Creates request options for trustedDevices without sending the request
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    trustedDevicesRequestOpts(): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    trustedDevicesRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<Array<TrustedDevice>>>;
+
+    /**
+     */
+    trustedDevices(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<Array<TrustedDevice>>;
+
+    /**
+     * Creates request options for updateApplication without sending the request
+     * @param {string} applicationId
+     * @param {ApplicationRegistration} applicationRegistration
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    updateApplicationRequestOpts(
+        requestParameters: UpdateApplicationRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} applicationId
+     * @param {ApplicationRegistration} applicationRegistration
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    updateApplicationRaw(
+        requestParameters: UpdateApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>>;
+
+    /**
+     */
+    updateApplication(
+        requestParameters: UpdateApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void>;
+
+    /**
+     * Creates request options for updateDevice without sending the request
+     * @param {string} id Device ID
+     * @param {UpdateDeviceRequest} updateDeviceRequest
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    updateDeviceRequestOpts(
+        requestParameters: UpdateDeviceOperationRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} id Device ID
+     * @param {UpdateDeviceRequest} updateDeviceRequest
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    updateDeviceRaw(
+        requestParameters: UpdateDeviceOperationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<DeviceInfo>>;
+
+    /**
+     */
+    updateDevice(
+        requestParameters: UpdateDeviceOperationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<DeviceInfo>;
+
+    /**
+     * Creates request options for updateUser without sending the request
+     * @param {string} userId
+     * @param {object} body
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    updateUserRequestOpts(
+        requestParameters: UpdateUserRequest,
+    ): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {string} userId
+     * @param {object} body
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    updateUserRaw(
+        requestParameters: UpdateUserRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<UserInfo>>;
+
+    /**
+     */
+    updateUser(
+        requestParameters: UpdateUserRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<UserInfo>;
+
+    /**
+     * Creates request options for userinfo without sending the request
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    userinfoRequestOpts(): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    userinfoRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<UserInfo>>;
+
+    /**
+     */
+    userinfo(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<UserInfo>;
+
+    /**
+     * Creates request options for version without sending the request
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    versionRequestOpts(): Promise<runtime.RequestOpts>;
+
+    /**
+     *
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof DefaultApiInterface
+     */
+    versionRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<VersionResponse>>;
+
+    /**
+     */
+    version(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<VersionResponse>;
 }
 
 /**
  *
  */
 export class DefaultApi extends runtime.BaseAPI implements DefaultApiInterface {
-  /**
-   * Creates request options for approveDevice without sending the request
-   */
-  async approveDeviceRequestOpts(
-    requestParameters: ApproveDeviceRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["id"] == null) {
-      throw new runtime.RequiredError(
-        "id",
-        'Required parameter "id" was null or undefined when calling approveDevice().',
-      );
-    }
-
-    if (requestParameters["devicePairingApprovalRequest"] == null) {
-      throw new runtime.RequiredError(
-        "devicePairingApprovalRequest",
-        'Required parameter "devicePairingApprovalRequest" was null or undefined when calling approveDevice().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    headerParameters["Content-Type"] = "application/json";
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/devices/enrollments/{id}/approve`;
-    urlPath = urlPath.replace(
-      "{id}",
-      encodeURIComponent(String(requestParameters["id"])),
-    );
-
-    return {
-      path: urlPath,
-      method: "POST",
-      headers: headerParameters,
-      query: queryParameters,
-      body: DevicePairingApprovalRequestToJSON(
-        requestParameters["devicePairingApprovalRequest"],
-      ),
-    };
-  }
-
-  /**
-   */
-  async approveDeviceRaw(
-    requestParameters: ApproveDeviceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<DeviceInfo>> {
-    const requestOptions =
-      await this.approveDeviceRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      DeviceInfoFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async approveDevice(
-    requestParameters: ApproveDeviceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<DeviceInfo> {
-    const response = await this.approveDeviceRaw(
-      requestParameters,
-      initOverrides,
-    );
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for approveForUser without sending the request
-   */
-  async approveForUserRequestOpts(
-    requestParameters: ApproveForUserOperationRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["approveForUserRequest"] == null) {
-      throw new runtime.RequiredError(
-        "approveForUserRequest",
-        'Required parameter "approveForUserRequest" was null or undefined when calling approveForUser().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    headerParameters["Content-Type"] = "application/json";
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/oauth2/auth/approve-for-user`;
-
-    return {
-      path: urlPath,
-      method: "POST",
-      headers: headerParameters,
-      query: queryParameters,
-      body: ApproveForUserRequestToJSON(
-        requestParameters["approveForUserRequest"],
-      ),
-    };
-  }
-
-  /**
-   */
-  async approveForUserRaw(
-    requestParameters: ApproveForUserOperationRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<IsAllowedForUserResponse>> {
-    const requestOptions =
-      await this.approveForUserRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      IsAllowedForUserResponseFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async approveForUser(
-    requestParameters: ApproveForUserOperationRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<IsAllowedForUserResponse> {
-    const response = await this.approveForUserRaw(
-      requestParameters,
-      initOverrides,
-    );
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for authorizeJson without sending the request
-   */
-  async authorizeJsonRequestOpts(
-    requestParameters: AuthorizeJsonRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["authorizationRequest"] == null) {
-      throw new runtime.RequiredError(
-        "authorizationRequest",
-        'Required parameter "authorizationRequest" was null or undefined when calling authorizeJson().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    headerParameters["Content-Type"] = "application/json";
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/oauth2/auth`;
-
-    return {
-      path: urlPath,
-      method: "POST",
-      headers: headerParameters,
-      query: queryParameters,
-      body: AuthorizationRequestToJSON(
-        requestParameters["authorizationRequest"],
-      ),
-    };
-  }
-
-  /**
-   */
-  async authorizeJsonRaw(
-    requestParameters: AuthorizeJsonRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<AuthorizationCodeResponse>> {
-    const requestOptions =
-      await this.authorizeJsonRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      AuthorizationCodeResponseFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async authorizeJson(
-    requestParameters: AuthorizeJsonRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<AuthorizationCodeResponse> {
-    const response = await this.authorizeJsonRaw(
-      requestParameters,
-      initOverrides,
-    );
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for authorizeQuery without sending the request
-   */
-  async authorizeQueryRequestOpts(
-    requestParameters: AuthorizeQueryRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["responseType"] == null) {
-      throw new runtime.RequiredError(
-        "responseType",
-        'Required parameter "responseType" was null or undefined when calling authorizeQuery().',
-      );
-    }
-
-    if (requestParameters["clientId"] == null) {
-      throw new runtime.RequiredError(
-        "clientId",
-        'Required parameter "clientId" was null or undefined when calling authorizeQuery().',
-      );
-    }
-
-    if (requestParameters["redirectUri"] == null) {
-      throw new runtime.RequiredError(
-        "redirectUri",
-        'Required parameter "redirectUri" was null or undefined when calling authorizeQuery().',
-      );
-    }
-
-    if (requestParameters["scope"] == null) {
-      throw new runtime.RequiredError(
-        "scope",
-        'Required parameter "scope" was null or undefined when calling authorizeQuery().',
-      );
-    }
-
-    if (requestParameters["state"] == null) {
-      throw new runtime.RequiredError(
-        "state",
-        'Required parameter "state" was null or undefined when calling authorizeQuery().',
-      );
-    }
-
-    if (requestParameters["resource"] == null) {
-      throw new runtime.RequiredError(
-        "resource",
-        'Required parameter "resource" was null or undefined when calling authorizeQuery().',
-      );
-    }
-
-    if (requestParameters["codeChallenge"] == null) {
-      throw new runtime.RequiredError(
-        "codeChallenge",
-        'Required parameter "codeChallenge" was null or undefined when calling authorizeQuery().',
-      );
-    }
-
-    if (requestParameters["codeChallengeMethod"] == null) {
-      throw new runtime.RequiredError(
-        "codeChallengeMethod",
-        'Required parameter "codeChallengeMethod" was null or undefined when calling authorizeQuery().',
-      );
-    }
-
-    if (requestParameters["nonce"] == null) {
-      throw new runtime.RequiredError(
-        "nonce",
-        'Required parameter "nonce" was null or undefined when calling authorizeQuery().',
-      );
-    }
-
-    if (requestParameters["prompt"] == null) {
-      throw new runtime.RequiredError(
-        "prompt",
-        'Required parameter "prompt" was null or undefined when calling authorizeQuery().',
-      );
-    }
-
-    if (requestParameters["responseMode"] == null) {
-      throw new runtime.RequiredError(
-        "responseMode",
-        'Required parameter "responseMode" was null or undefined when calling authorizeQuery().',
-      );
-    }
-
-    if (requestParameters["loginHint"] == null) {
-      throw new runtime.RequiredError(
-        "loginHint",
-        'Required parameter "loginHint" was null or undefined when calling authorizeQuery().',
-      );
-    }
-
-    if (requestParameters["idTokenHint"] == null) {
-      throw new runtime.RequiredError(
-        "idTokenHint",
-        'Required parameter "idTokenHint" was null or undefined when calling authorizeQuery().',
-      );
-    }
-
-    if (requestParameters["uiLocales"] == null) {
-      throw new runtime.RequiredError(
-        "uiLocales",
-        'Required parameter "uiLocales" was null or undefined when calling authorizeQuery().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    let urlPath = `/oauth2/auth`;
-    urlPath = urlPath.replace(
-      "{response_type}",
-      encodeURIComponent(String(requestParameters["responseType"])),
-    );
-    urlPath = urlPath.replace(
-      "{client_id}",
-      encodeURIComponent(String(requestParameters["clientId"])),
-    );
-    urlPath = urlPath.replace(
-      "{redirect_uri}",
-      encodeURIComponent(String(requestParameters["redirectUri"])),
-    );
-    urlPath = urlPath.replace(
-      "{scope}",
-      encodeURIComponent(String(requestParameters["scope"])),
-    );
-    urlPath = urlPath.replace(
-      "{state}",
-      encodeURIComponent(String(requestParameters["state"])),
-    );
-    urlPath = urlPath.replace(
-      "{resource}",
-      encodeURIComponent(String(requestParameters["resource"])),
-    );
-    urlPath = urlPath.replace(
-      "{code_challenge}",
-      encodeURIComponent(String(requestParameters["codeChallenge"])),
-    );
-    urlPath = urlPath.replace(
-      "{code_challenge_method}",
-      encodeURIComponent(String(requestParameters["codeChallengeMethod"])),
-    );
-    urlPath = urlPath.replace(
-      "{nonce}",
-      encodeURIComponent(String(requestParameters["nonce"])),
-    );
-    urlPath = urlPath.replace(
-      "{prompt}",
-      encodeURIComponent(String(requestParameters["prompt"])),
-    );
-    urlPath = urlPath.replace(
-      "{response_mode}",
-      encodeURIComponent(String(requestParameters["responseMode"])),
-    );
-    urlPath = urlPath.replace(
-      "{login_hint}",
-      encodeURIComponent(String(requestParameters["loginHint"])),
-    );
-    urlPath = urlPath.replace(
-      "{id_token_hint}",
-      encodeURIComponent(String(requestParameters["idTokenHint"])),
-    );
-    urlPath = urlPath.replace(
-      "{ui_locales}",
-      encodeURIComponent(String(requestParameters["uiLocales"])),
-    );
-
-    return {
-      path: urlPath,
-      method: "GET",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async authorizeQueryRaw(
-    requestParameters: AuthorizeQueryRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<void>> {
-    const requestOptions =
-      await this.authorizeQueryRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.VoidApiResponse(response);
-  }
-
-  /**
-   */
-  async authorizeQuery(
-    requestParameters: AuthorizeQueryRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<void> {
-    await this.authorizeQueryRaw(requestParameters, initOverrides);
-  }
-
-  /**
-   * Creates request options for deleteRegister without sending the request
-   */
-  async deleteRegisterRequestOpts(
-    requestParameters: DeleteRegisterRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["clientId"] == null) {
-      throw new runtime.RequiredError(
-        "clientId",
-        'Required parameter "clientId" was null or undefined when calling deleteRegister().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/oauth2/register/{client_id}`;
-    urlPath = urlPath.replace(
-      "{client_id}",
-      encodeURIComponent(String(requestParameters["clientId"])),
-    );
-
-    return {
-      path: urlPath,
-      method: "DELETE",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async deleteRegisterRaw(
-    requestParameters: DeleteRegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<void>> {
-    const requestOptions =
-      await this.deleteRegisterRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.VoidApiResponse(response);
-  }
-
-  /**
-   */
-  async deleteRegister(
-    requestParameters: DeleteRegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<void> {
-    await this.deleteRegisterRaw(requestParameters, initOverrides);
-  }
-
-  /**
-   * Creates request options for device without sending the request
-   */
-  async deviceRequestOpts(): Promise<runtime.RequestOpts> {
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    let urlPath = `/device`;
-
-    return {
-      path: urlPath,
-      method: "GET",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async deviceRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<Device>> {
-    const requestOptions = await this.deviceRequestOpts();
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      DeviceFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async device(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<Device> {
-    const response = await this.deviceRaw(initOverrides);
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for deviceAuth without sending the request
-   */
-  async deviceAuthRequestOpts(
-    requestParameters: DeviceAuthRequest,
-  ): Promise<runtime.RequestOpts> {
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    const consumes: runtime.Consume[] = [
-      { contentType: "application/x-www-form-urlencoded" },
-    ];
-    // @ts-ignore: canConsumeForm may be unused
-    const canConsumeForm = runtime.canConsumeForm(consumes);
-
-    let formParams: { append(param: string, value: any): any };
-    let useForm = false;
-    if (useForm) {
-      formParams = new FormData();
-    } else {
-      formParams = new URLSearchParams();
-    }
-
-    if (requestParameters["clientId"] != null) {
-      formParams.append("client_id", requestParameters["clientId"] as any);
-    }
-
-    if (requestParameters["scope"] != null) {
-      formParams.append("scope", requestParameters["scope"] as any);
-    }
-
-    let urlPath = `/oauth2/device/auth`;
-
-    return {
-      path: urlPath,
-      method: "POST",
-      headers: headerParameters,
-      query: queryParameters,
-      body: formParams,
-    };
-  }
-
-  /**
-   */
-  async deviceAuthRaw(
-    requestParameters: DeviceAuthRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<DeviceAuthorization>> {
-    const requestOptions = await this.deviceAuthRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      DeviceAuthorizationFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async deviceAuth(
-    requestParameters: DeviceAuthRequest = {},
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<DeviceAuthorization> {
-    const response = await this.deviceAuthRaw(requestParameters, initOverrides);
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for deviceVerify without sending the request
-   */
-  async deviceVerifyRequestOpts(): Promise<runtime.RequestOpts> {
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    let urlPath = `/oauth2/device/verify`;
-
-    return {
-      path: urlPath,
-      method: "GET",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async deviceVerifyRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<void>> {
-    const requestOptions = await this.deviceVerifyRequestOpts();
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.VoidApiResponse(response);
-  }
-
-  /**
-   */
-  async deviceVerify(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<void> {
-    await this.deviceVerifyRaw(initOverrides);
-  }
-
-  /**
-   * Creates request options for enrollDevice without sending the request
-   */
-  async enrollDeviceRequestOpts(
-    requestParameters: EnrollDeviceRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["deviceEnrollmentRequest"] == null) {
-      throw new runtime.RequiredError(
-        "deviceEnrollmentRequest",
-        'Required parameter "deviceEnrollmentRequest" was null or undefined when calling enrollDevice().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    headerParameters["Content-Type"] = "application/json";
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/devices/enrollments`;
-
-    return {
-      path: urlPath,
-      method: "POST",
-      headers: headerParameters,
-      query: queryParameters,
-      body: DeviceEnrollmentRequestToJSON(
-        requestParameters["deviceEnrollmentRequest"],
-      ),
-    };
-  }
-
-  /**
-   */
-  async enrollDeviceRaw(
-    requestParameters: EnrollDeviceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<DeviceEnrollment>> {
-    const requestOptions =
-      await this.enrollDeviceRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      DeviceEnrollmentFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async enrollDevice(
-    requestParameters: EnrollDeviceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<DeviceEnrollment> {
-    const response = await this.enrollDeviceRaw(
-      requestParameters,
-      initOverrides,
-    );
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for getRegister without sending the request
-   */
-  async getRegisterRequestOpts(
-    requestParameters: GetRegisterRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["clientId"] == null) {
-      throw new runtime.RequiredError(
-        "clientId",
-        'Required parameter "clientId" was null or undefined when calling getRegister().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    let urlPath = `/oauth2/register/{client_id}`;
-    urlPath = urlPath.replace(
-      "{client_id}",
-      encodeURIComponent(String(requestParameters["clientId"])),
-    );
-
-    return {
-      path: urlPath,
-      method: "GET",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async getRegisterRaw(
-    requestParameters: GetRegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<ClientRegistration>> {
-    const requestOptions = await this.getRegisterRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      ClientRegistrationFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async getRegister(
-    requestParameters: GetRegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<ClientRegistration> {
-    const response = await this.getRegisterRaw(
-      requestParameters,
-      initOverrides,
-    );
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for health without sending the request
-   */
-  async healthRequestOpts(): Promise<runtime.RequestOpts> {
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    let urlPath = `/health`;
-
-    return {
-      path: urlPath,
-      method: "GET",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async healthRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<HealthResponse>> {
-    const requestOptions = await this.healthRequestOpts();
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      HealthResponseFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async health(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<HealthResponse> {
-    const response = await this.healthRaw(initOverrides);
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for isAllowedForUser without sending the request
-   */
-  async isAllowedForUserRequestOpts(
-    requestParameters: IsAllowedForUserOperationRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["isAllowedForUserRequest"] == null) {
-      throw new runtime.RequiredError(
-        "isAllowedForUserRequest",
-        'Required parameter "isAllowedForUserRequest" was null or undefined when calling isAllowedForUser().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    headerParameters["Content-Type"] = "application/json";
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/oauth2/auth/allowed-for-user`;
-
-    return {
-      path: urlPath,
-      method: "POST",
-      headers: headerParameters,
-      query: queryParameters,
-      body: IsAllowedForUserRequestToJSON(
-        requestParameters["isAllowedForUserRequest"],
-      ),
-    };
-  }
-
-  /**
-   */
-  async isAllowedForUserRaw(
-    requestParameters: IsAllowedForUserOperationRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<IsAllowedForUserResponse>> {
-    const requestOptions =
-      await this.isAllowedForUserRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      IsAllowedForUserResponseFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async isAllowedForUser(
-    requestParameters: IsAllowedForUserOperationRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<IsAllowedForUserResponse> {
-    const response = await this.isAllowedForUserRaw(
-      requestParameters,
-      initOverrides,
-    );
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for jwks without sending the request
-   */
-  async jwksRequestOpts(): Promise<runtime.RequestOpts> {
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    let urlPath = `/.well-known/jwks.json`;
-
-    return {
-      path: urlPath,
-      method: "GET",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async jwksRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<Jwks>> {
-    const requestOptions = await this.jwksRequestOpts();
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      JwksFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async jwks(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<Jwks> {
-    const response = await this.jwksRaw(initOverrides);
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for listDevices without sending the request
-   */
-  async listDevicesRequestOpts(): Promise<runtime.RequestOpts> {
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/devices`;
-
-    return {
-      path: urlPath,
-      method: "GET",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async listDevicesRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<Array<DeviceInfo>>> {
-    const requestOptions = await this.listDevicesRequestOpts();
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      jsonValue.map(DeviceInfoFromJSON),
-    );
-  }
-
-  /**
-   */
-  async listDevices(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<Array<DeviceInfo>> {
-    const response = await this.listDevicesRaw(initOverrides);
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for openapiJson without sending the request
-   */
-  async openapiJsonRequestOpts(): Promise<runtime.RequestOpts> {
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    let urlPath = `/openapi.json`;
-
-    return {
-      path: urlPath,
-      method: "GET",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async openapiJsonRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<void>> {
-    const requestOptions = await this.openapiJsonRequestOpts();
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.VoidApiResponse(response);
-  }
-
-  /**
-   */
-  async openapiJson(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<void> {
-    await this.openapiJsonRaw(initOverrides);
-  }
-
-  /**
-   * Creates request options for openidConfiguration without sending the request
-   */
-  async openidConfigurationRequestOpts(): Promise<runtime.RequestOpts> {
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    let urlPath = `/.well-known/openid-configuration`;
-
-    return {
-      path: urlPath,
-      method: "GET",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async openidConfigurationRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<AuthorizationServerMetadata>> {
-    const requestOptions = await this.openidConfigurationRequestOpts();
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      AuthorizationServerMetadataFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async openidConfiguration(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<AuthorizationServerMetadata> {
-    const response = await this.openidConfigurationRaw(initOverrides);
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for pairingAcceptance without sending the request
-   */
-  async pairingAcceptanceRequestOpts(): Promise<runtime.RequestOpts> {
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/devices/pairing-accepting`;
-
-    return {
-      path: urlPath,
-      method: "GET",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async pairingAcceptanceRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<PairingAcceptance>> {
-    const requestOptions = await this.pairingAcceptanceRequestOpts();
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      PairingAcceptanceFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async pairingAcceptance(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<PairingAcceptance> {
-    const response = await this.pairingAcceptanceRaw(initOverrides);
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for pairingApprovalPayload without sending the request
-   */
-  async pairingApprovalPayloadRequestOpts(
-    requestParameters: PairingApprovalPayloadRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["id"] == null) {
-      throw new runtime.RequiredError(
-        "id",
-        'Required parameter "id" was null or undefined when calling pairingApprovalPayload().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/devices/enrollments/{id}/approval-payload`;
-    urlPath = urlPath.replace(
-      "{id}",
-      encodeURIComponent(String(requestParameters["id"])),
-    );
-
-    return {
-      path: urlPath,
-      method: "GET",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async pairingApprovalPayloadRaw(
-    requestParameters: PairingApprovalPayloadRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<DevicePairingApprovalPayload>> {
-    const requestOptions =
-      await this.pairingApprovalPayloadRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      DevicePairingApprovalPayloadFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async pairingApprovalPayload(
-    requestParameters: PairingApprovalPayloadRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<DevicePairingApprovalPayload> {
-    const response = await this.pairingApprovalPayloadRaw(
-      requestParameters,
-      initOverrides,
-    );
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for putRegister without sending the request
-   */
-  async putRegisterRequestOpts(
-    requestParameters: PutRegisterRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["clientId"] == null) {
-      throw new runtime.RequiredError(
-        "clientId",
-        'Required parameter "clientId" was null or undefined when calling putRegister().',
-      );
-    }
-
-    if (requestParameters["clientRegistration"] == null) {
-      throw new runtime.RequiredError(
-        "clientRegistration",
-        'Required parameter "clientRegistration" was null or undefined when calling putRegister().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    headerParameters["Content-Type"] = "application/json";
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/oauth2/register/{client_id}`;
-    urlPath = urlPath.replace(
-      "{client_id}",
-      encodeURIComponent(String(requestParameters["clientId"])),
-    );
-
-    return {
-      path: urlPath,
-      method: "PUT",
-      headers: headerParameters,
-      query: queryParameters,
-      body: ClientRegistrationToJSON(requestParameters["clientRegistration"]),
-    };
-  }
-
-  /**
-   */
-  async putRegisterRaw(
-    requestParameters: PutRegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<ClientRegistration>> {
-    const requestOptions = await this.putRegisterRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      ClientRegistrationFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async putRegister(
-    requestParameters: PutRegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<ClientRegistration> {
-    const response = await this.putRegisterRaw(
-      requestParameters,
-      initOverrides,
-    );
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for register without sending the request
-   */
-  async registerRequestOpts(
-    requestParameters: RegisterRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["clientRegistration"] == null) {
-      throw new runtime.RequiredError(
-        "clientRegistration",
-        'Required parameter "clientRegistration" was null or undefined when calling register().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    headerParameters["Content-Type"] = "application/json";
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/oauth2/register`;
-
-    return {
-      path: urlPath,
-      method: "POST",
-      headers: headerParameters,
-      query: queryParameters,
-      body: ClientRegistrationToJSON(requestParameters["clientRegistration"]),
-    };
-  }
-
-  /**
-   */
-  async registerRaw(
-    requestParameters: RegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<ClientRegistration>> {
-    const requestOptions = await this.registerRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      ClientRegistrationFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async register(
-    requestParameters: RegisterRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<ClientRegistration> {
-    const response = await this.registerRaw(requestParameters, initOverrides);
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for requestPairing without sending the request
-   */
-  async requestPairingRequestOpts(
-    requestParameters: RequestPairingRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["devicePairingRequest"] == null) {
-      throw new runtime.RequiredError(
-        "devicePairingRequest",
-        'Required parameter "devicePairingRequest" was null or undefined when calling requestPairing().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    headerParameters["Content-Type"] = "application/json";
-
-    let urlPath = `/devices/pairing-requests`;
-
-    return {
-      path: urlPath,
-      method: "POST",
-      headers: headerParameters,
-      query: queryParameters,
-      body: DevicePairingRequestToJSON(
-        requestParameters["devicePairingRequest"],
-      ),
-    };
-  }
-
-  /**
-   */
-  async requestPairingRaw(
-    requestParameters: RequestPairingRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<DeviceEnrollment>> {
-    const requestOptions =
-      await this.requestPairingRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      DeviceEnrollmentFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async requestPairing(
-    requestParameters: RequestPairingRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<DeviceEnrollment> {
-    const response = await this.requestPairingRaw(
-      requestParameters,
-      initOverrides,
-    );
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for revoke without sending the request
-   */
-  async revokeRequestOpts(
-    requestParameters: RevokeRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["token"] == null) {
-      throw new runtime.RequiredError(
-        "token",
-        'Required parameter "token" was null or undefined when calling revoke().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    const consumes: runtime.Consume[] = [
-      { contentType: "application/x-www-form-urlencoded" },
-    ];
-    // @ts-ignore: canConsumeForm may be unused
-    const canConsumeForm = runtime.canConsumeForm(consumes);
-
-    let formParams: { append(param: string, value: any): any };
-    let useForm = false;
-    if (useForm) {
-      formParams = new FormData();
-    } else {
-      formParams = new URLSearchParams();
-    }
-
-    if (requestParameters["token"] != null) {
-      formParams.append("token", requestParameters["token"] as any);
-    }
-
-    if (requestParameters["tokenTypeHint"] != null) {
-      formParams.append(
-        "token_type_hint",
-        requestParameters["tokenTypeHint"] as any,
-      );
-    }
-
-    let urlPath = `/oauth2/revoke`;
-
-    return {
-      path: urlPath,
-      method: "POST",
-      headers: headerParameters,
-      query: queryParameters,
-      body: formParams,
-    };
-  }
-
-  /**
-   */
-  async revokeRaw(
-    requestParameters: RevokeRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<void>> {
-    const requestOptions = await this.revokeRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.VoidApiResponse(response);
-  }
-
-  /**
-   */
-  async revoke(
-    requestParameters: RevokeRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<void> {
-    await this.revokeRaw(requestParameters, initOverrides);
-  }
-
-  /**
-   * Creates request options for revokeDevice without sending the request
-   */
-  async revokeDeviceRequestOpts(
-    requestParameters: RevokeDeviceRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["id"] == null) {
-      throw new runtime.RequiredError(
-        "id",
-        'Required parameter "id" was null or undefined when calling revokeDevice().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/devices/{id}`;
-    urlPath = urlPath.replace(
-      "{id}",
-      encodeURIComponent(String(requestParameters["id"])),
-    );
-
-    return {
-      path: urlPath,
-      method: "DELETE",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async revokeDeviceRaw(
-    requestParameters: RevokeDeviceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<void>> {
-    const requestOptions =
-      await this.revokeDeviceRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.VoidApiResponse(response);
-  }
-
-  /**
-   */
-  async revokeDevice(
-    requestParameters: RevokeDeviceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<void> {
-    await this.revokeDeviceRaw(requestParameters, initOverrides);
-  }
-
-  /**
-   * Creates request options for sessionsLogout without sending the request
-   */
-  async sessionsLogoutRequestOpts(): Promise<runtime.RequestOpts> {
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    let urlPath = `/oauth2/sessions/logout`;
-
-    return {
-      path: urlPath,
-      method: "GET",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async sessionsLogoutRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<void>> {
-    const requestOptions = await this.sessionsLogoutRequestOpts();
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.VoidApiResponse(response);
-  }
-
-  /**
-   */
-  async sessionsLogout(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<void> {
-    await this.sessionsLogoutRaw(initOverrides);
-  }
-
-  /**
-   * Creates request options for setPairingAcceptance without sending the request
-   */
-  async setPairingAcceptanceRequestOpts(
-    requestParameters: SetPairingAcceptanceRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["pairingAcceptance"] == null) {
-      throw new runtime.RequiredError(
-        "pairingAcceptance",
-        'Required parameter "pairingAcceptance" was null or undefined when calling setPairingAcceptance().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    headerParameters["Content-Type"] = "application/json";
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/devices/pairing-accepting`;
-
-    return {
-      path: urlPath,
-      method: "PUT",
-      headers: headerParameters,
-      query: queryParameters,
-      body: PairingAcceptanceToJSON(requestParameters["pairingAcceptance"]),
-    };
-  }
-
-  /**
-   */
-  async setPairingAcceptanceRaw(
-    requestParameters: SetPairingAcceptanceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<PairingAcceptance>> {
-    const requestOptions =
-      await this.setPairingAcceptanceRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      PairingAcceptanceFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async setPairingAcceptance(
-    requestParameters: SetPairingAcceptanceRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<PairingAcceptance> {
-    const response = await this.setPairingAcceptanceRaw(
-      requestParameters,
-      initOverrides,
-    );
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for signDeviceMessage without sending the request
-   */
-  async signDeviceMessageRequestOpts(
-    requestParameters: SignDeviceMessageRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["signDeviceMessage"] == null) {
-      throw new runtime.RequiredError(
-        "signDeviceMessage",
-        'Required parameter "signDeviceMessage" was null or undefined when calling signDeviceMessage().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    headerParameters["Content-Type"] = "application/json";
-
-    let urlPath = `/device/sign`;
-
-    return {
-      path: urlPath,
-      method: "POST",
-      headers: headerParameters,
-      query: queryParameters,
-      body: SignDeviceMessageToJSON(requestParameters["signDeviceMessage"]),
-    };
-  }
-
-  /**
-   */
-  async signDeviceMessageRaw(
-    requestParameters: SignDeviceMessageRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<DeviceSignature>> {
-    const requestOptions =
-      await this.signDeviceMessageRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      DeviceSignatureFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async signDeviceMessage(
-    requestParameters: SignDeviceMessageRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<DeviceSignature> {
-    const response = await this.signDeviceMessageRaw(
-      requestParameters,
-      initOverrides,
-    );
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for token without sending the request
-   */
-  async tokenRequestOpts(
-    requestParameters: TokenRequest,
-  ): Promise<runtime.RequestOpts> {
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    const consumes: runtime.Consume[] = [
-      { contentType: "application/x-www-form-urlencoded" },
-    ];
-    // @ts-ignore: canConsumeForm may be unused
-    const canConsumeForm = runtime.canConsumeForm(consumes);
-
-    let formParams: { append(param: string, value: any): any };
-    let useForm = false;
-    if (useForm) {
-      formParams = new FormData();
-    } else {
-      formParams = new URLSearchParams();
-    }
-
-    if (requestParameters["clientId"] != null) {
-      formParams.append("client_id", requestParameters["clientId"] as any);
-    }
-
-    if (requestParameters["password"] != null) {
-      formParams.append("password", requestParameters["password"] as any);
-    }
-
-    if (requestParameters["resource"] != null) {
-      formParams.append("resource", requestParameters["resource"] as any);
-    }
-
-    if (requestParameters["scope"] != null) {
-      formParams.append("scope", requestParameters["scope"] as any);
-    }
-
-    if (requestParameters["username"] != null) {
-      formParams.append("username", requestParameters["username"] as any);
-    }
-
-    if (requestParameters["grantType"] != null) {
-      formParams.append("grant_type", requestParameters["grantType"] as any);
-    }
-
-    if (requestParameters["code"] != null) {
-      formParams.append("code", requestParameters["code"] as any);
-    }
-
-    if (requestParameters["codeVerifier"] != null) {
-      formParams.append(
-        "code_verifier",
-        requestParameters["codeVerifier"] as any,
-      );
-    }
-
-    if (requestParameters["redirectUri"] != null) {
-      formParams.append(
-        "redirect_uri",
-        requestParameters["redirectUri"] as any,
-      );
-    }
-
-    if (requestParameters["audience"] != null) {
-      formParams.append("audience", requestParameters["audience"] as any);
-    }
-
-    if (requestParameters["clientSecret"] != null) {
-      formParams.append(
-        "client_secret",
-        requestParameters["clientSecret"] as any,
-      );
-    }
-
-    if (requestParameters["refreshToken"] != null) {
-      formParams.append(
-        "refresh_token",
-        requestParameters["refreshToken"] as any,
-      );
-    }
-
-    if (requestParameters["actorToken"] != null) {
-      formParams.append("actor_token", requestParameters["actorToken"] as any);
-    }
-
-    if (requestParameters["actorTokenType"] != null) {
-      formParams.append(
-        "actor_token_type",
-        requestParameters["actorTokenType"] as any,
-      );
-    }
-
-    if (requestParameters["requestedTokenType"] != null) {
-      formParams.append(
-        "requested_token_type",
-        requestParameters["requestedTokenType"] as any,
-      );
-    }
-
-    if (requestParameters["subjectToken"] != null) {
-      formParams.append(
-        "subject_token",
-        requestParameters["subjectToken"] as any,
-      );
-    }
-
-    if (requestParameters["subjectTokenType"] != null) {
-      formParams.append(
-        "subject_token_type",
-        requestParameters["subjectTokenType"] as any,
-      );
-    }
-
-    let urlPath = `/oauth2/token`;
-
-    return {
-      path: urlPath,
-      method: "POST",
-      headers: headerParameters,
-      query: queryParameters,
-      body: formParams,
-    };
-  }
-
-  /**
-   */
-  async tokenRaw(
-    requestParameters: TokenRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<TokenResponse>> {
-    const requestOptions = await this.tokenRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      TokenResponseFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async token(
-    requestParameters: TokenRequest = {},
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<TokenResponse> {
-    const response = await this.tokenRaw(requestParameters, initOverrides);
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for trustedDevices without sending the request
-   */
-  async trustedDevicesRequestOpts(): Promise<runtime.RequestOpts> {
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/devices/trusted`;
-
-    return {
-      path: urlPath,
-      method: "GET",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async trustedDevicesRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<Array<TrustedDevice>>> {
-    const requestOptions = await this.trustedDevicesRequestOpts();
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      jsonValue.map(TrustedDeviceFromJSON),
-    );
-  }
-
-  /**
-   */
-  async trustedDevices(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<Array<TrustedDevice>> {
-    const response = await this.trustedDevicesRaw(initOverrides);
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for updateDevice without sending the request
-   */
-  async updateDeviceRequestOpts(
-    requestParameters: UpdateDeviceOperationRequest,
-  ): Promise<runtime.RequestOpts> {
-    if (requestParameters["id"] == null) {
-      throw new runtime.RequiredError(
-        "id",
-        'Required parameter "id" was null or undefined when calling updateDevice().',
-      );
-    }
-
-    if (requestParameters["updateDeviceRequest"] == null) {
-      throw new runtime.RequiredError(
-        "updateDeviceRequest",
-        'Required parameter "updateDeviceRequest" was null or undefined when calling updateDevice().',
-      );
-    }
-
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    headerParameters["Content-Type"] = "application/json";
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/devices/{id}`;
-    urlPath = urlPath.replace(
-      "{id}",
-      encodeURIComponent(String(requestParameters["id"])),
-    );
-
-    return {
-      path: urlPath,
-      method: "PATCH",
-      headers: headerParameters,
-      query: queryParameters,
-      body: UpdateDeviceRequestToJSON(requestParameters["updateDeviceRequest"]),
-    };
-  }
-
-  /**
-   */
-  async updateDeviceRaw(
-    requestParameters: UpdateDeviceOperationRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<DeviceInfo>> {
-    const requestOptions =
-      await this.updateDeviceRequestOpts(requestParameters);
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      DeviceInfoFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async updateDevice(
-    requestParameters: UpdateDeviceOperationRequest,
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<DeviceInfo> {
-    const response = await this.updateDeviceRaw(
-      requestParameters,
-      initOverrides,
-    );
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for userinfo without sending the request
-   */
-  async userinfoRequestOpts(): Promise<runtime.RequestOpts> {
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    if (this.configuration && this.configuration.accessToken) {
-      const token = this.configuration.accessToken;
-      const tokenString = await token("authorization", []);
-
-      if (tokenString) {
-        headerParameters["Authorization"] = `Bearer ${tokenString}`;
-      }
-    }
-
-    let urlPath = `/userinfo`;
-
-    return {
-      path: urlPath,
-      method: "GET",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async userinfoRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<UserInfo>> {
-    const requestOptions = await this.userinfoRequestOpts();
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      UserInfoFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async userinfo(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<UserInfo> {
-    const response = await this.userinfoRaw(initOverrides);
-    return await response.value();
-  }
-
-  /**
-   * Creates request options for version without sending the request
-   */
-  async versionRequestOpts(): Promise<runtime.RequestOpts> {
-    const queryParameters: any = {};
-
-    const headerParameters: runtime.HTTPHeaders = {};
-
-    let urlPath = `/version`;
-
-    return {
-      path: urlPath,
-      method: "GET",
-      headers: headerParameters,
-      query: queryParameters,
-    };
-  }
-
-  /**
-   */
-  async versionRaw(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<runtime.ApiResponse<VersionResponse>> {
-    const requestOptions = await this.versionRequestOpts();
-    const response = await this.request(requestOptions, initOverrides);
-
-    return new runtime.JSONApiResponse(response, (jsonValue) =>
-      VersionResponseFromJSON(jsonValue),
-    );
-  }
-
-  /**
-   */
-  async version(
-    initOverrides?: RequestInit | runtime.InitOverrideFunction,
-  ): Promise<VersionResponse> {
-    const response = await this.versionRaw(initOverrides);
-    return await response.value();
-  }
+    /**
+     * Creates request options for approveForUser without sending the request
+     */
+    async approveForUserRequestOpts(
+        requestParameters: ApproveForUserOperationRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["approveForUserRequest"] == null) {
+            throw new runtime.RequiredError(
+                "approveForUserRequest",
+                'Required parameter "approveForUserRequest" was null or undefined when calling approveForUser().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters["Content-Type"] = "application/json";
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/oauth2/auth/approve-for-user`;
+
+        return {
+            path: urlPath,
+            method: "POST",
+            headers: headerParameters,
+            query: queryParameters,
+            body: ApproveForUserRequestToJSON(
+                requestParameters["approveForUserRequest"],
+            ),
+        };
+    }
+
+    /**
+     */
+    async approveForUserRaw(
+        requestParameters: ApproveForUserOperationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<IsAllowedForUserResponse>> {
+        const requestOptions =
+            await this.approveForUserRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            IsAllowedForUserResponseFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async approveForUser(
+        requestParameters: ApproveForUserOperationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<IsAllowedForUserResponse> {
+        const response = await this.approveForUserRaw(
+            requestParameters,
+            initOverrides,
+        );
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for authorizeJson without sending the request
+     */
+    async authorizeJsonRequestOpts(
+        requestParameters: AuthorizeJsonRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["authorizationRequest"] == null) {
+            throw new runtime.RequiredError(
+                "authorizationRequest",
+                'Required parameter "authorizationRequest" was null or undefined when calling authorizeJson().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters["Content-Type"] = "application/json";
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/oauth2/auth`;
+
+        return {
+            path: urlPath,
+            method: "POST",
+            headers: headerParameters,
+            query: queryParameters,
+            body: AuthorizationRequestToJSON(
+                requestParameters["authorizationRequest"],
+            ),
+        };
+    }
+
+    /**
+     */
+    async authorizeJsonRaw(
+        requestParameters: AuthorizeJsonRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<AuthorizationCodeResponse>> {
+        const requestOptions =
+            await this.authorizeJsonRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            AuthorizationCodeResponseFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async authorizeJson(
+        requestParameters: AuthorizeJsonRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<AuthorizationCodeResponse> {
+        const response = await this.authorizeJsonRaw(
+            requestParameters,
+            initOverrides,
+        );
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for authorizeQuery without sending the request
+     */
+    async authorizeQueryRequestOpts(
+        requestParameters: AuthorizeQueryRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["responseType"] == null) {
+            throw new runtime.RequiredError(
+                "responseType",
+                'Required parameter "responseType" was null or undefined when calling authorizeQuery().',
+            );
+        }
+
+        if (requestParameters["clientId"] == null) {
+            throw new runtime.RequiredError(
+                "clientId",
+                'Required parameter "clientId" was null or undefined when calling authorizeQuery().',
+            );
+        }
+
+        if (requestParameters["redirectUri"] == null) {
+            throw new runtime.RequiredError(
+                "redirectUri",
+                'Required parameter "redirectUri" was null or undefined when calling authorizeQuery().',
+            );
+        }
+
+        if (requestParameters["scope"] == null) {
+            throw new runtime.RequiredError(
+                "scope",
+                'Required parameter "scope" was null or undefined when calling authorizeQuery().',
+            );
+        }
+
+        if (requestParameters["state"] == null) {
+            throw new runtime.RequiredError(
+                "state",
+                'Required parameter "state" was null or undefined when calling authorizeQuery().',
+            );
+        }
+
+        if (requestParameters["resource"] == null) {
+            throw new runtime.RequiredError(
+                "resource",
+                'Required parameter "resource" was null or undefined when calling authorizeQuery().',
+            );
+        }
+
+        if (requestParameters["codeChallenge"] == null) {
+            throw new runtime.RequiredError(
+                "codeChallenge",
+                'Required parameter "codeChallenge" was null or undefined when calling authorizeQuery().',
+            );
+        }
+
+        if (requestParameters["codeChallengeMethod"] == null) {
+            throw new runtime.RequiredError(
+                "codeChallengeMethod",
+                'Required parameter "codeChallengeMethod" was null or undefined when calling authorizeQuery().',
+            );
+        }
+
+        if (requestParameters["nonce"] == null) {
+            throw new runtime.RequiredError(
+                "nonce",
+                'Required parameter "nonce" was null or undefined when calling authorizeQuery().',
+            );
+        }
+
+        if (requestParameters["prompt"] == null) {
+            throw new runtime.RequiredError(
+                "prompt",
+                'Required parameter "prompt" was null or undefined when calling authorizeQuery().',
+            );
+        }
+
+        if (requestParameters["responseMode"] == null) {
+            throw new runtime.RequiredError(
+                "responseMode",
+                'Required parameter "responseMode" was null or undefined when calling authorizeQuery().',
+            );
+        }
+
+        if (requestParameters["loginHint"] == null) {
+            throw new runtime.RequiredError(
+                "loginHint",
+                'Required parameter "loginHint" was null or undefined when calling authorizeQuery().',
+            );
+        }
+
+        if (requestParameters["idTokenHint"] == null) {
+            throw new runtime.RequiredError(
+                "idTokenHint",
+                'Required parameter "idTokenHint" was null or undefined when calling authorizeQuery().',
+            );
+        }
+
+        if (requestParameters["uiLocales"] == null) {
+            throw new runtime.RequiredError(
+                "uiLocales",
+                'Required parameter "uiLocales" was null or undefined when calling authorizeQuery().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        let urlPath = `/oauth2/auth`;
+        urlPath = urlPath.replace(
+            "{response_type}",
+            encodeURIComponent(String(requestParameters["responseType"])),
+        );
+        urlPath = urlPath.replace(
+            "{client_id}",
+            encodeURIComponent(String(requestParameters["clientId"])),
+        );
+        urlPath = urlPath.replace(
+            "{redirect_uri}",
+            encodeURIComponent(String(requestParameters["redirectUri"])),
+        );
+        urlPath = urlPath.replace(
+            "{scope}",
+            encodeURIComponent(String(requestParameters["scope"])),
+        );
+        urlPath = urlPath.replace(
+            "{state}",
+            encodeURIComponent(String(requestParameters["state"])),
+        );
+        urlPath = urlPath.replace(
+            "{resource}",
+            encodeURIComponent(String(requestParameters["resource"])),
+        );
+        urlPath = urlPath.replace(
+            "{code_challenge}",
+            encodeURIComponent(String(requestParameters["codeChallenge"])),
+        );
+        urlPath = urlPath.replace(
+            "{code_challenge_method}",
+            encodeURIComponent(
+                String(requestParameters["codeChallengeMethod"]),
+            ),
+        );
+        urlPath = urlPath.replace(
+            "{nonce}",
+            encodeURIComponent(String(requestParameters["nonce"])),
+        );
+        urlPath = urlPath.replace(
+            "{prompt}",
+            encodeURIComponent(String(requestParameters["prompt"])),
+        );
+        urlPath = urlPath.replace(
+            "{response_mode}",
+            encodeURIComponent(String(requestParameters["responseMode"])),
+        );
+        urlPath = urlPath.replace(
+            "{login_hint}",
+            encodeURIComponent(String(requestParameters["loginHint"])),
+        );
+        urlPath = urlPath.replace(
+            "{id_token_hint}",
+            encodeURIComponent(String(requestParameters["idTokenHint"])),
+        );
+        urlPath = urlPath.replace(
+            "{ui_locales}",
+            encodeURIComponent(String(requestParameters["uiLocales"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async authorizeQueryRaw(
+        requestParameters: AuthorizeQueryRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.authorizeQueryRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async authorizeQuery(
+        requestParameters: AuthorizeQueryRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.authorizeQueryRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for createApplication without sending the request
+     */
+    async createApplicationRequestOpts(
+        requestParameters: CreateApplicationRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["applicationRegistration"] == null) {
+            throw new runtime.RequiredError(
+                "applicationRegistration",
+                'Required parameter "applicationRegistration" was null or undefined when calling createApplication().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters["Content-Type"] = "application/json";
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/applications`;
+
+        return {
+            path: urlPath,
+            method: "POST",
+            headers: headerParameters,
+            query: queryParameters,
+            body: ApplicationRegistrationToJSON(
+                requestParameters["applicationRegistration"],
+            ),
+        };
+    }
+
+    /**
+     */
+    async createApplicationRaw(
+        requestParameters: CreateApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.createApplicationRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async createApplication(
+        requestParameters: CreateApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.createApplicationRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for deleteApplication without sending the request
+     */
+    async deleteApplicationRequestOpts(
+        requestParameters: DeleteApplicationRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["applicationId"] == null) {
+            throw new runtime.RequiredError(
+                "applicationId",
+                'Required parameter "applicationId" was null or undefined when calling deleteApplication().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/applications/{application_id}`;
+        urlPath = urlPath.replace(
+            "{application_id}",
+            encodeURIComponent(String(requestParameters["applicationId"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "DELETE",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async deleteApplicationRaw(
+        requestParameters: DeleteApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.deleteApplicationRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async deleteApplication(
+        requestParameters: DeleteApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.deleteApplicationRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for deleteRegister without sending the request
+     */
+    async deleteRegisterRequestOpts(
+        requestParameters: DeleteRegisterRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["clientId"] == null) {
+            throw new runtime.RequiredError(
+                "clientId",
+                'Required parameter "clientId" was null or undefined when calling deleteRegister().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/oauth2/register/{client_id}`;
+        urlPath = urlPath.replace(
+            "{client_id}",
+            encodeURIComponent(String(requestParameters["clientId"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "DELETE",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async deleteRegisterRaw(
+        requestParameters: DeleteRegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.deleteRegisterRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async deleteRegister(
+        requestParameters: DeleteRegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.deleteRegisterRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for deleteUser without sending the request
+     */
+    async deleteUserRequestOpts(
+        requestParameters: DeleteUserRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["userId"] == null) {
+            throw new runtime.RequiredError(
+                "userId",
+                'Required parameter "userId" was null or undefined when calling deleteUser().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/users/{user_id}`;
+        urlPath = urlPath.replace(
+            "{user_id}",
+            encodeURIComponent(String(requestParameters["userId"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "DELETE",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async deleteUserRaw(
+        requestParameters: DeleteUserRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.deleteUserRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async deleteUser(
+        requestParameters: DeleteUserRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.deleteUserRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for device without sending the request
+     */
+    async deviceRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        let urlPath = `/device`;
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async deviceRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<Device>> {
+        const requestOptions = await this.deviceRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            DeviceFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async device(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<Device> {
+        const response = await this.deviceRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for deviceAuth without sending the request
+     */
+    async deviceAuthRequestOpts(
+        requestParameters: DeviceAuthRequest,
+    ): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        const consumes: runtime.Consume[] = [
+            { contentType: "application/x-www-form-urlencoded" },
+        ];
+        // @ts-ignore: canConsumeForm may be unused
+        const canConsumeForm = runtime.canConsumeForm(consumes);
+
+        let formParams: { append(param: string, value: any): any };
+        let useForm = false;
+        if (useForm) {
+            formParams = new FormData();
+        } else {
+            formParams = new URLSearchParams();
+        }
+
+        if (requestParameters["clientId"] != null) {
+            formParams.append(
+                "client_id",
+                requestParameters["clientId"] as any,
+            );
+        }
+
+        if (requestParameters["scope"] != null) {
+            formParams.append("scope", requestParameters["scope"] as any);
+        }
+
+        let urlPath = `/oauth2/device/auth`;
+
+        return {
+            path: urlPath,
+            method: "POST",
+            headers: headerParameters,
+            query: queryParameters,
+            body: formParams,
+        };
+    }
+
+    /**
+     */
+    async deviceAuthRaw(
+        requestParameters: DeviceAuthRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<DeviceAuthorization>> {
+        const requestOptions =
+            await this.deviceAuthRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            DeviceAuthorizationFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async deviceAuth(
+        requestParameters: DeviceAuthRequest = {},
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<DeviceAuthorization> {
+        const response = await this.deviceAuthRaw(
+            requestParameters,
+            initOverrides,
+        );
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for deviceVerify without sending the request
+     */
+    async deviceVerifyRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        let urlPath = `/oauth2/device/verify`;
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async deviceVerifyRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions = await this.deviceVerifyRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async deviceVerify(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.deviceVerifyRaw(initOverrides);
+    }
+
+    /**
+     * Creates request options for enrollDevice without sending the request
+     */
+    async enrollDeviceRequestOpts(
+        requestParameters: EnrollDeviceRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["deviceEnrollmentRequest"] == null) {
+            throw new runtime.RequiredError(
+                "deviceEnrollmentRequest",
+                'Required parameter "deviceEnrollmentRequest" was null or undefined when calling enrollDevice().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters["Content-Type"] = "application/json";
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/devices/enrollments`;
+
+        return {
+            path: urlPath,
+            method: "POST",
+            headers: headerParameters,
+            query: queryParameters,
+            body: DeviceEnrollmentRequestToJSON(
+                requestParameters["deviceEnrollmentRequest"],
+            ),
+        };
+    }
+
+    /**
+     */
+    async enrollDeviceRaw(
+        requestParameters: EnrollDeviceRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<DeviceEnrollment>> {
+        const requestOptions =
+            await this.enrollDeviceRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            DeviceEnrollmentFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async enrollDevice(
+        requestParameters: EnrollDeviceRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<DeviceEnrollment> {
+        const response = await this.enrollDeviceRaw(
+            requestParameters,
+            initOverrides,
+        );
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for getApplication without sending the request
+     */
+    async getApplicationRequestOpts(
+        requestParameters: GetApplicationRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["applicationId"] == null) {
+            throw new runtime.RequiredError(
+                "applicationId",
+                'Required parameter "applicationId" was null or undefined when calling getApplication().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/applications/{application_id}`;
+        urlPath = urlPath.replace(
+            "{application_id}",
+            encodeURIComponent(String(requestParameters["applicationId"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async getApplicationRaw(
+        requestParameters: GetApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.getApplicationRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async getApplication(
+        requestParameters: GetApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.getApplicationRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for getRegister without sending the request
+     */
+    async getRegisterRequestOpts(
+        requestParameters: GetRegisterRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["clientId"] == null) {
+            throw new runtime.RequiredError(
+                "clientId",
+                'Required parameter "clientId" was null or undefined when calling getRegister().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/oauth2/register/{client_id}`;
+        urlPath = urlPath.replace(
+            "{client_id}",
+            encodeURIComponent(String(requestParameters["clientId"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async getRegisterRaw(
+        requestParameters: GetRegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<ClientRegistration>> {
+        const requestOptions =
+            await this.getRegisterRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            ClientRegistrationFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async getRegister(
+        requestParameters: GetRegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<ClientRegistration> {
+        const response = await this.getRegisterRaw(
+            requestParameters,
+            initOverrides,
+        );
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for getUser without sending the request
+     */
+    async getUserRequestOpts(
+        requestParameters: GetUserRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["userId"] == null) {
+            throw new runtime.RequiredError(
+                "userId",
+                'Required parameter "userId" was null or undefined when calling getUser().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/users/{user_id}`;
+        urlPath = urlPath.replace(
+            "{user_id}",
+            encodeURIComponent(String(requestParameters["userId"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async getUserRaw(
+        requestParameters: GetUserRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<UserInfo>> {
+        const requestOptions = await this.getUserRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            UserInfoFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async getUser(
+        requestParameters: GetUserRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<UserInfo> {
+        const response = await this.getUserRaw(
+            requestParameters,
+            initOverrides,
+        );
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for health without sending the request
+     */
+    async healthRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        let urlPath = `/health`;
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async healthRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<HealthResponse>> {
+        const requestOptions = await this.healthRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            HealthResponseFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async health(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<HealthResponse> {
+        const response = await this.healthRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for isAllowedForUser without sending the request
+     */
+    async isAllowedForUserRequestOpts(
+        requestParameters: IsAllowedForUserOperationRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["isAllowedForUserRequest"] == null) {
+            throw new runtime.RequiredError(
+                "isAllowedForUserRequest",
+                'Required parameter "isAllowedForUserRequest" was null or undefined when calling isAllowedForUser().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters["Content-Type"] = "application/json";
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/oauth2/auth/allowed-for-user`;
+
+        return {
+            path: urlPath,
+            method: "POST",
+            headers: headerParameters,
+            query: queryParameters,
+            body: IsAllowedForUserRequestToJSON(
+                requestParameters["isAllowedForUserRequest"],
+            ),
+        };
+    }
+
+    /**
+     */
+    async isAllowedForUserRaw(
+        requestParameters: IsAllowedForUserOperationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<IsAllowedForUserResponse>> {
+        const requestOptions =
+            await this.isAllowedForUserRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            IsAllowedForUserResponseFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async isAllowedForUser(
+        requestParameters: IsAllowedForUserOperationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<IsAllowedForUserResponse> {
+        const response = await this.isAllowedForUserRaw(
+            requestParameters,
+            initOverrides,
+        );
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for jwks without sending the request
+     */
+    async jwksRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        let urlPath = `/.well-known/jwks.json`;
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async jwksRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<Jwks>> {
+        const requestOptions = await this.jwksRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            JwksFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async jwks(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<Jwks> {
+        const response = await this.jwksRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for listApplications without sending the request
+     */
+    async listApplicationsRequestOpts(
+        requestParameters: ListApplicationsRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["offset"] == null) {
+            throw new runtime.RequiredError(
+                "offset",
+                'Required parameter "offset" was null or undefined when calling listApplications().',
+            );
+        }
+
+        if (requestParameters["limit"] == null) {
+            throw new runtime.RequiredError(
+                "limit",
+                'Required parameter "limit" was null or undefined when calling listApplications().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/applications`;
+        urlPath = urlPath.replace(
+            "{offset}",
+            encodeURIComponent(String(requestParameters["offset"])),
+        );
+        urlPath = urlPath.replace(
+            "{limit}",
+            encodeURIComponent(String(requestParameters["limit"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async listApplicationsRaw(
+        requestParameters: ListApplicationsRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.listApplicationsRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async listApplications(
+        requestParameters: ListApplicationsRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.listApplicationsRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for listClientKeys without sending the request
+     */
+    async listClientKeysRequestOpts(
+        requestParameters: ListClientKeysRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["clientId"] == null) {
+            throw new runtime.RequiredError(
+                "clientId",
+                'Required parameter "clientId" was null or undefined when calling listClientKeys().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/clients/{client_id}/keys`;
+        urlPath = urlPath.replace(
+            "{client_id}",
+            encodeURIComponent(String(requestParameters["clientId"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async listClientKeysRaw(
+        requestParameters: ListClientKeysRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.listClientKeysRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async listClientKeys(
+        requestParameters: ListClientKeysRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.listClientKeysRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for listConsents without sending the request
+     */
+    async listConsentsRequestOpts(
+        requestParameters: ListConsentsRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["userId"] == null) {
+            throw new runtime.RequiredError(
+                "userId",
+                'Required parameter "userId" was null or undefined when calling listConsents().',
+            );
+        }
+
+        if (requestParameters["offset"] == null) {
+            throw new runtime.RequiredError(
+                "offset",
+                'Required parameter "offset" was null or undefined when calling listConsents().',
+            );
+        }
+
+        if (requestParameters["limit"] == null) {
+            throw new runtime.RequiredError(
+                "limit",
+                'Required parameter "limit" was null or undefined when calling listConsents().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/users/{user_id}/consents`;
+        urlPath = urlPath.replace(
+            "{user_id}",
+            encodeURIComponent(String(requestParameters["userId"])),
+        );
+        urlPath = urlPath.replace(
+            "{offset}",
+            encodeURIComponent(String(requestParameters["offset"])),
+        );
+        urlPath = urlPath.replace(
+            "{limit}",
+            encodeURIComponent(String(requestParameters["limit"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async listConsentsRaw(
+        requestParameters: ListConsentsRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.listConsentsRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async listConsents(
+        requestParameters: ListConsentsRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.listConsentsRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for listDevices without sending the request
+     */
+    async listDevicesRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/devices`;
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async listDevicesRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<Array<DeviceInfo>>> {
+        const requestOptions = await this.listDevicesRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            jsonValue.map(DeviceInfoFromJSON),
+        );
+    }
+
+    /**
+     */
+    async listDevices(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<Array<DeviceInfo>> {
+        const response = await this.listDevicesRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for lookupDeviceIdentity without sending the request
+     */
+    async lookupDeviceIdentityRequestOpts(
+        requestParameters: LookupDeviceIdentityRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["deviceId"] == null) {
+            throw new runtime.RequiredError(
+                "deviceId",
+                'Required parameter "deviceId" was null or undefined when calling lookupDeviceIdentity().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/devices/identities/{device_id}`;
+        urlPath = urlPath.replace(
+            "{device_id}",
+            encodeURIComponent(String(requestParameters["deviceId"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async lookupDeviceIdentityRaw(
+        requestParameters: LookupDeviceIdentityRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<DeviceEndpointIdentity>> {
+        const requestOptions =
+            await this.lookupDeviceIdentityRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            DeviceEndpointIdentityFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async lookupDeviceIdentity(
+        requestParameters: LookupDeviceIdentityRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<DeviceEndpointIdentity> {
+        const response = await this.lookupDeviceIdentityRaw(
+            requestParameters,
+            initOverrides,
+        );
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for openapiJson without sending the request
+     */
+    async openapiJsonRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        let urlPath = `/openapi.json`;
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async openapiJsonRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions = await this.openapiJsonRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async openapiJson(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.openapiJsonRaw(initOverrides);
+    }
+
+    /**
+     * Creates request options for openidConfiguration without sending the request
+     */
+    async openidConfigurationRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        let urlPath = `/.well-known/openid-configuration`;
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async openidConfigurationRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<AuthorizationServerMetadata>> {
+        const requestOptions = await this.openidConfigurationRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            AuthorizationServerMetadataFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async openidConfiguration(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<AuthorizationServerMetadata> {
+        const response = await this.openidConfigurationRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for pairingAcceptance without sending the request
+     */
+    async pairingAcceptanceRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/devices/pairing-accepting`;
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async pairingAcceptanceRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<PairingAcceptance>> {
+        const requestOptions = await this.pairingAcceptanceRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            PairingAcceptanceFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async pairingAcceptance(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<PairingAcceptance> {
+        const response = await this.pairingAcceptanceRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for putRegister without sending the request
+     */
+    async putRegisterRequestOpts(
+        requestParameters: PutRegisterRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["clientId"] == null) {
+            throw new runtime.RequiredError(
+                "clientId",
+                'Required parameter "clientId" was null or undefined when calling putRegister().',
+            );
+        }
+
+        if (requestParameters["clientRegistration"] == null) {
+            throw new runtime.RequiredError(
+                "clientRegistration",
+                'Required parameter "clientRegistration" was null or undefined when calling putRegister().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters["Content-Type"] = "application/json";
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/oauth2/register/{client_id}`;
+        urlPath = urlPath.replace(
+            "{client_id}",
+            encodeURIComponent(String(requestParameters["clientId"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "PUT",
+            headers: headerParameters,
+            query: queryParameters,
+            body: ClientRegistrationToJSON(
+                requestParameters["clientRegistration"],
+            ),
+        };
+    }
+
+    /**
+     */
+    async putRegisterRaw(
+        requestParameters: PutRegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<ClientRegistration>> {
+        const requestOptions =
+            await this.putRegisterRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            ClientRegistrationFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async putRegister(
+        requestParameters: PutRegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<ClientRegistration> {
+        const response = await this.putRegisterRaw(
+            requestParameters,
+            initOverrides,
+        );
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for register without sending the request
+     */
+    async registerRequestOpts(
+        requestParameters: RegisterRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["clientRegistration"] == null) {
+            throw new runtime.RequiredError(
+                "clientRegistration",
+                'Required parameter "clientRegistration" was null or undefined when calling register().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters["Content-Type"] = "application/json";
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/oauth2/register`;
+
+        return {
+            path: urlPath,
+            method: "POST",
+            headers: headerParameters,
+            query: queryParameters,
+            body: ClientRegistrationToJSON(
+                requestParameters["clientRegistration"],
+            ),
+        };
+    }
+
+    /**
+     */
+    async registerRaw(
+        requestParameters: RegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<ClientRegistration>> {
+        const requestOptions =
+            await this.registerRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            ClientRegistrationFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async register(
+        requestParameters: RegisterRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<ClientRegistration> {
+        const response = await this.registerRaw(
+            requestParameters,
+            initOverrides,
+        );
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for resetPassword without sending the request
+     */
+    async resetPasswordRequestOpts(
+        requestParameters: ResetPasswordRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["userId"] == null) {
+            throw new runtime.RequiredError(
+                "userId",
+                'Required parameter "userId" was null or undefined when calling resetPassword().',
+            );
+        }
+
+        if (requestParameters["resetPassword"] == null) {
+            throw new runtime.RequiredError(
+                "resetPassword",
+                'Required parameter "resetPassword" was null or undefined when calling resetPassword().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters["Content-Type"] = "application/json";
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/users/{user_id}/password`;
+        urlPath = urlPath.replace(
+            "{user_id}",
+            encodeURIComponent(String(requestParameters["userId"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "PUT",
+            headers: headerParameters,
+            query: queryParameters,
+            body: ResetPasswordToJSON(requestParameters["resetPassword"]),
+        };
+    }
+
+    /**
+     */
+    async resetPasswordRaw(
+        requestParameters: ResetPasswordRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.resetPasswordRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async resetPassword(
+        requestParameters: ResetPasswordRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.resetPasswordRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for revoke without sending the request
+     */
+    async revokeRequestOpts(
+        requestParameters: RevokeRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["token"] == null) {
+            throw new runtime.RequiredError(
+                "token",
+                'Required parameter "token" was null or undefined when calling revoke().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        const consumes: runtime.Consume[] = [
+            { contentType: "application/x-www-form-urlencoded" },
+        ];
+        // @ts-ignore: canConsumeForm may be unused
+        const canConsumeForm = runtime.canConsumeForm(consumes);
+
+        let formParams: { append(param: string, value: any): any };
+        let useForm = false;
+        if (useForm) {
+            formParams = new FormData();
+        } else {
+            formParams = new URLSearchParams();
+        }
+
+        if (requestParameters["token"] != null) {
+            formParams.append("token", requestParameters["token"] as any);
+        }
+
+        if (requestParameters["tokenTypeHint"] != null) {
+            formParams.append(
+                "token_type_hint",
+                requestParameters["tokenTypeHint"] as any,
+            );
+        }
+
+        let urlPath = `/oauth2/revoke`;
+
+        return {
+            path: urlPath,
+            method: "POST",
+            headers: headerParameters,
+            query: queryParameters,
+            body: formParams,
+        };
+    }
+
+    /**
+     */
+    async revokeRaw(
+        requestParameters: RevokeRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions = await this.revokeRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async revoke(
+        requestParameters: RevokeRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.revokeRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for revokeClientKeys without sending the request
+     */
+    async revokeClientKeysRequestOpts(
+        requestParameters: RevokeClientKeysRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["clientId"] == null) {
+            throw new runtime.RequiredError(
+                "clientId",
+                'Required parameter "clientId" was null or undefined when calling revokeClientKeys().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/clients/{client_id}/keys`;
+        urlPath = urlPath.replace(
+            "{client_id}",
+            encodeURIComponent(String(requestParameters["clientId"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "DELETE",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async revokeClientKeysRaw(
+        requestParameters: RevokeClientKeysRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.revokeClientKeysRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async revokeClientKeys(
+        requestParameters: RevokeClientKeysRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.revokeClientKeysRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for revokeConsent without sending the request
+     */
+    async revokeConsentRequestOpts(
+        requestParameters: RevokeConsentRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["userId"] == null) {
+            throw new runtime.RequiredError(
+                "userId",
+                'Required parameter "userId" was null or undefined when calling revokeConsent().',
+            );
+        }
+
+        if (requestParameters["consentId"] == null) {
+            throw new runtime.RequiredError(
+                "consentId",
+                'Required parameter "consentId" was null or undefined when calling revokeConsent().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/users/{user_id}/consents/{consent_id}`;
+        urlPath = urlPath.replace(
+            "{user_id}",
+            encodeURIComponent(String(requestParameters["userId"])),
+        );
+        urlPath = urlPath.replace(
+            "{consent_id}",
+            encodeURIComponent(String(requestParameters["consentId"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "DELETE",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async revokeConsentRaw(
+        requestParameters: RevokeConsentRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.revokeConsentRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async revokeConsent(
+        requestParameters: RevokeConsentRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.revokeConsentRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for revokeDevice without sending the request
+     */
+    async revokeDeviceRequestOpts(
+        requestParameters: RevokeDeviceRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["id"] == null) {
+            throw new runtime.RequiredError(
+                "id",
+                'Required parameter "id" was null or undefined when calling revokeDevice().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/devices/{id}`;
+        urlPath = urlPath.replace(
+            "{id}",
+            encodeURIComponent(String(requestParameters["id"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "DELETE",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async revokeDeviceRaw(
+        requestParameters: RevokeDeviceRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.revokeDeviceRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async revokeDevice(
+        requestParameters: RevokeDeviceRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.revokeDeviceRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for revokeSelf without sending the request
+     */
+    async revokeSelfRequestOpts(
+        requestParameters: RevokeSelfRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["deviceSelfRevocationRequest"] == null) {
+            throw new runtime.RequiredError(
+                "deviceSelfRevocationRequest",
+                'Required parameter "deviceSelfRevocationRequest" was null or undefined when calling revokeSelf().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters["Content-Type"] = "application/json";
+
+        let urlPath = `/devices/revoke-self`;
+
+        return {
+            path: urlPath,
+            method: "POST",
+            headers: headerParameters,
+            query: queryParameters,
+            body: DeviceSelfRevocationRequestToJSON(
+                requestParameters["deviceSelfRevocationRequest"],
+            ),
+        };
+    }
+
+    /**
+     */
+    async revokeSelfRaw(
+        requestParameters: RevokeSelfRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.revokeSelfRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async revokeSelf(
+        requestParameters: RevokeSelfRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.revokeSelfRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for rotateClientKey without sending the request
+     */
+    async rotateClientKeyRequestOpts(
+        requestParameters: RotateClientKeyRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["clientId"] == null) {
+            throw new runtime.RequiredError(
+                "clientId",
+                'Required parameter "clientId" was null or undefined when calling rotateClientKey().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/clients/{client_id}/keys/rotate`;
+        urlPath = urlPath.replace(
+            "{client_id}",
+            encodeURIComponent(String(requestParameters["clientId"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "POST",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async rotateClientKeyRaw(
+        requestParameters: RotateClientKeyRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.rotateClientKeyRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async rotateClientKey(
+        requestParameters: RotateClientKeyRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.rotateClientKeyRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for sessionsLogout without sending the request
+     */
+    async sessionsLogoutRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        let urlPath = `/oauth2/sessions/logout`;
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async sessionsLogoutRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions = await this.sessionsLogoutRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async sessionsLogout(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.sessionsLogoutRaw(initOverrides);
+    }
+
+    /**
+     * Creates request options for setPairingAcceptance without sending the request
+     */
+    async setPairingAcceptanceRequestOpts(
+        requestParameters: SetPairingAcceptanceRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["pairingAcceptance"] == null) {
+            throw new runtime.RequiredError(
+                "pairingAcceptance",
+                'Required parameter "pairingAcceptance" was null or undefined when calling setPairingAcceptance().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters["Content-Type"] = "application/json";
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/devices/pairing-accepting`;
+
+        return {
+            path: urlPath,
+            method: "PUT",
+            headers: headerParameters,
+            query: queryParameters,
+            body: PairingAcceptanceToJSON(
+                requestParameters["pairingAcceptance"],
+            ),
+        };
+    }
+
+    /**
+     */
+    async setPairingAcceptanceRaw(
+        requestParameters: SetPairingAcceptanceRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<PairingAcceptance>> {
+        const requestOptions =
+            await this.setPairingAcceptanceRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            PairingAcceptanceFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async setPairingAcceptance(
+        requestParameters: SetPairingAcceptanceRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<PairingAcceptance> {
+        const response = await this.setPairingAcceptanceRaw(
+            requestParameters,
+            initOverrides,
+        );
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for token without sending the request
+     */
+    async tokenRequestOpts(
+        requestParameters: TokenRequest,
+    ): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        const consumes: runtime.Consume[] = [
+            { contentType: "application/x-www-form-urlencoded" },
+        ];
+        // @ts-ignore: canConsumeForm may be unused
+        const canConsumeForm = runtime.canConsumeForm(consumes);
+
+        let formParams: { append(param: string, value: any): any };
+        let useForm = false;
+        if (useForm) {
+            formParams = new FormData();
+        } else {
+            formParams = new URLSearchParams();
+        }
+
+        if (requestParameters["clientId"] != null) {
+            formParams.append(
+                "client_id",
+                requestParameters["clientId"] as any,
+            );
+        }
+
+        if (requestParameters["password"] != null) {
+            formParams.append("password", requestParameters["password"] as any);
+        }
+
+        if (requestParameters["resource"] != null) {
+            formParams.append("resource", requestParameters["resource"] as any);
+        }
+
+        if (requestParameters["scope"] != null) {
+            formParams.append("scope", requestParameters["scope"] as any);
+        }
+
+        if (requestParameters["username"] != null) {
+            formParams.append("username", requestParameters["username"] as any);
+        }
+
+        if (requestParameters["grantType"] != null) {
+            formParams.append(
+                "grant_type",
+                requestParameters["grantType"] as any,
+            );
+        }
+
+        if (requestParameters["code"] != null) {
+            formParams.append("code", requestParameters["code"] as any);
+        }
+
+        if (requestParameters["codeVerifier"] != null) {
+            formParams.append(
+                "code_verifier",
+                requestParameters["codeVerifier"] as any,
+            );
+        }
+
+        if (requestParameters["redirectUri"] != null) {
+            formParams.append(
+                "redirect_uri",
+                requestParameters["redirectUri"] as any,
+            );
+        }
+
+        if (requestParameters["audience"] != null) {
+            formParams.append("audience", requestParameters["audience"] as any);
+        }
+
+        if (requestParameters["clientSecret"] != null) {
+            formParams.append(
+                "client_secret",
+                requestParameters["clientSecret"] as any,
+            );
+        }
+
+        if (requestParameters["refreshToken"] != null) {
+            formParams.append(
+                "refresh_token",
+                requestParameters["refreshToken"] as any,
+            );
+        }
+
+        if (requestParameters["actorToken"] != null) {
+            formParams.append(
+                "actor_token",
+                requestParameters["actorToken"] as any,
+            );
+        }
+
+        if (requestParameters["actorTokenType"] != null) {
+            formParams.append(
+                "actor_token_type",
+                requestParameters["actorTokenType"] as any,
+            );
+        }
+
+        if (requestParameters["authorizationDetails"] != null) {
+            formParams.append(
+                "authorization_details",
+                requestParameters["authorizationDetails"]!.join(
+                    runtime.COLLECTION_FORMATS["csv"],
+                ),
+            );
+        }
+
+        if (requestParameters["requestedTokenType"] != null) {
+            formParams.append(
+                "requested_token_type",
+                requestParameters["requestedTokenType"] as any,
+            );
+        }
+
+        if (requestParameters["subjectToken"] != null) {
+            formParams.append(
+                "subject_token",
+                requestParameters["subjectToken"] as any,
+            );
+        }
+
+        if (requestParameters["subjectTokenType"] != null) {
+            formParams.append(
+                "subject_token_type",
+                requestParameters["subjectTokenType"] as any,
+            );
+        }
+
+        let urlPath = `/oauth2/token`;
+
+        return {
+            path: urlPath,
+            method: "POST",
+            headers: headerParameters,
+            query: queryParameters,
+            body: formParams,
+        };
+    }
+
+    /**
+     */
+    async tokenRaw(
+        requestParameters: TokenRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<TokenResponse>> {
+        const requestOptions = await this.tokenRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            TokenResponseFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async token(
+        requestParameters: TokenRequest = {},
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<TokenResponse> {
+        const response = await this.tokenRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for trustedDevices without sending the request
+     */
+    async trustedDevicesRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/devices/trusted`;
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async trustedDevicesRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<Array<TrustedDevice>>> {
+        const requestOptions = await this.trustedDevicesRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            jsonValue.map(TrustedDeviceFromJSON),
+        );
+    }
+
+    /**
+     */
+    async trustedDevices(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<Array<TrustedDevice>> {
+        const response = await this.trustedDevicesRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for updateApplication without sending the request
+     */
+    async updateApplicationRequestOpts(
+        requestParameters: UpdateApplicationRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["applicationId"] == null) {
+            throw new runtime.RequiredError(
+                "applicationId",
+                'Required parameter "applicationId" was null or undefined when calling updateApplication().',
+            );
+        }
+
+        if (requestParameters["applicationRegistration"] == null) {
+            throw new runtime.RequiredError(
+                "applicationRegistration",
+                'Required parameter "applicationRegistration" was null or undefined when calling updateApplication().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters["Content-Type"] = "application/json";
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/applications/{application_id}`;
+        urlPath = urlPath.replace(
+            "{application_id}",
+            encodeURIComponent(String(requestParameters["applicationId"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "PUT",
+            headers: headerParameters,
+            query: queryParameters,
+            body: ApplicationRegistrationToJSON(
+                requestParameters["applicationRegistration"],
+            ),
+        };
+    }
+
+    /**
+     */
+    async updateApplicationRaw(
+        requestParameters: UpdateApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<void>> {
+        const requestOptions =
+            await this.updateApplicationRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     */
+    async updateApplication(
+        requestParameters: UpdateApplicationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<void> {
+        await this.updateApplicationRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for updateDevice without sending the request
+     */
+    async updateDeviceRequestOpts(
+        requestParameters: UpdateDeviceOperationRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["id"] == null) {
+            throw new runtime.RequiredError(
+                "id",
+                'Required parameter "id" was null or undefined when calling updateDevice().',
+            );
+        }
+
+        if (requestParameters["updateDeviceRequest"] == null) {
+            throw new runtime.RequiredError(
+                "updateDeviceRequest",
+                'Required parameter "updateDeviceRequest" was null or undefined when calling updateDevice().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters["Content-Type"] = "application/json";
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/devices/{id}`;
+        urlPath = urlPath.replace(
+            "{id}",
+            encodeURIComponent(String(requestParameters["id"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "PATCH",
+            headers: headerParameters,
+            query: queryParameters,
+            body: UpdateDeviceRequestToJSON(
+                requestParameters["updateDeviceRequest"],
+            ),
+        };
+    }
+
+    /**
+     */
+    async updateDeviceRaw(
+        requestParameters: UpdateDeviceOperationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<DeviceInfo>> {
+        const requestOptions =
+            await this.updateDeviceRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            DeviceInfoFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async updateDevice(
+        requestParameters: UpdateDeviceOperationRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<DeviceInfo> {
+        const response = await this.updateDeviceRaw(
+            requestParameters,
+            initOverrides,
+        );
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for updateUser without sending the request
+     */
+    async updateUserRequestOpts(
+        requestParameters: UpdateUserRequest,
+    ): Promise<runtime.RequestOpts> {
+        if (requestParameters["userId"] == null) {
+            throw new runtime.RequiredError(
+                "userId",
+                'Required parameter "userId" was null or undefined when calling updateUser().',
+            );
+        }
+
+        if (requestParameters["body"] == null) {
+            throw new runtime.RequiredError(
+                "body",
+                'Required parameter "body" was null or undefined when calling updateUser().',
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters["Content-Type"] = "application/json";
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/users/{user_id}`;
+        urlPath = urlPath.replace(
+            "{user_id}",
+            encodeURIComponent(String(requestParameters["userId"])),
+        );
+
+        return {
+            path: urlPath,
+            method: "PUT",
+            headers: headerParameters,
+            query: queryParameters,
+            body: requestParameters["body"] as any,
+        };
+    }
+
+    /**
+     */
+    async updateUserRaw(
+        requestParameters: UpdateUserRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<UserInfo>> {
+        const requestOptions =
+            await this.updateUserRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            UserInfoFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async updateUser(
+        requestParameters: UpdateUserRequest,
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<UserInfo> {
+        const response = await this.updateUserRaw(
+            requestParameters,
+            initOverrides,
+        );
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for userinfo without sending the request
+     */
+    async userinfoRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("authorization", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/userinfo`;
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async userinfoRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<UserInfo>> {
+        const requestOptions = await this.userinfoRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            UserInfoFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async userinfo(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<UserInfo> {
+        const response = await this.userinfoRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for version without sending the request
+     */
+    async versionRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        let urlPath = `/version`;
+
+        return {
+            path: urlPath,
+            method: "GET",
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     */
+    async versionRaw(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<runtime.ApiResponse<VersionResponse>> {
+        const requestOptions = await this.versionRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) =>
+            VersionResponseFromJSON(jsonValue),
+        );
+    }
+
+    /**
+     */
+    async version(
+        initOverrides?: RequestInit | runtime.InitOverrideFunction,
+    ): Promise<VersionResponse> {
+        const response = await this.versionRaw(initOverrides);
+        return await response.value();
+    }
 }
 
 /**
  * @export
  */
 export const TokenGrantTypeEnum = {
-  UrnIetfParamsOauthGrantTypeTokenExchange:
-    "urn:ietf:params:oauth:grant-type:token-exchange",
+    UrnIetfParamsOauthGrantTypeTokenExchange:
+        "urn:ietf:params:oauth:grant-type:token-exchange",
 } as const;
 export type TokenGrantTypeEnum =
-  (typeof TokenGrantTypeEnum)[keyof typeof TokenGrantTypeEnum];
+    (typeof TokenGrantTypeEnum)[keyof typeof TokenGrantTypeEnum];

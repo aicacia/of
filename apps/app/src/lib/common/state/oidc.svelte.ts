@@ -1,10 +1,17 @@
 import { OidcClient } from "@aicacia/oidc-client";
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { env } from "$env/dynamic/public";
 import icon256x256Png from "$lib/assets/icon256x256.png";
 import { getIdpApiUrl } from "./idpClient.svelte";
 
-const CLIENT_ID = isTauri() ? "idp-desktop" : "idp-web";
+let desktopClientId = $state<string | undefined>(undefined);
+const CLIENT_ID = $derived(isTauri() ? desktopClientId : "idp-web");
+
+export async function ensureOidcClientId(): Promise<string> {
+  if (!isTauri()) return "idp-web";
+  desktopClientId ??= await invoke<string>("get_desktop_client_id");
+  return desktopClientId;
+}
 
 const oidcClient = $derived.by(
   () =>

@@ -38,7 +38,7 @@ export interface TokenResponse {
     /**
      *
      */
-    idToken: string;
+    idToken?: string | null;
     /**
      * The identifier of the authorization server that issued the token.
      */
@@ -73,13 +73,6 @@ export function instanceOfTokenResponse(value: object): value is TokenResponse {
     )
         return false;
     if (
-        (!("idToken" in (value as Record<string, any>)) &&
-            !("id_token" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["idToken"] === undefined &&
-            (value as Record<string, any>)["id_token"] === undefined)
-    )
-        return false;
-    if (
         (!("tokenType" in (value as Record<string, any>)) &&
             !("token_type" in (value as Record<string, any>))) ||
         ((value as Record<string, any>)["tokenType"] === undefined &&
@@ -108,7 +101,12 @@ export function TokenResponseFromJSONTyped(
                 : json["expires_in"] === null
                   ? null
                   : json["expires_in"],
-        idToken: json["id_token"],
+        idToken:
+            json["id_token"] === undefined
+                ? undefined
+                : json["id_token"] === null
+                  ? null
+                  : json["id_token"],
         iss:
             json["iss"] === undefined
                 ? undefined

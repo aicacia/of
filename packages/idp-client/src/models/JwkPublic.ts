@@ -65,7 +65,7 @@ export interface JwkPublic {
     /**
      * Key ID
      */
-    kid: number;
+    kid: string;
     /**
      * Key use (sig, enc)
      */

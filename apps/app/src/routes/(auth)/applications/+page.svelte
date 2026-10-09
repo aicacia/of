@@ -1,8 +1,11 @@
 <script lang="ts">
-    import type { ApplicationResponse } from "@aicacia/management-client";
+    import {
+        idpAdministration,
+        type Application,
+    } from "$lib/common/state/idpAdministration";
     import { onMount } from "svelte";
     import { resolve } from "$app/paths";
-    import { managementApi } from "$lib/common/state/lidpManagementClient.svelte";
+
     import { notifications } from "$lib/common/state/notifications.svelte";
 
     const limit = 25;
@@ -10,7 +13,7 @@
     let loading = $state(false);
     let creating = $state(false);
     let error = $state<string | null>(null);
-    let applications = $state<ApplicationResponse[]>([]);
+    let applications = $state<Application[]>([]);
     let offset = $state(0);
 
     let name = $state("");
@@ -18,7 +21,7 @@
     let description = $state("");
 
     function formatTimestamp(value: number): string {
-        return new Date(value).toLocaleString();
+        return new Date(value * 1000).toLocaleString();
     }
 
     async function loadApplications() {
@@ -26,7 +29,7 @@
         error = null;
 
         try {
-            applications = await managementApi.listApplications({
+            applications = await idpAdministration.listApplications({
                 offset,
                 limit,
             });
@@ -57,8 +60,8 @@
 
         creating = true;
         try {
-            await managementApi.createApplication({
-                createApplicationRequest: {
+            await idpAdministration.createApplication({
+                applicationRegistration: {
                     name: name.trim(),
                     uri: uri.trim(),
                     description: description.trim() || undefined,
@@ -176,7 +179,7 @@
                                 >{application.description ?? "-"}</td
                             >
                             <td class="px-4 py-3"
-                                >{formatTimestamp(application.updatedAt)}</td
+                                >{formatTimestamp(application.updated_at)}</td
                             >
                         </tr>
                     {/each}

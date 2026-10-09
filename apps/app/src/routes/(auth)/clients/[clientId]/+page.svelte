@@ -1,14 +1,14 @@
 <script lang="ts">
-    import type {
-        ClientRegistration,
-        JwkPublic,
-        ManagementKey,
-    } from "@aicacia/management-client";
+    import type { ClientRegistration } from "@aicacia/idp-client";
+    import {
+        idpAdministration,
+        type ClientKey,
+    } from "$lib/common/state/idpAdministration";
     import { onMount } from "svelte";
     import { goto } from "$app/navigation";
     import { resolve } from "$app/paths";
     import { page } from "$app/state";
-    import { managementApi } from "$lib/common/state/lidpManagementClient.svelte";
+    import { idpApi } from "$lib/common/state/idpClient.svelte";
     import { notifications } from "$lib/common/state/notifications.svelte";
 
     const clientId = page.params.clientId;
@@ -20,11 +20,11 @@
     let client = $state<ClientRegistration | null>(null);
     let keysLoading = $state(false);
     let keysError = $state<string | null>(null);
-    let keys = $state<ManagementKey[]>([]);
-    let jwkLoadingKeyId = $state<number | null>(null);
+    let keys = $state<ClientKey[]>([]);
+    let jwkLoadingKeyId = $state<string | null>(null);
     let jwkError = $state<string | null>(null);
-    let jwk = $state<JwkPublic | null>(null);
-    let jwkKeyId = $state<number | null>(null);
+    let jwk = $state<Record<string, unknown> | null>(null);
+    let jwkKeyId = $state<string | null>(null);
 
     let clientName = $state("");
     let clientUri = $state("");
@@ -37,7 +37,7 @@
             return "-";
         }
 
-        return new Date(value).toLocaleString();
+        return new Date(value * 1000).toLocaleString();
     }
 
     function applyClient(currentClient: ClientRegistration) {
@@ -53,7 +53,7 @@
         keysLoading = true;
         keysError = null;
         try {
-            keys = await managementApi.listClientKeys({ clientId });
+            keys = await idpAdministration.listClientKeys({ clientId });
         } catch (cause) {
             console.error(cause);
             keysError =
@@ -71,7 +71,7 @@
         error = null;
 
         try {
-            const currentClient = await managementApi.getClient({
+            const currentClient = await idpApi.getRegister({
                 clientId,
             });
             applyClient(currentClient);
@@ -88,11 +88,12 @@
         }
     }
 
-    async function onLoadJwk(key: ManagementKey) {
+    async function onLoadJwk(key: ClientKey) {
         jwkLoadingKeyId = key.id;
         jwkError = null;
         try {
-            jwk = await managementApi.getKeyJwk({ keyId: key.id });
+            jwk = key.public_jwk;
+            if (!jwk) throw new Error("This key has no public JWK");
             jwkKeyId = key.id;
             notifications.add("JWK loaded", "success");
         } catch (cause) {
@@ -114,7 +115,7 @@
 
         saving = true;
         try {
-            await managementApi.updateClient({
+            await idpApi.putRegister({
                 clientId,
                 clientRegistration: {
                     ...client,
@@ -142,7 +143,7 @@
 
         deleting = true;
         try {
-            await managementApi.deleteClient({ clientId });
+            await idpApi.deleteRegister({ clientId });
             notifications.add("Client deleted", "success");
             await goto(resolve("/clients"));
         } catch (cause) {
@@ -236,19 +237,19 @@
                                         <td class="px-4 py-3">{key.id}</td>
                                         <td class="px-4 py-3">{key.name}</td>
                                         <td class="px-4 py-3"
-                                            >{key.derivationPath}</td
+                                            >{key.derivation_path}</td
                                         >
                                         <td class="px-4 py-3"
                                             >{key.hardened ? "Yes" : "No"}</td
                                         >
                                         <td class="px-4 py-3"
-                                            >{key.revokedAt
-                                                ? formatTimestamp(key.revokedAt)
+                                            >{key.revoked_at
+                                                ? formatTimestamp(key.revoked_at)
                                                 : "Active"}</td
                                         >
                                         <td class="px-4 py-3"
-                                            >{key.expiresAt
-                                                ? formatTimestamp(key.expiresAt)
+                                            >{key.expires_at
+                                                ? formatTimestamp(key.expires_at)
                                                 : "No expiry"}</td
                                         >
                                         <td class="px-4 py-3">

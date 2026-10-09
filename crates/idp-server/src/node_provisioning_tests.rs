@@ -15,7 +15,7 @@ use idp_model::{
 };
 use idp_service::{
     oauth2::NodeSignerBinding,
-    repo::{PrivateKeyRepo, RepoError, RepoResult},
+    repo::{ClientRepo, KeyRepo, PrivateKeyRepo, RepoError, RepoResult},
 };
 use key::{DerivationPath, DerivedKey};
 use model::contract::StandardClaims;
@@ -71,6 +71,241 @@ impl PrivateKeyRepo for Secrets {
             .remove(&(namespace.into(), path.to_string()));
         Ok(())
     }
+}
+
+#[tokio::test]
+async fn restricted_desktop_client_enables_local_user_signin_and_exact_retry() {
+    let root = std::env::temp_dir().join(format!("desktop-client-{}", Id::now_v7()));
+    let binding = NodeSignerBinding {
+        member_id: Id::now_v7(),
+        key_id: Id::now_v7(),
+        endpoint_id: iroh::SecretKey::generate().public().to_string(),
+    };
+    let mut config = AppConfig {
+        data_dir: root.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    config.oauth2.local_signer = Some(binding.clone());
+    let provisioner = OwnerProvisioner::open_with_private_keys(&config, Secrets::default())
+        .await
+        .expect("native owner");
+    let user = Id::now_v7();
+    provisioner
+        .ensure_initial_user(user, Id::now_v7(), "desktop-admin", "valid-password")
+        .await
+        .expect("restricted User setup");
+    provisioner
+        .ensure_initial_node(&binding, user, "Desktop Node")
+        .await
+        .expect("independent trusted local signer");
+    provisioner
+        .ensure_initial_user_signing_key(user)
+        .await
+        .expect("local User private/public key");
+    provisioner
+        .ensure_initial_user_signing_key(user)
+        .await
+        .expect("exact User key retry");
+    let desktop_client = Id::now_v7();
+    let first = provisioner
+        .ensure_desktop_client(desktop_client)
+        .await
+        .expect("restricted public desktop client");
+    let retry = provisioner
+        .ensure_desktop_client(desktop_client)
+        .await
+        .expect("exact client retry");
+    assert_eq!(first.client_id, retry.client_id);
+    assert_eq!(first.client_type, ClientType::Public);
+    assert_eq!(
+        first.token_endpoint_auth_method,
+        TokenEndpointAuthMethod::None
+    );
+    assert!(first.client_secret.is_none());
+    for (password, allowed) in [("wrong-password", false), ("valid-password", true)] {
+        let result = provisioner
+            .oauth2
+            .token(
+                TokenRequest::Password(idp_model::contract::PasswordGrantRequest {
+                    client_id: desktop_client.to_string(),
+                    username: "desktop-admin".into(),
+                    password: password.into(),
+                    scope: Some("openid profile email".into()),
+                    resource: None,
+                }),
+                None,
+            )
+            .await;
+        assert_eq!(
+            result.is_ok(),
+            allowed,
+            "normal password verification is not bypassed: {:?}",
+            result.as_ref().err()
+        );
+        if let Ok(token) = result {
+            for audience in [config.oauth2.issuer.as_str(), "idp-management"] {
+                let exchanged = provisioner
+                    .oauth2
+                    .token(
+                        TokenRequest::TokenExchange(
+                            idp_model::contract::TokenExchangeGrantRequest {
+                                subject_token: token.access_token.0.clone(),
+                                subject_token_type:
+                                    idp_model::contract::SubjectTokenType::AccessToken,
+                                actor_token: None,
+                                actor_token_type: None,
+                                resource: Some(audience.into()),
+                                audience: None,
+                                authorization_details: None,
+                                scope: None,
+                                requested_token_type: None,
+                            },
+                        ),
+                        None,
+                    )
+                    .await
+                    .expect("current owner audience exchange for ordinary desktop User");
+                let claims = provisioner
+                    .oauth2
+                    .validate_access_token(&exchanged.access_token.0, audience)
+                    .await
+                    .expect("owner-specific User bearer");
+                assert_eq!(claims.sub, user.to_string());
+                assert_eq!(claims.aud, audience);
+                assert_eq!(claims.scope, ["openid", "profile", "email"]);
+                assert_eq!(claims.principal_type, model::contract::PrincipalType::User);
+            }
+        }
+    }
+    let keys = &provisioner.oauth2.key_service;
+    let user_key = keys
+        .key_repo()
+        .find_by_entity_type_and_id(idp_model::contract::EntityType::User, user)
+        .await
+        .expect("retained public identity")
+        .expect("User key");
+    let namespace = keys.scoped_namespace(idp_model::contract::EntityType::User, user);
+    keys.private_key_repo()
+        .delete(&namespace, &user_key.derivation_path().expect("User path"))
+        .expect("simulate lost private reference");
+    let count = keys
+        .private_key_repo()
+        .values
+        .lock()
+        .expect("injected secure store")
+        .len();
+    assert!(
+        provisioner
+            .ensure_initial_user_signing_key(user)
+            .await
+            .expect_err("published trust must not regenerate private material")
+            .to_string()
+            .contains("explicit recovery")
+    );
+    assert_eq!(
+        keys.private_key_repo()
+            .values
+            .lock()
+            .expect("injected secure store")
+            .len(),
+        count
+    );
+    drop(provisioner);
+    std::fs::remove_dir_all(root).expect("remove owned native fixture");
+}
+
+#[tokio::test]
+async fn interrupted_desktop_client_retries_exact_key_and_reset_deletes_internal_namespace() {
+    let root = std::env::temp_dir().join(format!("desktop-client-retry-{}", Id::now_v7()));
+    let config = AppConfig {
+        data_dir: root.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let secrets = Secrets::default();
+    let provisioner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
+        .await
+        .expect("native owner");
+    let external_id = Id::now_v7();
+    secrets.fail.store(true, Ordering::SeqCst);
+    provisioner
+        .ensure_desktop_client(external_id)
+        .await
+        .expect_err("secure-store failure interrupts registration");
+    let client = provisioner
+        .oauth2
+        .client_repo
+        .find_client_by_client_id(&external_id.to_string())
+        .await
+        .expect("read interrupted client")
+        .expect("durable client row");
+    assert_ne!(
+        client.id, external_id,
+        "owner internal identity differs from OAuth client ID"
+    );
+    secrets.fail.store(false, Ordering::SeqCst);
+    provisioner
+        .ensure_desktop_client(external_id)
+        .await
+        .expect("complete interrupted registration");
+    let keys = &provisioner.oauth2.key_service;
+    let key = keys
+        .key_repo()
+        .find_by_entity_type_and_id(idp_model::contract::EntityType::Client, client.id)
+        .await
+        .expect("read client key")
+        .expect("retry must complete missing key");
+    assert!(key.public_jwk.is_some());
+    let namespace = keys.scoped_namespace(idp_model::contract::EntityType::Client, client.id);
+    let path = key.derivation_path().expect("client key path");
+    let retained = secrets
+        .load(&namespace, &path)
+        .expect("read client secret")
+        .expect("durable private key");
+    provisioner
+        .ensure_desktop_client(external_id)
+        .await
+        .expect("exact completed retry");
+    assert_eq!(
+        secrets
+            .load(&namespace, &path)
+            .expect("readback")
+            .expect("key retained")
+            .to_xprv_string(),
+        retained.to_xprv_string()
+    );
+    secrets
+        .delete(&namespace, &path)
+        .expect("inject lost published private key");
+    provisioner
+        .ensure_desktop_client(external_id)
+        .await
+        .expect_err("published client identity must not rotate silently");
+    assert!(
+        secrets
+            .load(&namespace, &path)
+            .expect("no key recreation")
+            .is_none()
+    );
+    secrets
+        .store(&namespace, &retained)
+        .expect("restore fixture's exact original key");
+    provisioner
+        .delete_local_secrets(Id::now_v7(), Id::now_v7(), Id::now_v7(), &[external_id])
+        .await
+        .expect("offline reset resolves stable external reference through retained owner state");
+    assert!(
+        secrets.values.lock().expect("secret map").is_empty(),
+        "reset removes internal Client namespace, not guessed external UUID namespace"
+    );
+    assert!(
+        keys.key_repo()
+            .list_by_entity_type_and_id(idp_model::contract::EntityType::Client, client.id)
+            .await
+            .expect("removed metadata")
+            .is_empty()
+    );
+    drop(provisioner);
+    std::fs::remove_dir_all(root).expect("remove owned native fixture");
 }
 
 #[tokio::test]
