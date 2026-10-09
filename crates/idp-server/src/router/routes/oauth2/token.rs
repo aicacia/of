@@ -37,7 +37,9 @@ fn parse_client_auth(
     parse_basic_client_auth(headers)
 }
 
-pub(super) fn parse_basic_client_auth(headers: &HeaderMap) -> Result<Option<OAuth2ClientAuth>, ErrorResponse> {
+pub(super) fn parse_basic_client_auth(
+    headers: &HeaderMap,
+) -> Result<Option<OAuth2ClientAuth>, ErrorResponse> {
     let Some(value) = headers.get(axum::http::header::AUTHORIZATION) else {
         return Ok(None);
     };

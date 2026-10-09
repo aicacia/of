@@ -6,7 +6,6 @@ use model::contract::AuthorizationDetail;
 use super::RepoResult;
 
 pub struct OAuth2RefreshToken {
-
     pub token: String,
     pub client_id: Id,
     pub user_id: Id,

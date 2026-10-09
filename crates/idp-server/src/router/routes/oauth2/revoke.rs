@@ -1,4 +1,7 @@
-use axum::{extract::{Form, State}, http::HeaderMap};
+use axum::{
+    extract::{Form, State},
+    http::HeaderMap,
+};
 use idp_model::contract::{ErrorResponse, RevocationRequest};
 
 use crate::router::RouterState;
