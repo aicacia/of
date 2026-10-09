@@ -425,9 +425,6 @@ where
             .lock()
             .map_err(|_| "copy catalog lock poisoned".to_owned())?;
         let key = (namespace.clone(), resource_id, generation);
-        if let Some(catalog) = catalogs.get(&key) {
-            return Ok(Arc::clone(catalog));
-        }
         let entry = self
             .catalog(namespace)?
             .snapshot()
@@ -435,6 +432,12 @@ where
             .into_iter()
             .find(|entry| entry.resource.id == resource_id)
             .ok_or_else(|| "unknown filesystem identity".to_owned())?;
+        if let Some(catalog) = catalogs.get(&key) {
+            catalog
+                .import_snapshot(&[entry])
+                .map_err(|error| error.to_string())?;
+            return Ok(Arc::clone(catalog));
+        }
         let root = namespace_root(&self.root, namespace)
             .join("copies")
             .join(resource_id.as_uuid().to_string())
@@ -786,6 +789,133 @@ mod tests {
         assert!(fresh.read("old.txt").await.is_err());
         drop(fresh);
         drop(reopened);
+        fs::remove_dir_all(root).expect("fixture cleanup");
+    }
+
+    #[tokio::test]
+    async fn cached_generation_rejects_reopen_after_local_deletion() {
+        cached_generation_rejects_reopen_after_tombstone(false).await;
+    }
+
+    #[tokio::test]
+    async fn cached_generation_rejects_reopen_after_learned_tombstone() {
+        cached_generation_rejects_reopen_after_tombstone(true).await;
+    }
+
+    async fn cached_generation_rejects_reopen_after_tombstone(learned: bool) {
+        let root = env::temp_dir().join(format!(
+            "fs-generation-tombstone-{}",
+            idp_model::model::Id::now_v7()
+        ));
+        let scope = Namespace {
+            user_sub: "owner",
+            application_id: idp_model::model::Id::now_v7(),
+        };
+        let runtime = ScopedFileSystemRuntime::new(root.clone(), 1_u8).expect("runtime opens");
+        let resource = runtime
+            .create_resource(&scope, Some("stable".into()))
+            .await
+            .expect("resource creates");
+        runtime
+            .open_resource(&scope, resource.id)
+            .await
+            .expect("original generation opens");
+        let selected = [("owner".into(), scope.application_id, resource.id)];
+        runtime
+            .remove_unselected_projected_resources(&selected)
+            .await
+            .expect("selection observed");
+        runtime
+            .remove_unselected_projected_resources(&[])
+            .await
+            .expect("original generation retires");
+        runtime
+            .remove_unselected_projected_resources(&selected)
+            .await
+            .expect("later trusted reselection");
+        let session = crate::ScopedStorageService::open_resource(
+            &runtime,
+            Namespace {
+                user_sub: "owner",
+                application_id: scope.application_id,
+            },
+            resource.id,
+        )
+        .await
+        .expect("fresh scoped generation opens");
+        session
+            .execute(storage_model::StorageRequest::Write {
+                path: "new.txt".into(),
+                content: b"new copy".to_vec(),
+            })
+            .await
+            .expect("fresh scoped generation writes");
+        assert_eq!(
+            runtime.list_resources(&scope).await.expect("live catalog"),
+            vec![resource.clone()]
+        );
+        if learned {
+            runtime
+                .apply_deletion_tombstone(&scope, resource.id)
+                .await
+                .expect("learned Tombstone applies");
+        } else {
+            assert!(
+                runtime
+                    .delete_resource(&scope, resource.id)
+                    .await
+                    .expect("local deletion applies")
+            );
+        }
+        assert!(
+            crate::ScopedStorageService::open_resource(
+                &runtime,
+                Namespace {
+                    user_sub: "owner",
+                    application_id: scope.application_id,
+                },
+                resource.id,
+            )
+            .await
+            .is_err(),
+            "authoritative Tombstone denies a cached-generation scoped reopen"
+        );
+        assert!(runtime.open_resource(&scope, resource.id).await.is_err());
+        assert!(
+            runtime
+                .list_resources(&scope)
+                .await
+                .expect("deleted catalog lists")
+                .is_empty()
+        );
+        assert!(
+            runtime
+                .is_tombstoned(&scope, resource.id)
+                .await
+                .expect("logical ID retains its Tombstone")
+        );
+        assert!(
+            runtime
+                .register_selected_resource(&scope, resource.id)
+                .await
+                .is_err(),
+            "selection cannot revive the logical ID"
+        );
+        runtime
+            .remove_local_copy(&scope, resource.id)
+            .await
+            .expect("tombstoned generation still permits managed-copy cleanup");
+        drop(session);
+        drop(runtime);
+        let restarted = ScopedFileSystemRuntime::new(root.clone(), 1_u8).expect("runtime restarts");
+        assert!(
+            restarted
+                .is_tombstoned(&scope, resource.id)
+                .await
+                .expect("Tombstone survives restart")
+        );
+        assert!(restarted.open_resource(&scope, resource.id).await.is_err());
+        drop(restarted);
         fs::remove_dir_all(root).expect("fixture cleanup");
     }
 
