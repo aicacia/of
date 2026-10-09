@@ -1,4 +1,4 @@
-use std::{future::Future, io, sync::Arc};
+use std::{future::Future, io, path::Path, sync::Arc};
 
 use idp_model::{
     contract::{PermissionEvaluationRequest, PermissionSubject, PermissionTarget},
@@ -40,6 +40,85 @@ struct BootstrapRequest {
 }
 
 impl SecurityProtocol {
+    pub async fn open_node_bootstrap(
+        endpoint: &crate::UnifiedEndpoint,
+        config: &idp_server::AppConfig,
+        management_directory: &Path,
+        binding: NodeSignerBinding,
+    ) -> io::Result<(Self, OwnerProvisioner)> {
+        if binding.endpoint_id != endpoint.endpoint_id().to_string() {
+            return Err(denied(
+                "bootstrap signer must bind the shared local endpoint",
+            ));
+        }
+        let owner = OwnerProvisioner::open(config).await?;
+        std::fs::create_dir_all(management_directory)?;
+        let management = Arc::new(
+            db::Database::open(management_directory.join("management.redb"))
+                .map_err(io::Error::other)?,
+        );
+        management_service::replica::up(&management)
+            .await
+            .map_err(io::Error::other)?;
+        let protocol = Self::new(
+            endpoint.server().clone(),
+            owner.node_join_database(),
+            management,
+            config.oauth2.issuer.clone(),
+            Some(binding),
+            management_directory.join("node-bootstrap-staging"),
+            tokio_util::sync::CancellationToken::new(),
+        );
+        Ok((protocol, owner))
+    }
+
+    /// Drives only purpose-bound public bootstrap; the host must verify all local services separately.
+    pub async fn join_from_trusted_peer(
+        &self,
+        owner: &OwnerProvisioner,
+        name: &str,
+        peer: &str,
+    ) -> io::Result<NodeJoinApproval> {
+        let peer: iroh::EndpointId = peer.parse().map_err(io::Error::other)?;
+        let binding = self
+            .binding
+            .as_ref()
+            .ok_or_else(|| denied("local independent signer binding is required"))?;
+        let request = owner.prepare_node_join(binding, name, peer)?;
+        if owner.node_join_approval()?.is_none() {
+            let approval = request.send(&self.server, peer.into()).await?;
+            owner.record_node_join_approval(&approval)?;
+        }
+        let approval = owner.node_join_anchor()?;
+        owner.check_node_join_local_binding().await?;
+        if owner.node_join_stage_recorded(NodeJoinStage::Idp)? {
+            self.check_exact_join_trust(&approval).await?;
+        }
+        if owner.node_join_stage_recorded(NodeJoinStage::Management)? {
+            self.check_join_context_grants(&approval).await?;
+        }
+        if self.node_join_public_ready(owner).await? {
+            return Ok(approval);
+        }
+        let connection = self
+            .server
+            .endpoint()
+            .connect(peer, idp_server::BOOTSTRAP_ALPN)
+            .await
+            .map_err(io::Error::other)?;
+        let result = async {
+            for context in [SecurityContext::Idp, SecurityContext::Management] {
+                self.receive_node_bootstrap(&connection, owner, context)
+                    .await?;
+            }
+            self.complete_node_join_public_bootstrap(owner).await?;
+            Ok(approval)
+        }
+        .await;
+        connection.close(0u32.into(), b"public bootstrap finished");
+        result
+    }
+
     pub fn node_bootstrap_handler(&self) -> impl iroh::protocol::ProtocolHandler + use<> {
         NodeBootstrapHandler {
             protocol: self.clone(),

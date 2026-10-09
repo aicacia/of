@@ -27,6 +27,8 @@ pub(crate) struct Secrets {
     values: Arc<Mutex<HashMap<(String, String), String>>>,
     pub(crate) fail: Arc<AtomicBool>,
     fail_delete: Arc<AtomicBool>,
+    retain_on_delete: Arc<AtomicBool>,
+    discard_write: Arc<AtomicBool>,
 }
 
 impl PrivateKeyRepo for Secrets {
@@ -45,6 +47,9 @@ impl PrivateKeyRepo for Secrets {
                 "injected secure-store failure".into(),
             ));
         }
+        if self.discard_write.load(Ordering::SeqCst) {
+            return Ok(());
+        }
         self.values.lock().expect("secret map").insert(
             (namespace.into(), key.derivation_path().to_string()),
             key.to_xprv_string().to_string(),
@@ -56,6 +61,9 @@ impl PrivateKeyRepo for Secrets {
             return Err(RepoError::InvalidInput(
                 "injected secure-store deletion failure".into(),
             ));
+        }
+        if self.retain_on_delete.load(Ordering::SeqCst) {
+            return Ok(());
         }
         self.values
             .lock()
@@ -97,6 +105,12 @@ async fn secure_store_failure_keeps_initial_setup_incomplete_and_retryable() {
     );
     assert!(provisioner.verify_node_signer(&binding).await.is_err());
     secrets.fail.store(false, Ordering::SeqCst);
+    secrets.discard_write.store(true, Ordering::SeqCst);
+    assert!(
+        provisioner.prepare_node_signer(&binding).is_err(),
+        "acknowledged but lost private signer must not be published"
+    );
+    secrets.discard_write.store(false, Ordering::SeqCst);
     provisioner
         .ensure_initial_node(&binding, owner, "Local Node")
         .await
@@ -120,6 +134,15 @@ async fn secure_store_failure_keeps_initial_setup_incomplete_and_retryable() {
         public
     );
     secrets.fail_delete.store(false, Ordering::SeqCst);
+    secrets.retain_on_delete.store(true, Ordering::SeqCst);
+    assert!(
+        provisioner
+            .delete_local_secrets(binding.member_id, binding.key_id, owner, &[])
+            .await
+            .is_err(),
+        "successful deletion must be independently verified before discarding reset references"
+    );
+    secrets.retain_on_delete.store(false, Ordering::SeqCst);
     provisioner
         .delete_local_secrets(binding.member_id, binding.key_id, owner, &[])
         .await
@@ -142,6 +165,78 @@ async fn secure_store_failure_keeps_initial_setup_incomplete_and_retryable() {
     assert!(!public.kid.is_empty());
     drop(provisioner);
     std::fs::remove_dir_all(root).expect("remove isolated owner");
+}
+
+#[tokio::test]
+#[ignore = "uses isolated real OS private-key credentials and native stores"]
+async fn real_os_initial_node_signer_survives_native_reopen_and_offline_reset() {
+    let root = std::env::temp_dir().join(format!("of04-real-os-signer-{}", Id::now_v7()));
+    let mut config = AppConfig {
+        data_dir: root.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    config.oauth2.issuer = format!("https://of04-{}.test/idp", Id::now_v7());
+    let owner = Id::now_v7();
+    let credential = Id::now_v7();
+    let binding = NodeSignerBinding {
+        member_id: Id::now_v7(),
+        key_id: Id::now_v7(),
+        endpoint_id: iroh::SecretKey::generate().public().to_string(),
+    };
+    let public = {
+        let provisioner = OwnerProvisioner::open(&config)
+            .await
+            .expect("real OS private-key provider");
+        provisioner
+            .ensure_initial_user(
+                owner,
+                credential,
+                "isolated-of04-admin",
+                "isolated-of04-test-password",
+            )
+            .await
+            .expect("real OS initial User credentials");
+        provisioner
+            .ensure_initial_node(&binding, owner, "Isolated real OS Node")
+            .await
+            .expect("readback before initial enrollment");
+        provisioner
+            .ensure_initial_node(&binding, owner, "Isolated real OS Node")
+            .await
+            .expect("real OS exact initial-node retry");
+        provisioner
+            .verify_node_signer(&binding)
+            .await
+            .expect("real OS current signer")
+    };
+    let reopened = OwnerProvisioner::open(&config)
+        .await
+        .expect("native owner reopen with real OS keys");
+    assert_eq!(
+        reopened
+            .verify_node_signer(&binding)
+            .await
+            .expect("offline retained real OS signer"),
+        public
+    );
+    reopened
+        .delete_local_secrets(binding.member_id, binding.key_id, owner, &[])
+        .await
+        .expect("real OS local reset deletion and readback");
+    reopened
+        .delete_local_secrets(binding.member_id, binding.key_id, owner, &[])
+        .await
+        .expect("real OS offline idempotent reset retry");
+    assert!(reopened.verify_node_signer(&binding).await.is_err());
+    assert!(
+        reopened
+            .ensure_initial_node(&binding, owner, "Isolated real OS Node")
+            .await
+            .is_err(),
+        "missing approved signer is not silently regenerated"
+    );
+    drop(reopened);
+    std::fs::remove_dir_all(root).expect("real OS native fixture cleanup after key deletion");
 }
 
 #[tokio::test]

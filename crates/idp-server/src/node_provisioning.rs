@@ -5,7 +5,11 @@ use idp_model::{
     contract::{EntityType, IdpSignerRecord, JwkPublic, ReplicaMembership},
     model::Id,
 };
-use idp_service::{oauth2::NodeSignerBinding, replica::DbReplicaSignerRepo, repo::PrivateKeyRepo};
+use idp_service::{
+    oauth2::NodeSignerBinding,
+    replica::DbReplicaSignerRepo,
+    repo::{KeyRepo, PrivateKeyRepo},
+};
 use iroh::EndpointId;
 
 use crate::OwnerProvisioner;
@@ -13,10 +17,30 @@ use crate::OwnerProvisioner;
 impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
     pub fn prepare_node_signer(&self, binding: &NodeSignerBinding) -> io::Result<JwkPublic> {
         validate_binding(binding)?;
-        self.oauth2
-            .key_service
-            .prepare_node_signer(binding)
-            .map_err(io::Error::other)
+        let keys = &self.oauth2.key_service;
+        let namespace = format!(
+            "{}:node:{}:{}",
+            self.key_namespace, binding.member_id, binding.key_id
+        );
+        let private = keys
+            .private_key_repo()
+            .ensure_master_key(&namespace)
+            .map_err(io::Error::other)?;
+        let retained = keys
+            .private_key_repo()
+            .load(&namespace, &key::DerivationPath::default())
+            .map_err(io::Error::other)?
+            .ok_or_else(|| {
+                io::Error::other(
+                    "secure-store private signer readback is missing; setup remains incomplete",
+                )
+            })?;
+        if private.to_xprv_string() != retained.to_xprv_string() {
+            return Err(io::Error::other(
+                "secure-store private signer readback changed; setup remains incomplete",
+            ));
+        }
+        keys.prepare_node_signer(binding).map_err(io::Error::other)
     }
 
     pub async fn verify_node_signer(&self, binding: &NodeSignerBinding) -> io::Result<JwkPublic> {
@@ -43,27 +67,37 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             ));
         }
         let keys = &self.oauth2.key_service;
-        for client in clients {
-            keys.delete_entity_key_material(EntityType::Client, *client)
+        for (entity_type, entity_id) in clients
+            .iter()
+            .map(|id| (EntityType::Client, *id))
+            .chain(core::iter::once((EntityType::User, owner)))
+        {
+            let namespace = keys.scoped_namespace(entity_type, entity_id);
+            for key in keys
+                .key_repo()
+                .list_by_entity_type_and_id(entity_type, entity_id)
+                .await
+                .map_err(io::Error::other)?
+            {
+                delete_verified(
+                    keys.private_key_repo(),
+                    &namespace,
+                    &key.derivation_path().map_err(io::Error::other)?,
+                )?;
+            }
+            delete_verified(
+                keys.private_key_repo(),
+                &namespace,
+                &key::DerivationPath::default(),
+            )?;
+            keys.key_repo()
+                .delete_by_entity_type_and_id(entity_type, entity_id)
                 .await
                 .map_err(io::Error::other)?;
         }
-        keys.delete_entity_key_material(EntityType::User, owner)
-            .await
-            .map_err(io::Error::other)?;
         let namespace = format!("{}:node:{}:{}", self.key_namespace, member_id, key_id);
         let path = key::DerivationPath::default();
-        if keys
-            .private_key_repo()
-            .load(&namespace, &path)
-            .map_err(io::Error::other)?
-            .is_some()
-        {
-            keys.private_key_repo()
-                .delete(&namespace, &path)
-                .map_err(io::Error::other)?;
-        }
-        Ok(())
+        delete_verified(keys.private_key_repo(), &namespace, &path)
     }
 
     /// Restricted owner-local fresh setup; never exposed as an unauthenticated HTTP mutation.
@@ -149,6 +183,30 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         self.verify_node_signer(binding).await?;
         Ok(())
     }
+}
+
+fn delete_verified<P: PrivateKeyRepo>(
+    repo: &P,
+    namespace: &str,
+    path: &key::DerivationPath,
+) -> io::Result<()> {
+    if repo
+        .load(namespace, path)
+        .map_err(io::Error::other)?
+        .is_some()
+    {
+        repo.delete(namespace, path).map_err(io::Error::other)?;
+        if repo
+            .load(namespace, path)
+            .map_err(io::Error::other)?
+            .is_some()
+        {
+            return Err(io::Error::other(
+                "secure-store deletion was not durable; retry local reset",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn validate_binding(binding: &NodeSignerBinding) -> io::Result<()> {

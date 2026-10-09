@@ -39,6 +39,14 @@ pub struct NodeJoinApproval {
 }
 
 impl NodeJoinRequest {
+    pub fn validate_trusted_peer(peer: &str) -> io::Result<()> {
+        let endpoint: EndpointId = peer.parse().map_err(io::Error::other)?;
+        if endpoint.to_string() != peer {
+            return Err(invalid("trusted peer endpoint ID must be canonical"));
+        }
+        Ok(())
+    }
+
     pub(crate) fn validate(&self) -> io::Result<()> {
         let endpoint: EndpointId = self.endpoint_id.parse().map_err(io::Error::other)?;
         let peer: EndpointId = self.approving_peer.parse().map_err(io::Error::other)?;
@@ -239,6 +247,25 @@ fn persist_exact<T: Serialize + serde::de::DeserializeOwned + PartialEq>(
     })();
     let cleanup = fs::remove_file(&temporary);
     result.and(cleanup)
+}
+
+#[cfg(test)]
+mod setup_peer_tests {
+    use super::NodeJoinRequest;
+
+    #[test]
+    fn trusted_peer_input_requires_a_canonical_endpoint_identity() {
+        let peer = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
+        NodeJoinRequest::validate_trusted_peer(peer).expect("known Ed25519 endpoint identity");
+        for invalid in [
+            "",
+            "discovered-peer",
+            "https://peer.test",
+            &peer.to_uppercase(),
+        ] {
+            assert!(NodeJoinRequest::validate_trusted_peer(invalid).is_err());
+        }
+    }
 }
 
 pub(crate) fn invalid(message: &str) -> io::Error {

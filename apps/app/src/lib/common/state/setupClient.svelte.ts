@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
-export type SetupStage = "installation" | "device" | "ready";
+export type SetupStage = "installation" | "device" | "ready" | "unavailable";
 
 export async function getSetupStage(): Promise<SetupStage> {
   if (!isTauri()) {
