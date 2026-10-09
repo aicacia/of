@@ -47,7 +47,7 @@ impl NodeJoinRequest {
         Ok(())
     }
 
-    pub(crate) fn validate(&self) -> io::Result<()> {
+    pub fn validate(&self) -> io::Result<()> {
         let endpoint: EndpointId = self.endpoint_id.parse().map_err(io::Error::other)?;
         let peer: EndpointId = self.approving_peer.parse().map_err(io::Error::other)?;
         let key_id: Id = self.public_signer.kid.parse().map_err(io::Error::other)?;
@@ -180,6 +180,15 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             return Err(invalid("local independent signer does not match approval"));
         }
         persist_exact(&self.data_dir.join("node-join-approval.json"), approval)
+    }
+
+    pub fn node_join_request(&self) -> io::Result<Option<NodeJoinRequest>> {
+        let request: Option<NodeJoinRequest> =
+            read_optional(&self.data_dir.join("node-join-request.json"))?;
+        if let Some(request) = &request {
+            request.validate()?;
+        }
+        Ok(request)
     }
 
     pub fn node_join_approval(&self) -> io::Result<Option<NodeJoinApproval>> {

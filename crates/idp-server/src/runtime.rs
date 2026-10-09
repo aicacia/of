@@ -17,7 +17,7 @@ use iroh_chain::Server;
 use management_service::{DeviceRepo, HostedControlPlane, LocalPermissions, replica::DbDeviceRepo};
 
 use crate::{
-    AppConfig, BootstrapProtocolHandler, DeviceIdentity, RouterState,
+    AppConfig, BootstrapProtocolHandler, DeviceIdentity, PairingAcceptanceController, RouterState,
     TimedPairingAcceptanceController, bootstrap::BOOTSTRAP_ALPN, router::openapi_router,
 };
 
@@ -32,6 +32,31 @@ pub struct IdpRuntime {
 }
 
 impl IdpRuntime {
+    pub async fn authorize_node_join_approver(
+        &self,
+        bearer: &str,
+    ) -> io::Result<idp_model::model::Id> {
+        self.join_state.authorize_node_join_approver(bearer).await
+    }
+
+    pub async fn node_join_accepting(
+        &self,
+        bearer: &str,
+        accepting: Option<bool>,
+    ) -> io::Result<bool> {
+        self.authorize_node_join_approver(bearer).await?;
+        if let Some(accepting) = accepting {
+            self.join_state
+                .pairing_acceptance
+                .set_pairing_accepting(accepting)
+                .map_err(io::Error::other)?;
+        }
+        self.join_state
+            .pairing_acceptance
+            .pairing_accepting()
+            .map_err(io::Error::other)
+    }
+
     pub async fn approve_node_join(
         &self,
         offer: &iroh_chain::PairingOffer,

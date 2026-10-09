@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import type {
   DeviceEnrollment,
   DeviceInfo,
@@ -7,6 +8,47 @@ import { getOidcClient } from "./oidc.svelte";
 import { getIdpApiUrl, idpApi } from "./idpClient.svelte";
 
 export type { DeviceEnrollment, DeviceInfo, DeviceState };
+
+export interface PendingNodeJoin {
+  offer_id: string;
+  authenticated_endpoint: string;
+  request: {
+    installation: string;
+    member_id: string;
+    endpoint_id: string;
+    approving_peer: string;
+    name: string;
+    public_signer: Record<string, unknown>;
+  };
+}
+
+function nodeJoinBearer(): string {
+  const token = getOidcClient()?.getStoredTokenResponse()?.access_token;
+  if (!token) throw new Error("Sign in to manage Node joining");
+  return token;
+}
+
+export function nodeJoinAccepting(accepting?: boolean): Promise<boolean> {
+  return invoke("node_join_accepting", { bearer: nodeJoinBearer(), accepting });
+}
+
+export function pendingNodeJoins(): Promise<PendingNodeJoin[]> {
+  return invoke("pending_node_joins", { bearer: nodeJoinBearer() });
+}
+
+export function approvePendingNodeJoin(offerId: string): Promise<void> {
+  return invoke("approve_pending_node_join", {
+    bearer: nodeJoinBearer(),
+    offerId,
+  });
+}
+
+export function rejectPendingNodeJoin(offerId: string): Promise<void> {
+  return invoke("reject_pending_node_join", {
+    bearer: nodeJoinBearer(),
+    offerId,
+  });
+}
 
 export function listDevices(): Promise<DeviceInfo[]> {
   return idpApi.listDevices();

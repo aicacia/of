@@ -234,49 +234,6 @@ async fn interruption_boundary(complete: bool) {
     let request = provisioner
         .prepare_node_join(&binding, "Joining Node", source.endpoint().id())
         .expect("durable independent private signer");
-    let sending = tokio::spawn({
-        let joining = joining.clone();
-        let address = source.endpoint().addr();
-        let request = request.clone();
-        async move { request.send(&joining, address).await }
-    });
-    let offer = offers
-        .recv()
-        .await
-        .expect("real authenticated pairing offer");
-    assert!(
-        joining
-            .endpoint()
-            .connect(source.endpoint().addr(), idp_server::BOOTSTRAP_ALPN)
-            .await
-            .is_err(),
-        "no bootstrap admission before verified persisted receipt"
-    );
-    let approved = runtime
-        .approve_node_join(&offer, &bearer)
-        .await
-        .expect("purpose-specific authorized enrollment");
-    let received = sending
-        .await
-        .expect("pairing sender")
-        .expect("pinned peer signed reply");
-    assert_eq!(approved, received);
-    source_allowed.replace(
-        runtime
-            .approved_peer_ids()
-            .await
-            .expect("source admission restored only from real durable trust"),
-    );
-    provisioner
-        .record_node_join_approval(&received)
-        .expect("persist receipt");
-    provisioner
-        .record_node_join_approval(&received)
-        .expect("exact receipt retry");
-    assert!(
-        provisioner.verify_node_signer(&binding).await.is_err(),
-        "receipt is not local signer trust"
-    );
     let joining_idp = provisioner.node_join_database();
     let joining_policy = Arc::new(
         Database::open(joining_root.join("management.redb")).expect("joining policy owner"),
@@ -293,6 +250,71 @@ async fn interruption_boundary(complete: bool) {
         joining_root.join("security-staging"),
         CancellationToken::new(),
     );
+    // Minimal discovery has no resolver; authenticate the address before exercising the ID-only driver.
+    let address_connection = joining
+        .endpoint()
+        .connect(source.endpoint().addr(), iroh_chain::PAIRING_ALPN)
+        .await
+        .expect("learn authenticated source address");
+    assert!(
+        provisioner
+            .node_join_approval()
+            .expect("fresh receipt state")
+            .is_none()
+    );
+    let peer_id = source.endpoint().id().to_string();
+    let sending = async {
+        if complete {
+            protocol
+                .join_from_trusted_peer(&provisioner, "Joining Node", &peer_id)
+                .await
+        } else {
+            request.send(&joining, source.endpoint().addr()).await
+        }
+    };
+    let approving = async {
+        let offer = offers
+            .recv()
+            .await
+            .expect("driver sends actual authenticated offer without a persisted receipt");
+        assert!(
+            joining
+                .endpoint()
+                .connect(source.endpoint().addr(), idp_server::BOOTSTRAP_ALPN)
+                .await
+                .is_err(),
+            "no bootstrap admission before verified persisted receipt"
+        );
+        let approved = runtime
+            .approve_node_join(&offer, &bearer)
+            .await
+            .expect("purpose-specific authorized enrollment");
+        source_allowed.replace(
+            runtime
+                .approved_peer_ids()
+                .await
+                .expect("source admission restored from durable trust"),
+        );
+        // Retain the actual transport until the reply has reached the joining driver.
+        (approved, offer)
+    };
+    let (received, (approved, retained_offer)) = tokio::join!(sending, approving);
+    let received = received.expect("production driver or pinned peer signed reply");
+    assert_eq!(approved, received);
+    drop(retained_offer);
+    address_connection.close(0u32.into(), b"address learned");
+    provisioner
+        .record_node_join_approval(&received)
+        .expect("persist or retry receipt");
+    provisioner
+        .record_node_join_approval(&received)
+        .expect("exact receipt retry");
+    if !complete {
+        assert!(
+            provisioner.verify_node_signer(&binding).await.is_err(),
+            "receipt is not local signer trust"
+        );
+    }
     assert!(
         joining
             .endpoint()

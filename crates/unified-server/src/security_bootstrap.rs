@@ -480,14 +480,17 @@ impl SecurityProtocol {
     }
 
     async fn check_join_context_grants(&self, approval: &NodeJoinApproval) -> io::Result<()> {
+        self.check_public_context_grants(approval.owner_subject)
+            .await
+    }
+
+    async fn check_public_context_grants(&self, owner: Id) -> io::Result<()> {
         for context in [SecurityContext::Idp, SecurityContext::Management] {
             let (action, resource) = context.permission();
             if !LocalPermissions::new(self.management.clone())
                 .evaluate(&PermissionEvaluationRequest {
                     request_id: Id::now_v7(),
-                    subject: PermissionSubject::User {
-                        id: approval.owner_subject,
-                    },
+                    subject: PermissionSubject::User { id: owner },
                     action,
                     target: PermissionTarget::Installation { resource },
                 })
@@ -509,11 +512,59 @@ impl SecurityProtocol {
         owner.record_node_join_stage(NodeJoinStage::PublicReady)
     }
 
+    pub async fn local_node_public_ready<P: PrivateKeyRepo + Send + Sync>(
+        &self,
+        owner: &OwnerProvisioner<P>,
+    ) -> io::Result<bool> {
+        if owner.node_join_request()?.is_some() || owner.node_join_approval()?.is_some() {
+            return self.node_join_public_ready(owner).await;
+        }
+        let check = async {
+            if self.cancellation.is_cancelled()
+                || !Arc::ptr_eq(&self.idp, &owner.node_join_database())
+            {
+                return Err(denied("current shared owner runtime is required"));
+            }
+            let binding = self
+                .binding
+                .as_ref()
+                .ok_or_else(|| denied("local signer binding is required"))?;
+            owner.verify_node_signer(binding).await?;
+            for context in [SecurityContext::Idp, SecurityContext::Management] {
+                let local = self.local_handshake(context).await?;
+                if local.member != binding.member_id {
+                    return Err(denied("local member binding changed"));
+                }
+            }
+            let device = DbDeviceRepo::new(self.idp.clone())
+                .find_approved_by_public_key(&self.server.endpoint().id().to_string())
+                .await
+                .map_err(denied)?
+                .ok_or_else(|| denied("local Device is not approved"))?;
+            let subject: Id = device.owner_subject.parse().map_err(denied)?;
+            if device.id != binding.member_id
+                || subject.is_nil()
+                || DbUserRepo::new(self.idp.clone(), PasswordConfig::default())
+                    .find_user_by_id(subject)
+                    .await
+                    .map_err(denied)?
+                    .is_none()
+            {
+                return Err(denied("local Device requires its active owner"));
+            }
+            self.check_public_context_grants(subject).await
+        }
+        .await;
+        Ok(check.is_ok())
+    }
+
     pub async fn node_join_public_ready<P: PrivateKeyRepo + Send + Sync>(
         &self,
         owner: &OwnerProvisioner<P>,
     ) -> io::Result<bool> {
-        if !owner.node_join_stage_recorded(NodeJoinStage::PublicReady)? {
+        if owner.node_join_approval()?.is_none()
+            || !owner.node_join_stage_recorded(NodeJoinStage::PublicReady)?
+        {
             return Ok(false);
         }
         Ok(self.verify_node_join_public_readiness(owner).await.is_ok())

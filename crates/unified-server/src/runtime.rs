@@ -1,16 +1,26 @@
-use std::{fs, io, path::Path, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, fs, io, path::Path, sync::Arc, time::Duration};
 
 use api::serve_listener;
 use axum::Router;
 use db::Database;
-use idp_server::{IdpRuntime, build_runtime as build_idp_runtime};
+use idp_model::model::Id;
+use idp_server::{
+    IdpRuntime, NodeJoinApproval, NodeJoinRequest, OwnerProvisioner,
+    build_runtime as build_idp_runtime,
+};
 use iroh::protocol::Router as IrohRouter;
+use iroh_chain::PairingOffer;
 use management_service::{HostedControlPlane, LocalPermissions};
 use storage_server::{
     DeviceReplicationPolicy, IdpClient, LocalReplicationAuthorizer, ManagementClient,
     RouterState as StorageRouterState, StorageRuntime, build_runtime as build_storage_runtime,
 };
-use tokio::{net::TcpListener, task::JoinHandle, time::sleep};
+use tokio::{
+    net::TcpListener,
+    sync::{Mutex, broadcast},
+    task::JoinHandle,
+    time::sleep,
+};
 use tokio_util::sync::CancellationToken;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
 
@@ -51,6 +61,12 @@ fn owner_replication_authorizer(
     })
 }
 
+struct PendingNodeJoins {
+    receiver: broadcast::Receiver<PairingOffer>,
+    offers: BTreeMap<Id, PairingOffer>,
+    answered: Vec<PairingOffer>,
+}
+
 pub struct UnifiedRuntime {
     listener: Option<TcpListener>,
     listener_addr: std::net::SocketAddr,
@@ -63,6 +79,11 @@ pub struct UnifiedRuntime {
     cancellation_token: CancellationToken,
     peer_refresh: Option<JoinHandle<()>>,
     security_protocol: SecurityProtocol,
+    owner: OwnerProvisioner,
+    pending_joins: Mutex<PendingNodeJoins>,
+    installation: String,
+    #[cfg(test)]
+    management_fixture: Arc<Database>,
 }
 
 impl UnifiedRuntime {
@@ -91,6 +112,11 @@ impl UnifiedRuntime {
         let endpoint =
             Arc::new(UnifiedEndpoint::open(&config.endpoint_data_dir, &config.idp).await?);
         let server = endpoint.server().clone();
+        let pending_joins = Mutex::new(PendingNodeJoins {
+            receiver: server.subscribe_pairing_offers(),
+            offers: BTreeMap::new(),
+            answered: Vec::new(),
+        });
 
         let management_engine =
             open_service_engine(&config.management.data_dir, "management.redb")?;
@@ -207,10 +233,11 @@ impl UnifiedRuntime {
             cancellation_token.clone(),
         )?;
 
+        let owner = OwnerProvisioner::from_database(&idp_config, Arc::clone(&idp_engine))?;
         let security_protocol = SecurityProtocol::new(
             server.clone(),
             idp_engine,
-            management_engine,
+            Arc::clone(&management_engine),
             idp_config.oauth2.issuer.clone(),
             idp_config.oauth2.local_signer.clone(),
             Path::new(&config.endpoint_data_dir).join("security-sync-staging"),
@@ -246,7 +273,137 @@ impl UnifiedRuntime {
             cancellation_token,
             peer_refresh: None,
             security_protocol,
+            owner,
+            pending_joins,
+            installation: idp_config.oauth2.issuer.clone(),
+            #[cfg(test)]
+            management_fixture: management_engine,
         })
+    }
+
+    pub async fn node_public_ready(&self) -> io::Result<bool> {
+        self.security_protocol
+            .local_node_public_ready(&self.owner)
+            .await
+    }
+
+    pub async fn node_join_public_ready(&self) -> io::Result<bool> {
+        self.security_protocol
+            .node_join_public_ready(&self.owner)
+            .await
+    }
+
+    pub async fn node_join_accepting(
+        &self,
+        bearer: &str,
+        accepting: Option<bool>,
+    ) -> io::Result<bool> {
+        if self.cancellation_token.is_cancelled() {
+            return Err(io::Error::other("runtime is shutting down"));
+        }
+        let mut pending = self.pending_joins.lock().await;
+        let accepting = self
+            .idp_runtime
+            .node_join_accepting(bearer, accepting)
+            .await?;
+        if !accepting {
+            pending.offers.clear();
+            while let Ok(_) | Err(broadcast::error::TryRecvError::Lagged(_)) =
+                pending.receiver.try_recv()
+            {}
+        }
+        Ok(accepting)
+    }
+
+    fn display_node_join(&self, offer: &PairingOffer) -> io::Result<NodeJoinRequest> {
+        let request: NodeJoinRequest = serde_json::from_slice(&offer.payload)?;
+        request.validate()?;
+        if request.installation != self.installation
+            || request.approving_peer != self.endpoint_id().to_string()
+            || request.endpoint_id != offer.remote_id.to_string()
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "join Installation or authenticated endpoint mismatch",
+            ));
+        }
+        Ok(request)
+    }
+
+    pub async fn pending_node_joins(&self, bearer: &str) -> io::Result<serde_json::Value> {
+        self.idp_runtime
+            .authorize_node_join_approver(bearer)
+            .await?;
+        let mut pending = self.pending_joins.lock().await;
+        loop {
+            match pending.receiver.try_recv() {
+                Ok(offer) => {
+                    if self.display_node_join(&offer).is_ok()
+                        && self.endpoint.server().pairing_enabled()
+                    {
+                        pending.offers.insert(Id::now_v7(), offer);
+                    }
+                }
+                Err(broadcast::error::TryRecvError::Lagged(_)) => continue,
+                Err(_) => break,
+            }
+        }
+        if !self.endpoint.server().pairing_enabled() || self.cancellation_token.is_cancelled() {
+            pending.offers.clear();
+        }
+        let mut display = Vec::new();
+        for (id, offer) in &pending.offers {
+            display.push(serde_json::json!({"offer_id": id, "authenticated_endpoint": offer.remote_id.to_string(), "request": self.display_node_join(offer)?}));
+        }
+        Ok(serde_json::json!(display))
+    }
+
+    pub async fn approve_pending_node_join(
+        &self,
+        bearer: &str,
+        id: Id,
+    ) -> io::Result<NodeJoinApproval> {
+        let mut pending = self.pending_joins.lock().await;
+        if self.cancellation_token.is_cancelled() || !self.endpoint.server().pairing_enabled() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "pairing acceptance has ended",
+            ));
+        }
+        let offer = pending.offers.get(&id).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                "pending authenticated offer is unavailable",
+            )
+        })?;
+        self.display_node_join(offer)?;
+        let approval = self.idp_runtime.approve_node_join(offer, bearer).await?;
+        // reply finishes the stream but does not await delivery; retain its connection until shutdown.
+        let answered = pending
+            .offers
+            .remove(&id)
+            .expect("approved offer remains under the pending lock");
+        pending.answered.push(answered);
+        self.endpoint
+            .refresh_approved_peers(&self.idp_runtime)
+            .await?;
+        Ok(approval)
+    }
+
+    pub async fn reject_pending_node_join(&self, bearer: &str, id: Id) -> io::Result<()> {
+        self.idp_runtime
+            .authorize_node_join_approver(bearer)
+            .await?;
+        let mut pending = self.pending_joins.lock().await;
+        let offer = pending.offers.remove(&id).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                "pending authenticated offer is unavailable",
+            )
+        })?;
+        let result = offer.reply(b"").await;
+        pending.answered.push(offer);
+        result
     }
 
     pub async fn synchronize_security(
@@ -332,6 +489,9 @@ impl UnifiedRuntime {
 
     pub async fn shutdown(mut self) -> io::Result<()> {
         self.cancellation_token.cancel();
+        self.endpoint.server().set_pairing_enabled(false);
+        self.pending_joins.get_mut().offers.clear();
+        self.pending_joins.get_mut().answered.clear();
         let mut shutdown_error = None;
         if let Some(peer_refresh) = self.peer_refresh.take()
             && let Err(error) = peer_refresh.await
@@ -897,13 +1057,76 @@ mod tests {
         let peer_binding =
             approve_test_peer(&root, &config.idp, approved_peer_id, device_only_peer).await;
         let persisted_idp_config = config.idp.clone();
+        let mut public_context_grant = None;
+        {
+            let owner = super::open_service_engine(&config.idp.data_dir, "idp.redb")
+                .expect("owner fixture");
+            owner
+                .client()
+                .translate_and_execute(
+                    &format!(
+                        "UPDATE devices SET owner_subject = '{}'",
+                        fixture.administrator
+                    ),
+                    &db::SqlTranslator,
+                )
+                .await
+                .expect("bind real active fixture owner");
+            let policy = super::open_service_engine(&config.management.data_dir, "management.redb")
+                .expect("policy fixture");
+            let service = management_service::ManagementService::new(
+                management_service::replica::DbPermissionRepo::new(policy.clone()),
+                management_service::replica::DbRoleRepo::new(policy),
+            );
+            let role = service
+                .create_role(
+                    idp_model::contract::INSTALLATION_POLICY_ID,
+                    "Node approval and public contexts",
+                    None,
+                )
+                .await
+                .expect("explicit test role");
+            service
+                .add_role_to_user(
+                    idp_model::contract::INSTALLATION_POLICY_ID,
+                    fixture.administrator,
+                    role.id,
+                )
+                .await
+                .expect("explicit User grant");
+            for action in [
+                idp_model::contract::IdentityAction::ReplicaSignersEnroll,
+                idp_model::contract::IdentityAction::IdpSecuritySync,
+                idp_model::contract::IdentityAction::ManagementSecuritySync,
+            ] {
+                let permission = service
+                    .create_permission(
+                        idp_model::contract::INSTALLATION_POLICY_ID,
+                        action.permission(),
+                        None,
+                    )
+                    .await
+                    .expect("exact permission");
+                service
+                    .add_permission_to_role(
+                        idp_model::contract::INSTALLATION_POLICY_ID,
+                        role.id,
+                        permission.id,
+                    )
+                    .await
+                    .expect("exact role permission");
+                if action == idp_model::contract::IdentityAction::IdpSecuritySync {
+                    public_context_grant = Some((role.id, permission.id));
+                }
+            }
+        }
         endpoint.close().await;
 
         let listener = TcpListener::bind(config.listen_addr)
             .await
             .expect("bind host-owned unified listener");
         let api_base = loopback_base(listener.local_addr().expect("read host listener address"));
-        let runtime = UnifiedRuntime::build_on_listener(config, listener, api_base)
+        let mut runtime = UnifiedRuntime::build_on_listener(config, listener, api_base)
             .await
             .expect("build unified runtime on host-owned listener");
         assert_eq!(runtime.endpoint_id(), endpoint_id);
@@ -967,7 +1190,15 @@ mod tests {
 
         let cancellation_token = runtime.cancellation_token();
         let server_address = runtime.local_addr();
-        let serve_task = tokio::spawn(runtime.serve());
+        let serve_task = tokio::spawn(api::serve_listener(
+            runtime.router(),
+            runtime.take_listener().expect("host listener"),
+            cancellation_token.clone(),
+        ));
+        runtime
+            .start_background_tasks()
+            .await
+            .expect("start composed runtime tasks");
         let client = reqwest::Client::new();
         for path in ["/idp/health", "/management/health", "/storage/health"] {
             let response = client
@@ -986,6 +1217,221 @@ mod tests {
             .await
             .expect("request live Management route with legacy header only");
         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+
+        let bearer = crate::permission_http_tests::user_token(
+            &client,
+            &format!("http://{server_address}"),
+            "administrator",
+            "idp-services",
+        )
+        .await;
+        assert!(
+            runtime
+                .node_public_ready()
+                .await
+                .expect("current initial Node readiness")
+        );
+        assert!(
+            !runtime
+                .node_join_public_ready()
+                .await
+                .expect("initial Node has no join receipt")
+        );
+        assert!(
+            runtime
+                .node_join_accepting("forged", Some(true))
+                .await
+                .is_err()
+        );
+        assert!(runtime.pending_node_joins("forged").await.is_err());
+        let ordinary = crate::permission_http_tests::user_token(
+            &client,
+            &format!("http://{server_address}"),
+            "unassigned",
+            "idp-services",
+        )
+        .await;
+        assert!(
+            runtime
+                .node_join_accepting(&ordinary, Some(true))
+                .await
+                .is_err(),
+            "ordinary authentication cannot authorize joining"
+        );
+        assert!(runtime.pending_node_joins(&ordinary).await.is_err());
+        assert!(
+            runtime
+                .node_join_accepting(&bearer, Some(true))
+                .await
+                .expect("authorized pairing acceptance")
+        );
+        let joining_config = idp_server::AppConfig {
+            data_dir: root.join("joining-idp").to_string_lossy().into_owned(),
+            oauth2: idp_service::oauth2::OAuth2Config {
+                issuer: issuer.clone(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let joining = iroh_chain::Server::bind(
+            iroh::endpoint::presets::Minimal,
+            iroh_chain::EndpointIdStore::default(),
+        )
+        .await
+        .expect("independent joining endpoint");
+        joining.set_pairing_enabled(true);
+        let joining_owner = idp_server::OwnerProvisioner::open(&joining_config)
+            .await
+            .expect("joining owner");
+        let request = joining_owner
+            .prepare_node_join(
+                &idp_service::oauth2::NodeSignerBinding {
+                    member_id: idp_model::model::Id::now_v7(),
+                    key_id: idp_model::model::Id::now_v7(),
+                    endpoint_id: joining.endpoint().id().to_string(),
+                },
+                "Pending equal Node",
+                runtime.endpoint_id(),
+            )
+            .expect("independent joining signer");
+        let sending = tokio::spawn({
+            let joining = joining.clone();
+            let address = runtime.endpoint.server().endpoint().addr();
+            let request = request.clone();
+            async move { request.send(&joining, address).await }
+        });
+        let pending = tokio::time::timeout(std::time::Duration::from_secs(20), async {
+            loop {
+                let offers = runtime
+                    .pending_node_joins(&bearer)
+                    .await
+                    .expect("authorized pending display");
+                if !offers.as_array().expect("display list").is_empty() {
+                    break offers;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("authenticated offer arrives");
+        assert_eq!(
+            pending[0]["authenticated_endpoint"],
+            joining.endpoint().id().to_string()
+        );
+        assert_eq!(
+            pending[0]["request"],
+            serde_json::to_value(&request).expect("display exact request")
+        );
+        let offer_id = pending[0]["offer_id"]
+            .as_str()
+            .expect("opaque offer ID")
+            .parse()
+            .expect("offer UUID");
+        assert!(
+            runtime
+                .approve_pending_node_join("forged", offer_id)
+                .await
+                .is_err()
+        );
+        assert!(
+            runtime
+                .approve_pending_node_join(&ordinary, offer_id)
+                .await
+                .is_err()
+        );
+        assert!(
+            runtime
+                .reject_pending_node_join(&ordinary, offer_id)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            runtime
+                .pending_node_joins(&bearer)
+                .await
+                .expect("failed auth preserves offer"),
+            pending
+        );
+        let approval = runtime
+            .approve_pending_node_join(&bearer, offer_id)
+            .await
+            .expect("authorized approval of retained transport offer");
+        assert_eq!(
+            sending.await.expect("sender task").expect("signed reply"),
+            approval
+        );
+        assert!(
+            runtime
+                .endpoint
+                .server()
+                .peers()
+                .contains(joining.endpoint().id()),
+            "approval refreshes admission immediately"
+        );
+        assert!(
+            runtime
+                .pending_node_joins(&bearer)
+                .await
+                .expect("consumed pending list")
+                .as_array()
+                .expect("list")
+                .is_empty()
+        );
+        assert!(
+            runtime
+                .approve_pending_node_join(&bearer, offer_id)
+                .await
+                .is_err(),
+            "no replay of consumed offer"
+        );
+        let rejected_sender = tokio::spawn({
+            let joining = joining.clone();
+            let address = runtime.endpoint.server().endpoint().addr();
+            async move { request.send(&joining, address).await }
+        });
+        let rejected_id: idp_model::model::Id =
+            tokio::time::timeout(std::time::Duration::from_secs(20), async {
+                loop {
+                    let pending = runtime
+                        .pending_node_joins(&bearer)
+                        .await
+                        .expect("rejection display");
+                    if let Some(id) = pending[0]["offer_id"].as_str() {
+                        break id.parse().expect("retained rejection offer ID");
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .expect("rejection offer arrives");
+        runtime
+            .reject_pending_node_join(&bearer, rejected_id)
+            .await
+            .expect("authorized rejection");
+        assert!(
+            rejected_sender
+                .await
+                .expect("rejected sender task")
+                .is_err(),
+            "rejection cannot produce an approval receipt"
+        );
+        assert!(
+            runtime
+                .pending_node_joins(&bearer)
+                .await
+                .expect("rejected offers removed")
+                .as_array()
+                .expect("list")
+                .is_empty()
+        );
+        assert!(
+            !runtime
+                .node_join_accepting(&bearer, Some(false))
+                .await
+                .expect("disable acceptance")
+        );
+        joining.close().await;
+        drop(joining_owner);
 
         let management_idp_token = issue_client_token(
             &client,
@@ -1070,11 +1516,48 @@ mod tests {
             }
         }
 
+        let policy = runtime.management_fixture.clone();
+        let service = management_service::ManagementService::new(
+            management_service::replica::DbPermissionRepo::new(policy.clone()),
+            management_service::replica::DbRoleRepo::new(policy),
+        );
+        let (role_id, permission_id) = public_context_grant.expect("exact context grant");
+        service
+            .remove_permission_from_role(
+                idp_model::contract::INSTALLATION_POLICY_ID,
+                role_id,
+                permission_id,
+            )
+            .await
+            .expect("learn context permission removal");
+        assert!(
+            !runtime
+                .node_public_ready()
+                .await
+                .expect("live current grant readiness"),
+            "old completion cannot override learned grant denial"
+        );
+        service
+            .add_permission_to_role(
+                idp_model::contract::INSTALLATION_POLICY_ID,
+                role_id,
+                permission_id,
+            )
+            .await
+            .expect("authorized grant restoration");
+        assert!(
+            runtime
+                .node_public_ready()
+                .await
+                .expect("live restored grant readiness")
+        );
+
         cancellation_token.cancel();
         serve_task
             .await
             .expect("join unified server")
             .expect("serve and stop unified runtime");
+        runtime.shutdown().await.expect("close shared runtime");
         let restored_endpoint =
             crate::UnifiedEndpoint::open(&root.join("endpoint"), &persisted_idp_config)
                 .await
