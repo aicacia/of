@@ -171,7 +171,14 @@ impl IdpClient {
             })
             .send()
             .await
-            .map_err(|_| IdpIntrospectionError::ServiceUnavailable)?;
+            .map_err(|error| {
+                log::warn!(
+                    "IdP introspection transport failed (timeout={}): {}",
+                    error.is_timeout(),
+                    error.without_url()
+                );
+                IdpIntrospectionError::ServiceUnavailable
+            })?;
         if !response.status().is_success() {
             return Err(match response.status().as_u16() {
                 401 => IdpIntrospectionError::InvalidToken,

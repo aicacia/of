@@ -503,6 +503,8 @@ impl<A: StorageSocketAuthorizer> StorageSocketAuthorizer for GatedAuthorizer<A> 
     ) -> Result<StorageSocketAccess<Self::Session>, StorageSocketAuthorizationError> {
         let access = self.actual.authorize(token, resource).await?;
         Ok(StorageSocketAccess {
+            subject: access.subject,
+            application_id: access.application_id,
             read: access.read,
             write: access.write,
             expires_at: access.expires_at,

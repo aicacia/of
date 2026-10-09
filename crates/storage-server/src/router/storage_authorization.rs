@@ -99,13 +99,15 @@ impl StorageSocketAuthorizer for ScopedFileSystemSocketAuthorizer {
             .parse::<Id>()
             .map_err(|_| StorageSocketAuthorizationError::InvalidToken)?;
         let scope = StorageNamespace {
-            user_sub: authorization.subject,
+            user_sub: authorization.subject.clone(),
             application_id,
         };
         let session = ScopedStorageService::open_resource(&self.file_systems, scope, resource_id)
             .await
             .map_err(|_| StorageSocketAuthorizationError::InvalidToken)?;
         Ok(StorageSocketAccess {
+            subject: authorization.subject,
+            application_id: authorization.application_id,
             read: authorization.can_read,
             write: authorization.can_write,
             expires_at: authorization.expires_at,

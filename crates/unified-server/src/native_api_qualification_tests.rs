@@ -77,6 +77,34 @@ async fn native_catalog_response_denies_learned_application_reassignment_without
     }).await.expect("native namespace interleaving completes");
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn native_catalog_paused_local_introspection_timeout_returns_503_without_rollback() {
+    tokio::time::timeout(Duration::from_secs(120), async {
+        let gate = Gate::default();
+        let fixture = Fixture::with_catalog_gate(Gate::default(), Some(gate.clone())).await;
+        let token = fixture.token("storage:filesystems", vec![StorageAuthorizationAction::Write]).await;
+        let started = std::time::Instant::now();
+        let mut request = Box::pin(fixture.request(reqwest::Method::POST, "/storage/filesystems", &token));
+        tokio::select! {
+            response = &mut request => panic!("result returned before real response-time introspection: {}", response.status()),
+            () = gate.reached() => {}
+        }
+        assert_eq!(catalog_count(&fixture, "filesystems", &fixture.scope).await, 2, "authorized mutation completed before the paused local evaluation");
+        let response = request.await;
+        assert_eq!(response.status(), reqwest::StatusCode::SERVICE_UNAVAILABLE);
+        assert!(response.bytes().await.expect("safe denial body").is_empty());
+        let elapsed = started.elapsed();
+        assert!(elapsed >= Duration::from_secs(10), "existing HTTP request deadline, not token/policy denial: {elapsed:?}");
+        eprintln!("paused native introspection returned safe503 after {elapsed:?}; owner evaluation was still gated");
+        gate.release();
+        let current = storage_server::authorize_storage_token(&fixture.client, &token).await.expect("same bearer remains genuinely valid after the gate releases");
+        assert_eq!(current.subject, fixture.scope.user_sub);
+        assert_eq!(current.application_id, fixture.scope.application_id.to_string());
+        assert_eq!(catalog_count(&fixture, "filesystems", &fixture.scope).await, 2);
+        fixture.stop().await;
+    }).await.expect("native timeout diagnostic completes");
+}
+
 async fn catalog_count(fixture: &Fixture, kind: &str, scope: &super::StorageNamespace) -> usize {
     if kind == "databases" {
         fixture
@@ -281,6 +309,101 @@ async fn native_socket_device_restriction_preserves_bearer_response_and_next_ope
     })
     .await
     .expect("native Management/socket policy distinction completes");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn native_socket_response_binds_namespace_even_when_resource_id_exists_in_new_application() {
+    tokio::time::timeout(Duration::from_secs(120), async {
+        let gate = Gate::default();
+        let fixture = Fixture::new(gate.clone()).await;
+        let token = fixture
+            .token(
+                "storage:filesystems",
+                vec![
+                    StorageAuthorizationAction::Read,
+                    StorageAuthorizationAction::Write,
+                ],
+            )
+            .await;
+        let original = fixture.file().await;
+        original
+            .write("retained.txt", b"original namespace secret")
+            .await
+            .expect("original content");
+        let mut idle = fixture.socket(&token, false).await;
+        let mut socket = fixture.socket(&token, true).await;
+        super::send(
+            &mut socket,
+            StorageRequest::Read {
+                path: "retained.txt".into(),
+            },
+        )
+        .await;
+        gate.reached().await;
+        let other = reassign_application(&fixture).await;
+        let scope = super::StorageNamespace {
+            user_sub: fixture.scope.user_sub.clone(),
+            application_id: other,
+        };
+        fixture
+            .files
+            .register_selected_resource(&scope, fixture.resource)
+            .await
+            .expect("native resource projection in new namespace");
+        let current_file = fixture
+            .files
+            .open_resource(&scope, fixture.resource)
+            .await
+            .expect("same ID in genuinely distinct namespace");
+        current_file
+            .write("retained.txt", b"new namespace content")
+            .await
+            .expect("distinct namespace content");
+        let current = storage_server::authorize_storage_token(&fixture.client, &token)
+            .await
+            .expect("same signed bearer is valid in new Application");
+        assert_eq!(current.application_id, other.to_string());
+        gate.release();
+        super::assert_no_response(&mut socket).await;
+        assert_eq!(
+            original
+                .read("retained.txt")
+                .await
+                .expect("source retained"),
+            b"original namespace secret"
+        );
+        super::send(
+            &mut idle,
+            StorageRequest::Write {
+                path: "must-not-rebind.txt".into(),
+                content: b"denied".to_vec(),
+            },
+        )
+        .await;
+        super::assert_no_response(&mut idle).await;
+        assert!(current_file.read("must-not-rebind.txt").await.is_err());
+        assert!(original.read("must-not-rebind.txt").await.is_err());
+        drop(idle);
+        let mut fresh = fixture.socket(&token, false).await;
+        super::send(
+            &mut fresh,
+            StorageRequest::Read {
+                path: "retained.txt".into(),
+            },
+        )
+        .await;
+        assert_eq!(
+            super::response(&mut fresh).await,
+            StorageResponse::Read {
+                content: b"new namespace content".to_vec()
+            }
+        );
+        drop(fresh);
+        drop(socket);
+        fixture.stop().await;
+    })
+    .await
+    .expect("native overlapping-ID namespace boundary completes");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
