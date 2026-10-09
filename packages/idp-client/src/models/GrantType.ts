@@ -21,6 +21,8 @@ export const GrantType = {
     AuthorizationCode: "authorization_code",
     ClientCredentials: "client_credentials",
     RefreshToken: "refresh_token",
+    UrnIetfParamsOauthGrantTypeTokenExchange:
+        "urn:ietf:params:oauth:grant-type:token-exchange",
 } as const;
 export type GrantType = (typeof GrantType)[keyof typeof GrantType];
 

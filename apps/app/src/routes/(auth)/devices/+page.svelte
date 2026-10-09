@@ -1,37 +1,21 @@
 <script lang="ts">
     import { toDataURL } from "qrcode";
     import { onMount } from "svelte";
+    import DevicePolicy from "$lib/common/components/DevicePolicy.svelte";
 
-    import Modal from "$lib/common/components/Modal.svelte";
     import {
-        approveDevice,
         approvePendingNodeJoin,
         rejectPendingNodeJoin,
         pendingNodeJoins,
         nodeJoinAccepting,
         type PendingNodeJoin,
         type DeviceInfo,
-        getDeviceApprovalPayload,
-        getPairingAccepting,
         listDevices,
-        requestDevicePairing,
         renameDevice,
         revokeDevice,
     } from "$lib/common/state/devices.svelte";
     import { idpApi } from "$lib/common/state/idpClient.svelte";
     import { notifications } from "$lib/common/state/notifications.svelte";
-
-    interface BarcodeDetectorResult {
-        rawValue?: string;
-    }
-
-    interface BarcodeDetector {
-        detect(source: ImageBitmapSource): Promise<BarcodeDetectorResult[]>;
-    }
-
-    interface BarcodeDetectorConstructor {
-        new (options?: { formats?: string[] }): BarcodeDetector;
-    }
 
     let nodeOffers = $state.raw<PendingNodeJoin[]>([]);
     let nodeAccepting = $state(false);
@@ -88,35 +72,13 @@
     let loading = $state(false);
     let error = $state<string | null>(null);
     let deviceEndpointId = $state<string | null>(null);
-    let pendingPrompt = $state<DeviceInfo | null>(null);
-    let editingId = $state<number | null>(null);
+    let editingId = $state<string | null>(null);
     let editingName = $state("");
     let publicIdQr = $state<string | null>(null);
-    let pairingAccepting = $state(false);
-    let manualPairingName = $state("");
-    let manualPublicKey = $state("");
-    let startingManualPairing = $state(false);
-    let scanning = $state(false);
-    let scannerVideo = $state<HTMLVideoElement | undefined>(undefined);
-    let scannerStream: MediaStream | null = null;
-    let scannerTimer: ReturnType<typeof setInterval> | null = null;
-    let addDeviceModal = $state<Modal>();
 
     const initialLoading = $derived(!error && loading && devices.length === 0);
     const empty = $derived(!error && !loading && devices.length === 0);
     const hasDevices = $derived(!error && devices.length > 0);
-    const localDeviceApproved = $derived(
-        devices.some(
-            (device) =>
-                device.state === "approved" &&
-                device.publicKey === deviceEndpointId,
-        ),
-    );
-
-    const supportsScanner = $derived(
-        typeof window !== "undefined" && "BarcodeDetector" in window,
-    );
-
     function formatTimestamp(value: number): string {
         return new Date(value * 1000).toLocaleString();
     }
@@ -131,20 +93,7 @@
         loading = true;
         error = null;
         try {
-            const [nextDevices, accepting] = await Promise.all([
-                listDevices(),
-                getPairingAccepting(),
-            ]);
-            pairingAccepting = accepting;
-            const newlyPending = nextDevices.find(
-                (device) =>
-                    device.state === "pending" &&
-                    !devices.some((current) => current.id === device.id),
-            );
-            devices = nextDevices;
-            if (localDeviceApproved) {
-                pendingPrompt ??= newlyPending ?? null;
-            }
+            devices = await listDevices();
         } catch (cause) {
             console.error(cause);
             error =
@@ -158,61 +107,10 @@
 
     async function onCopy(value: string, label: string) {
         try {
-            pairingAccepting = await getPairingAccepting(true);
             await navigator.clipboard.writeText(value);
             notifications.add(`${label} copied`, "success");
         } catch {
             notifications.add(`Could not copy ${label.toLowerCase()}`, "error");
-        }
-    }
-
-    async function onSetPairingAccepting(accepting: boolean) {
-        try {
-            pairingAccepting = await getPairingAccepting(accepting);
-        } catch {
-            notifications.add("Could not update pairing mode", "error");
-        }
-    }
-
-    async function onStartManualPairing(event: SubmitEvent) {
-        event.preventDefault();
-        const publicKey = manualPublicKey.trim();
-        if (!manualPairingName.trim() || !publicKey) {
-            return;
-        }
-        startingManualPairing = true;
-        try {
-            const device = await idpApi.device();
-            await requestDevicePairing(
-                manualPairingName.trim(),
-                device.publicKey,
-                device.address,
-                publicKey,
-            );
-            addDeviceModal?.close();
-            notifications.add("Pairing request sent for approval", "success");
-            await loadDevices();
-        } catch (cause) {
-            console.error(cause);
-            notifications.add("Failed to start pairing", "error");
-        } finally {
-            startingManualPairing = false;
-        }
-    }
-
-    async function onApprove(device: DeviceInfo) {
-        try {
-            const payload = await getDeviceApprovalPayload(device.id);
-            const { signature } = await idpApi.signDeviceMessage({
-                signDeviceMessage: { message: payload },
-            });
-            await approveDevice(device.id, signature);
-            pendingPrompt = null;
-            notifications.add("Device approved", "success");
-            await loadDevices();
-        } catch (cause) {
-            console.error(cause);
-            notifications.add("Failed to approve device", "error");
         }
     }
 
@@ -254,54 +152,6 @@
         }
     }
 
-    function stopScanner() {
-        if (scannerTimer) {
-            clearInterval(scannerTimer);
-            scannerTimer = null;
-        }
-        scannerStream?.getTracks().forEach((track) => {
-            track.stop();
-        });
-        scannerStream = null;
-        scanning = false;
-    }
-
-    async function onStartScanner() {
-        const BarcodeDetector = (
-            window as typeof window & {
-                BarcodeDetector?: BarcodeDetectorConstructor;
-            }
-        ).BarcodeDetector;
-        const video = scannerVideo;
-        if (!BarcodeDetector || !video) {
-            return;
-        }
-
-        try {
-            const detector = new BarcodeDetector({ formats: ["qr_code"] });
-            scannerStream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment" },
-            });
-            video.srcObject = scannerStream;
-            await video.play();
-            scanning = true;
-            scannerTimer = setInterval(() => {
-                void detector.detect(video).then((codes) => {
-                    const value = codes[0]?.rawValue;
-                    if (!value) {
-                        return;
-                    }
-                    manualPublicKey = value;
-                    stopScanner();
-                });
-            }, 500);
-        } catch (cause) {
-            console.error(cause);
-            stopScanner();
-            notifications.add("Could not start the QR scanner", "error");
-        }
-    }
-
     onMount(() => {
         void idpApi
             .device()
@@ -318,7 +168,6 @@
         }, 5000);
         return () => {
             clearInterval(timer);
-            stopScanner();
         };
     });
 </script>
@@ -329,17 +178,14 @@
         <div class="flex gap-2">
             <button
                 type="button"
-                class="btn primary"
-                onclick={() => addDeviceModal?.show()}>Add device</button
-            >
-            <button
-                type="button"
                 class="btn secondary"
                 onclick={() => void loadDevices()}
                 disabled={loading}>Refresh</button
             >
         </div>
     </div>
+
+    <DevicePolicy {devices} />
 
     <section class="flex flex-col gap-2" aria-labelledby="node-joining-heading">
         <h2 id="node-joining-heading">Equal-Node joining</h2>
@@ -404,109 +250,27 @@
         {/each}
     </section>
 
-    <Modal bind:this={addDeviceModal} title="Add device">
-        {#if supportsScanner}
-            <p class="mb-0">
-                Scan a device QR code or paste its public ID or endpoint
-                address.
-            </p>
-            <video
-                class="max-w-full"
-                style:display={scanning ? "block" : "none"}
-                bind:this={scannerVideo}
-                muted
-                playsinline
-            ></video>
-            {#if scanning}
-                <button
-                    type="button"
-                    class="btn secondary"
-                    onclick={stopScanner}>Stop scanner</button
-                >
-            {:else}
-                <button
-                    type="button"
-                    class="btn primary"
-                    onclick={() => void onStartScanner()}>Scan device QR</button
-                >
-            {/if}
-        {/if}
-
-        <form class="flex flex-col gap-2" onsubmit={onStartManualPairing}>
-            <p class="mb-0">
-                The other device must be online and accepting join requests.
-            </p>
-            <label class="flex flex-col gap-1">
-                <span>Device name</span>
-                <input bind:value={manualPairingName} type="text" required />
-            </label>
-            <label class="flex flex-col gap-1">
-                <span>Public ID or endpoint address</span>
-                <input bind:value={manualPublicKey} type="text" required />
-            </label>
+    {#if deviceEndpointId}
+        <section class="card flex flex-col gap-3">
+            <h2>Local Node endpoint</h2>
+            <code class="break-all">{deviceEndpointId}</code>
             <button
-                type="submit"
-                class="btn secondary self-start"
-                disabled={startingManualPairing}
-                >{startingManualPairing
-                    ? "Starting pairing..."
-                    : "Start pairing"}</button
-            >
-        </form>
-    </Modal>
-
-    {#if localDeviceApproved}
-        <div class="card secondary flex flex-col gap-3">
-            <h2 class="mb-0 text-2xl">Pair another device</h2>
-            <p class="mb-0">
-                Turn on join requests before sharing this device's public ID.
-            </p>
-            <button
-                type="button"
-                class="btn secondary self-start"
-                onclick={() => void onSetPairingAccepting(!pairingAccepting)}
-                >{pairingAccepting
-                    ? "Stop accepting join requests"
-                    : "Accept join requests"}</button
-            >
-            <code class="break-all select-all">{deviceEndpointId}</code>
-            <button
-                type="button"
-                class="btn secondary self-start"
+                class="btn secondary"
                 onclick={() =>
                     deviceEndpointId &&
-                    void onCopy(deviceEndpointId, "Public key")}
-                >Copy public ID and accept requests</button
+                    void onCopy(deviceEndpointId, "Endpoint ID")}
+                >Copy endpoint ID</button
             >
-            {#if publicIdQr}
-                <img
-                    class="h-64 w-64 self-start bg-white p-2"
+            {#if publicIdQr}<img
+                    class="h-64 w-64 bg-white p-2"
                     src={publicIdQr}
-                    alt="Device public ID QR code"
-                />
-            {/if}
-        </div>
-    {/if}
-
-    {#if pendingPrompt}
-        <div class="card secondary flex flex-col gap-3">
-            <h2 class="mb-0 text-2xl">Approve new device?</h2>
-            <p class="mb-0">{pendingPrompt.name} wants to join your devices.</p>
-            <div class="flex justify-end gap-2">
-                <button
-                    type="button"
-                    class="btn secondary"
-                    onclick={() => (pendingPrompt = null)}>Not now</button
-                >
-                <button
-                    type="button"
-                    class="btn primary"
-                    onclick={() =>
-                        pendingPrompt && void onApprove(pendingPrompt)}
-                    >Approve</button
-                >
-            </div>
-        </div>
+                    alt="Local Node endpoint QR code"
+                />{/if}
+            <p>
+                Use this endpoint on the joining Node. Enable equal-Node joining
+                above separately; copying does not open admission.
+            </p>
+        </section>
     {/if}
 
     {#if error}<div class="card border border-red-700 text-red-200">
@@ -579,15 +343,6 @@
                                                 onStartRename(device)}
                                             >Rename</button
                                         >
-                                        {#if localDeviceApproved && device.state === "pending"}
-                                            <button
-                                                type="button"
-                                                class="btn primary"
-                                                onclick={() =>
-                                                    (pendingPrompt = device)}
-                                                >Review</button
-                                            >
-                                        {/if}
                                         {#if deviceEndpointId !== null && device.publicKey !== deviceEndpointId}
                                             <button
                                                 type="button"

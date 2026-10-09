@@ -22,7 +22,7 @@ export interface UserApplicationRoleResponse {
     /**
      *
      */
-    applicationId: number;
+    applicationId: string;
     /**
      *
      */
@@ -34,7 +34,7 @@ export interface UserApplicationRoleResponse {
     /**
      *
      */
-    roleId: number;
+    roleId: string;
     /**
      *
      */

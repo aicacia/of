@@ -26,10 +26,13 @@
     import { afterSigninRedirect } from "$lib/common/state/afterSigninRedirect.svelte";
     import {
         ensureTauriIdpApiUrl,
-        idpApi,
+        passwordToken,
     } from "$lib/common/state/idpClient.svelte";
     import { notifications } from "$lib/common/state/notifications.svelte";
-    import { getOidcClient } from "$lib/common/state/oidc.svelte";
+    import {
+        ensureOidcClientId,
+        getOidcClient,
+    } from "$lib/common/state/oidc.svelte";
 
     const form = createForm(SignInSchema(), {
         username: "",
@@ -49,13 +52,11 @@
                 await ensureTauriIdpApiUrl();
             }
 
-            const token = await idpApi.token({
-                grantType: "password",
-                clientId: isTauri() ? "management-desktop" : "management-web",
-                username: output.username,
-                password: output.password,
-                scope: "openid profile email",
-            });
+            const token = await passwordToken(
+                await ensureOidcClientId(),
+                output.username,
+                output.password,
+            );
 
             getOidcClient().setToken({
                 token_type: token.tokenType,
@@ -73,7 +74,7 @@
         } catch (e) {
             console.error("Error during sign-in:", e);
             notifications.add(
-                `${m.errors_name_application()}: ${m.errors_message_internal()}`,
+                e instanceof Error ? e.message : m.errors_message_internal(),
             );
         }
     }

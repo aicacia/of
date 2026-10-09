@@ -22,7 +22,7 @@ export interface PermissionResponse {
     /**
      *
      */
-    applicationId: number;
+    applicationId: string;
     /**
      *
      */
@@ -34,7 +34,7 @@ export interface PermissionResponse {
     /**
      *
      */
-    id: number;
+    id: string;
     /**
      *
      */

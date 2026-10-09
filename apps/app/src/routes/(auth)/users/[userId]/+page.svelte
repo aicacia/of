@@ -1,16 +1,18 @@
 <script lang="ts">
-    import type {
-        UserApplicationRoleResponse,
-        UserConsentResponse,
-        UserInfo,
-    } from "@aicacia/management-client";
+    import type { UserApplicationRoleResponse } from "@aicacia/management-client";
+    import type { UserInfo } from "@aicacia/idp-client";
+    import { idpApi } from "$lib/common/state/idpClient.svelte";
+    import {
+        idpAdministration,
+        type Consent,
+    } from "$lib/common/state/idpAdministration";
     import { onMount } from "svelte";
     import { page } from "$app/state";
-    import { managementApi } from "$lib/common/state/lidpManagementClient.svelte";
+    import { managementApi } from "$lib/common/state/managementClient.svelte";
     import { notifications } from "$lib/common/state/notifications.svelte";
 
-    const parsedUserId = Number(page.params.userId);
-    const hasValidUserId = Number.isFinite(parsedUserId);
+    const parsedUserId = page.params.userId;
+    const hasValidUserId = Boolean(parsedUserId);
 
     let loading = $state(false);
     let error = $state<string | null>(null);
@@ -20,8 +22,8 @@
     let userRoles = $state<UserApplicationRoleResponse[]>([]);
     let consentsLoading = $state(false);
     let consentsError = $state<string | null>(null);
-    let consents = $state<UserConsentResponse[]>([]);
-    let revokingConsentId = $state<number | null>(null);
+    let consents = $state<Consent[]>([]);
+    let revokingConsentId = $state<string | null>(null);
 
     async function loadUserRoles() {
         if (!hasValidUserId) {
@@ -54,7 +56,7 @@
         consentsLoading = true;
         consentsError = null;
         try {
-            consents = await managementApi.listUserConsents({
+            consents = await idpAdministration.listConsents({
                 userId: parsedUserId,
                 offset: 0,
                 limit: 100,
@@ -84,7 +86,7 @@
         loading = true;
         error = null;
         try {
-            user = await managementApi.getUser({
+            user = await idpApi.getUser({
                 userId: parsedUserId,
             });
             void loadRelatedData();
@@ -98,18 +100,18 @@
         }
     }
 
-    async function onRevokeConsent(consent: UserConsentResponse) {
+    async function onRevokeConsent(consent: Consent) {
         if (!hasValidUserId) {
             return;
         }
 
-        if (!confirm(`Revoke consent for ${consent.clientId}?`)) {
+        if (!confirm(`Revoke consent for ${consent.client_id}?`)) {
             return;
         }
 
         revokingConsentId = consent.id;
         try {
-            await managementApi.revokeUserConsent({
+            await idpApi.revokeConsent({
                 userId: parsedUserId,
                 consentId: consent.id,
             });
@@ -234,13 +236,13 @@
                                         class="border-b border-gray-200 align-top last:border-b-0 dark:border-gray-800"
                                     >
                                         <td class="px-4 py-3"
-                                            >{consent.clientId}</td
+                                            >{consent.client_id}</td
                                         >
                                         <td class="px-4 py-3"
                                             >{consent.scope}</td
                                         >
                                         <td class="px-4 py-3 break-all"
-                                            >{consent.redirectUri}</td
+                                            >{consent.redirect_uri}</td
                                         >
                                         <td class="px-4 py-3">
                                             <button

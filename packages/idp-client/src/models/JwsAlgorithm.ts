@@ -21,6 +21,7 @@ export const JwsAlgorithm = {
     Rs384: "RS384",
     Rs512: "RS512",
     Es256: "ES256",
+    Es256K: "ES256K",
     Es384: "ES384",
     Es512: "ES512",
     Ps256: "PS256",

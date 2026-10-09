@@ -2,6 +2,9 @@ import {
   Configuration,
   type ConfigurationParameters,
   DefaultApi,
+  TokenResponseFromJSON,
+  SubjectTokenType,
+  TokenGrantTypeEnum,
 } from "@aicacia/idp-client";
 import { createStorage } from "@aicacia/svelte-headless";
 import { isTauri } from "@tauri-apps/api/core";
@@ -71,8 +74,8 @@ export const defaultConfigurationParameters: ConfigurationParameters = {
   get fetchApi() {
     return fetch;
   },
-  accessToken(_name, _scopes): string {
-    return readAccessToken();
+  async accessToken(_name, _scopes): Promise<string> {
+    return idpOwnerAccessToken();
   },
   get basePath(): string | undefined {
     return readBasePath();
@@ -85,6 +88,56 @@ export const lidpConfiguration = new Configuration(
 );
 
 export const idpApi = new DefaultApi(lidpConfiguration);
+
+export async function passwordToken(
+  clientId: string,
+  username: string,
+  password: string,
+) {
+  const base = await ensureTauriIdpApiUrl();
+  if (!base) throw new Error("An IdP endpoint is required");
+  const response = await fetch(`${base.replace(/\/$/, "")}/oauth2/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "password",
+      client_id: clientId,
+      username,
+      password,
+      scope: "openid profile email",
+    }),
+    redirect: "error",
+  });
+  if (!response.ok)
+    throw new Error(
+      `IdP sign-in rejected (${response.status}): ${await response.text()}`,
+    );
+  return TokenResponseFromJSON(await response.json());
+}
+
+export async function ownerAccessToken(resource: string): Promise<string> {
+  const base = await ensureTauriIdpApiUrl();
+  const subjectToken = readAccessToken();
+  if (!subjectToken) return "";
+  if (!base || (resource !== base && resource !== "idp-management"))
+    throw new Error("A current IdP or Management owner audience is required");
+  const owner = new DefaultApi(
+    new Configuration({ basePath: base, fetchApi: fetch }),
+  );
+  const token = await owner.token({
+    grantType: TokenGrantTypeEnum.UrnIetfParamsOauthGrantTypeTokenExchange,
+    subjectToken,
+    subjectTokenType: SubjectTokenType.UrnIetfParamsOauthTokenTypeAccessToken,
+    resource,
+  });
+  return token.accessToken;
+}
+
+export async function idpOwnerAccessToken(): Promise<string> {
+  const base = await ensureTauriIdpApiUrl();
+  if (!base) throw new Error("An IdP endpoint is required");
+  return ownerAccessToken(base);
+}
 
 export function setIdpApiUrl(newIdpApiUrl: string) {
   idpApiUrl.item = newIdpApiUrl;

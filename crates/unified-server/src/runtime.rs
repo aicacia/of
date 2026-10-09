@@ -1303,6 +1303,36 @@ mod tests {
             .await
             .expect("start composed runtime tasks");
         let client = reqwest::Client::new();
+        for (path, expected_server) in [
+            ("/idp/openapi.json", "https://idp.example/idp"),
+            (
+                "/management/openapi.json",
+                "https://management.example/management",
+            ),
+            ("/storage/openapi.json", "https://storage.example/storage"),
+        ] {
+            let openapi = get_json(&client, format!("http://{server_address}{path}")).await;
+            assert_eq!(openapi["servers"][0]["url"], expected_server, "{path}");
+            if !path.starts_with("/storage/")
+                && let Some(directory) = std::env::var_os("OF04_OPENAPI_OUTPUT")
+            {
+                let directory = std::path::PathBuf::from(directory);
+                std::fs::create_dir_all(&directory)
+                    .expect("create requested API snapshot directory");
+                let name = path.trim_start_matches('/').replace('/', "-");
+                std::fs::write(
+                    directory.join(name),
+                    serde_json::to_vec_pretty(&openapi)
+                        .expect("serialize live owner specification"),
+                )
+                .expect("export live owner specification");
+            }
+            if path.starts_with("/storage/") {
+                assert!(openapi["paths"].get("/databases").is_some());
+                assert!(openapi["paths"].get("/storage/databases").is_none());
+            }
+        }
+
         for path in ["/idp/health", "/management/health", "/storage/health"] {
             let response = client
                 .get(format!("http://{server_address}{path}"))
@@ -1603,21 +1633,6 @@ mod tests {
             idp_metadata["token_endpoint"],
             format!("{issuer}/oauth2/token")
         );
-        for (path, expected_server) in [
-            ("/idp/openapi.json", "https://idp.example/idp"),
-            (
-                "/management/openapi.json",
-                "https://management.example/management",
-            ),
-            ("/storage/openapi.json", "https://storage.example/storage"),
-        ] {
-            let openapi = get_json(&client, format!("http://{server_address}{path}")).await;
-            assert_eq!(openapi["servers"][0]["url"], expected_server, "{path}");
-            if path.starts_with("/storage/") {
-                assert!(openapi["paths"].get("/databases").is_some());
-                assert!(openapi["paths"].get("/storage/databases").is_none());
-            }
-        }
 
         let policy = runtime.management_fixture.clone();
         let service = management_service::ManagementService::new(

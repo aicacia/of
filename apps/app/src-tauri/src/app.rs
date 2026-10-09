@@ -175,8 +175,15 @@ pub async fn provision_initial_administrator(
     let idp = OwnerProvisioner::open(&idp_config)
         .await
         .map_err(|error| error.to_string())?;
+    idp.prepare_setup_client_slots(&setup_client_ids(&ids))
+        .await
+        .map_err(|error| error.to_string())?;
     let administrator_id = idp
         .ensure_initial_user(ids.administrator_id, ids.credential_id, &name, &password)
+        .await
+        .map_err(|error| error.to_string())?;
+
+    idp.ensure_initial_user_signing_key(administrator_id)
         .await
         .map_err(|error| error.to_string())?;
 
@@ -322,6 +329,7 @@ pub async fn join_installation(
             binding,
         )
         .await?;
+        owner.prepare_setup_client_slots(&setup_client_ids(&ids)).await?;
         protocol
             .join_from_trusted_peer(&owner, &name, &peer)
             .await?;
@@ -425,7 +433,8 @@ fn persist_setup_intent(directory: &Path, value: &Value) -> io::Result<()> {
                     "Node setup purpose or identity changed; explicit reset required",
                 ));
             }
-            return fs::File::open(directory)?.sync_all();
+            fs::File::open(directory)?.sync_all()?;
+            return reset::retain(directory);
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => (),
         Err(error) => return Err(error),
@@ -448,7 +457,8 @@ fn persist_setup_intent(directory: &Path, value: &Value) -> io::Result<()> {
         fs::File::open(directory)?.sync_all()
     })();
     let cleanup = fs::remove_file(temporary);
-    result.and(cleanup)
+    result.and(cleanup)?;
+    reset::retain(directory)
 }
 
 pub async fn restore_setup_listener(app_handle: &AppHandle<Wry>) -> io::Result<()> {
@@ -461,6 +471,16 @@ pub async fn restore_setup_listener(app_handle: &AppHandle<Wry>) -> io::Result<(
     crate::localhost_server::verify_localhost_server(&base_url).await
 }
 
+fn setup_client_ids(ids: &SetupIds) -> [Id; 5] {
+    [
+        ids.installation_id,
+        ids.management_to_idp_client_id,
+        ids.storage_to_idp_client_id,
+        ids.storage_to_management_client_id,
+        ids.idp_to_management_client_id,
+    ]
+}
+
 async fn provision_service_clients(
     idp: &OwnerProvisioner,
     ids: &SetupIds,
@@ -468,6 +488,7 @@ async fn provision_service_clients(
     idp_audience: &str,
     storage_audience: &str,
 ) -> io::Result<()> {
+    idp.ensure_desktop_client(ids.installation_id).await?;
     provision_service_client(
         idp,
         ids,
@@ -536,6 +557,8 @@ async fn provision_service_client(
     audience: &str,
     scopes: &[&str],
 ) -> io::Result<()> {
+    idp.begin_client_provisioning(&client_id.to_string())
+        .await?;
     let client_secret =
         service_secrets::ensure_secret(ids.installation_id, relationship, client_id).map_err(
             |error| {
@@ -554,6 +577,8 @@ async fn provision_service_client(
         scopes,
     ))
     .await?;
+    idp.ensure_client_signing_key(&client_id.to_string())
+        .await?;
     Ok(())
 }
 
@@ -1172,6 +1197,144 @@ pub async fn complete_device_setup(app_handle: AppHandle<Wry>) -> Result<(), Str
 }
 
 #[tauri::command]
+pub fn get_desktop_client_id(app_handle: AppHandle<Wry>) -> Result<String, String> {
+    let data = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    read_setup_ids(&data.join("setup-ids.json"))
+        .map(|ids| ids.installation_id.to_string())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn recover_reset_references(app_handle: AppHandle<Wry>) -> Result<(), String> {
+    cancel_installation_setup();
+    let _operation = SETUP_OPERATION_LOCK.lock().await;
+    let data = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    reset::recover(&data).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn pending_reset_revocations(app_handle: AppHandle<Wry>) -> Result<Value, String> {
+    let data = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    let mut targets = reset::revocations(&data).map_err(|error| error.to_string())?;
+    if let Ok(references) = reset::recovery_references(&data) {
+        let ids = parse_setup_ids(&references["ids"]).map_err(|error| error.to_string())?;
+        let member = ids.member_id.to_string();
+        if !targets.iter().any(|target| target["member_id"] == member) {
+            targets.push(json!({"version":1,"issuer":references["issuer"],"member_id":member,"status":"pending"}));
+        }
+    }
+    Ok(Value::Array(targets))
+}
+
+#[tauri::command]
+pub async fn revoke_reset_on_peer(
+    app_handle: AppHandle<Wry>,
+    peer_api: String,
+    bearer: String,
+    member_id: Id,
+) -> Result<(), String> {
+    let _operation = SETUP_OPERATION_LOCK.lock().await;
+    let data = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    if let Ok(references) = reset::recovery_references(&data) {
+        let ids = parse_setup_ids(&references["ids"]).map_err(|error| error.to_string())?;
+        if ids.member_id == member_id {
+            reset::queue_revocation(&data, &references).map_err(|error| error.to_string())?;
+        }
+    }
+    let target = reset::revocations(&data)
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|target| target["member_id"] == member_id.to_string())
+        .ok_or("no retained public revocation target for this member")?;
+    if peer_api == format!("{}/idp", localhost_server_base_url_for(&app_handle).await) {
+        return Err(
+            "revocation must be acknowledged by a surviving peer, not this local Node".into(),
+        );
+    }
+    let url = reqwest::Url::parse(&peer_api).map_err(|error| error.to_string())?;
+    if url.scheme() != "https"
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || url.path() != "/idp"
+        || url.as_str() != peer_api
+        || bearer.trim().is_empty()
+    {
+        return Err(
+            "select a trusted HTTPS peer IdP base URL and an authorized User session".into(),
+        );
+    }
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let metadata: Value = client
+        .get(format!("{peer_api}/.well-known/openid-configuration"))
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json()
+        .await
+        .map_err(|error| error.to_string())?;
+    if metadata["issuer"] != target["issuer"] {
+        return Err("peer belongs to a different Installation; no bearer was sent".into());
+    }
+    let token: Value = client
+        .post(format!("{peer_api}/oauth2/token"))
+        .form(&[
+            (
+                "grant_type",
+                "urn:ietf:params:oauth:grant-type:token-exchange",
+            ),
+            (
+                "subject_token_type",
+                "urn:ietf:params:oauth:token-type:access_token",
+            ),
+            ("subject_token", bearer.as_str()),
+            ("resource", peer_api.as_str()),
+        ])
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| format!("peer User audience exchange denied; target retained: {error}"))?
+        .json()
+        .await
+        .map_err(|error| error.to_string())?;
+    let access_token = token["access_token"]
+        .as_str()
+        .filter(|token| !token.is_empty())
+        .ok_or("peer did not return an authorized User access token; target retained")?;
+    for path in [
+        format!("replica-signers/{member_id}"),
+        format!("devices/{member_id}"),
+    ] {
+        client.delete(format!("{peer_api}/{path}")).bearer_auth(access_token).send().await
+            .map_err(|error| error.to_string())?.error_for_status().map_err(|error| {
+                format!("peer revocation incomplete; public target retained for later authorized retry: {error}")
+            })?;
+    }
+    reset::acknowledge_revocation(&data, &target).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub async fn reset_device(app_handle: AppHandle<Wry>) -> Result<(), String> {
     cancel_installation_setup();
     let _operation = SETUP_OPERATION_LOCK.lock().await;
@@ -1203,6 +1366,7 @@ pub async fn reset_device(app_handle: AppHandle<Wry>) -> Result<(), String> {
                     ids.signer_key_id,
                     ids.administrator_id,
                     &[
+                        ids.installation_id,
                         ids.management_to_idp_client_id,
                         ids.storage_to_idp_client_id,
                         ids.storage_to_management_client_id,
@@ -1333,6 +1497,7 @@ mod tests {
     fn setup_intent_pins_canonical_issuer_and_join_identity_across_retry() {
         let root = std::env::temp_dir().join(format!("setup-intent-{}", Id::now_v7()));
         fs::create_dir_all(&root).expect("intent fixture");
+        load_or_create_setup_ids(&root).expect("persist IDs before intent as production does");
         let intent = serde_json::json!({"purpose": "join", "issuer": "https://installation.test/idp", "name": "Independent Node", "peer": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"});
         super::persist_setup_intent(&root, &intent).expect("persist intent before owner work");
         super::persist_setup_intent(&root, &intent).expect("exact retry");

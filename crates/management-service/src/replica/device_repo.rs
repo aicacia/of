@@ -498,11 +498,11 @@ impl DeviceRepo for DbDeviceRepo {
             return Ok(false);
         };
         self.ensure_clear(device_id).await?;
-        if row.owner_subject != owner_subject
-            || row.public_key == protected_public_key
-            || row.state == DeviceState::Revoked
-        {
+        if row.owner_subject != owner_subject || row.public_key == protected_public_key {
             return Ok(false);
+        }
+        if row.state == DeviceState::Revoked {
+            return Ok(true);
         }
         let rows = self.records().await?;
         for other in rows
@@ -1034,6 +1034,29 @@ mod tests {
         repo.revoke("owner-b", second.id, "key-a")
             .await
             .expect("revoke device");
+        assert!(
+            repo.revoke("owner-b", second.id, "key-a")
+                .await
+                .expect("retry exact revocation after a lost acknowledgement")
+        );
+        assert!(
+            !repo
+                .revoke("owner-a", second.id, "key-a")
+                .await
+                .expect("wrong owner cannot acknowledge revocation")
+        );
+        assert!(
+            !repo
+                .revoke("owner-b", second.id, "key-b")
+                .await
+                .expect("protected endpoint cannot acknowledge revocation")
+        );
+        assert!(
+            !repo
+                .revoke("owner-b", idp_model::model::Id::now_v7(), "key-a")
+                .await
+                .expect("unknown Device is not a successful revocation")
+        );
         assert!(
             repo.list_approved("owner-b")
                 .await

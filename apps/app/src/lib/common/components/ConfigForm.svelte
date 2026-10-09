@@ -57,7 +57,7 @@
 
         const [_input, output, error] = await form.validate();
         if (error) {
-            notifications.add(m.errors_message_invalid_form(), "error");
+            notifications.add(m.errors_message_invalid(), "error");
             return;
         }
 
