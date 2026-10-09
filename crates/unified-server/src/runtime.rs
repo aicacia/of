@@ -88,7 +88,8 @@ impl UnifiedRuntime {
         }
         validate_api_base(&api_base, listener_addr)?;
         let cancellation_token = CancellationToken::new();
-        let endpoint = Arc::new(UnifiedEndpoint::open(&config.endpoint_data_dir).await?);
+        let endpoint =
+            Arc::new(UnifiedEndpoint::open(&config.endpoint_data_dir, &config.idp).await?);
         let server = endpoint.server().clone();
 
         let management_engine =
@@ -217,13 +218,14 @@ impl UnifiedRuntime {
         );
         endpoint.refresh_approved_peers(&idp_runtime).await?;
         let protocol_router =
-            compose_protocol_router(&server, &idp_runtime, &storage_runtime, &security_protocol)
-                .ok_or_else(|| {
+            compose_protocol_router(&server, &storage_runtime, &security_protocol).ok_or_else(
+                || {
                     io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "Storage replication handler is unavailable in unified mode",
                     )
-                })?;
+                },
+            )?;
         let router = compose_router(
             idp_runtime.router(),
             management_router,
@@ -686,7 +688,7 @@ mod tests {
         };
         config.oauth2.issuer = format!("https://{}.test/idp", idp_model::model::Id::now_v7());
         let endpoint_dir = root.join("endpoint");
-        let initial = crate::UnifiedEndpoint::open(&endpoint_dir)
+        let initial = crate::UnifiedEndpoint::open(&endpoint_dir, &config)
             .await
             .expect("persist Node endpoint");
         let local = initial.endpoint_id();
@@ -704,7 +706,7 @@ mod tests {
         initial.close().await;
         drop(initial);
         for revoked in [false, true] {
-            let endpoint = crate::UnifiedEndpoint::open(&endpoint_dir)
+            let endpoint = crate::UnifiedEndpoint::open(&endpoint_dir, &config)
                 .await
                 .expect("offline endpoint reopen");
             assert_eq!(endpoint.endpoint_id(), local);
@@ -876,7 +878,7 @@ mod tests {
         config.management_idp_client.client_secret = "management-idp-secret".to_owned();
         config.storage_idp_client.client_secret = "storage-idp-secret".to_owned();
         config.storage_management_client.client_secret = "storage-management-secret".to_owned();
-        let endpoint = crate::UnifiedEndpoint::open(&config.endpoint_data_dir)
+        let endpoint = crate::UnifiedEndpoint::open(&config.endpoint_data_dir, &config.idp)
             .await
             .expect("open endpoint for initial test provisioning");
         let endpoint_id = endpoint.endpoint_id();
@@ -1073,9 +1075,10 @@ mod tests {
             .await
             .expect("join unified server")
             .expect("serve and stop unified runtime");
-        let restored_endpoint = crate::UnifiedEndpoint::open(&root.join("endpoint"))
-            .await
-            .expect("reopen unified endpoint after shutdown");
+        let restored_endpoint =
+            crate::UnifiedEndpoint::open(&root.join("endpoint"), &persisted_idp_config)
+                .await
+                .expect("reopen unified endpoint after shutdown");
         assert_eq!(restored_endpoint.endpoint_id(), endpoint_id);
         let reopened_engine =
             super::open_service_engine(&persisted_idp_config.data_dir, "idp.redb")

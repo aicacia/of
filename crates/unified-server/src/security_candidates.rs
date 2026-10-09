@@ -177,6 +177,54 @@ fn validate_signer(table: &SyncTableView, row: &SyncRowView) -> Result<(), Strin
     Ok(())
 }
 
+pub(super) fn validate_node_join(
+    view: &SyncCandidateView,
+    installation: &str,
+    approval: &idp_server::NodeJoinApproval,
+) -> Result<(), String> {
+    let request = &approval.request;
+    validate(
+        view,
+        installation,
+        &[PeerBinding {
+            member: request.member_id,
+            endpoint: request.endpoint_id.clone(),
+            owner: approval.owner_subject,
+        }],
+    )?;
+    let key: Id = request.public_signer.kid.parse().map_err(|_| invalid())?;
+    for table in &view.tables {
+        for row in &table.rows {
+            if row.deleted {
+                continue;
+            }
+            if table.name == "devices"
+                && row.id == request.member_id
+                && text(table, row, "name").is_some_and(|name| name != request.name)
+            {
+                return Err(invalid());
+            }
+            if table.name == "idp_replica_signers"
+                && (uuid(table, row, "key_id") == Some(key)
+                    || uuid(table, row, "active_member_id") == Some(request.member_id))
+            {
+                if uuid(table, row, "key_id").is_some_and(|id| id != key)
+                    || uuid(table, row, "member_id").is_some_and(|id| id != request.member_id)
+                {
+                    return Err(invalid());
+                }
+                if let Some(public) = text(table, row, "public_jwk") {
+                    let public: JwkPublic = serde_json::from_str(public).map_err(|_| invalid())?;
+                    if public != request.public_signer {
+                        return Err(invalid());
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn invalid() -> String {
     "invalid public security candidate".into()
 }

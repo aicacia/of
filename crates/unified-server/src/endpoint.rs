@@ -18,16 +18,19 @@ pub struct UnifiedEndpoint {
 }
 
 impl UnifiedEndpoint {
-    pub async fn open(data_dir: &Path) -> io::Result<Self> {
+    pub async fn open(data_dir: &Path, idp_config: &idp_server::AppConfig) -> io::Result<Self> {
         fs::create_dir_all(data_dir)?;
         let key_path = data_dir.join(ENDPOINT_KEY_FILE);
         let secret_key = load_or_create_secret_key(&key_path)?;
         let allowed_peers = EndpointIdStore::default();
         allowed_peers.replace([secret_key.public()]);
-        let server =
-            Server::bind_with_secret_key(presets::N0, secret_key.clone(), allowed_peers.clone())
-                .await
-                .map_err(io::Error::other)?;
+        let server = idp_server::bind_node_join_endpoint(
+            idp_config,
+            presets::N0,
+            secret_key.clone(),
+            allowed_peers.clone(),
+        )
+        .await?;
 
         Ok(Self {
             server,
@@ -142,7 +145,7 @@ mod tests {
     #[tokio::test]
     async fn owns_one_persisted_endpoint_and_matches_idp_identity() {
         let data_dir = test_dir();
-        let endpoint = UnifiedEndpoint::open(&data_dir)
+        let endpoint = UnifiedEndpoint::open(&data_dir, &idp_server::AppConfig::default())
             .await
             .expect("open unified endpoint");
         let endpoint_id = endpoint.endpoint_id();
@@ -167,7 +170,7 @@ mod tests {
         assert_eq!(endpoint.key_path(), data_dir.join("endpoint.key"));
         endpoint.close().await;
 
-        let restored = UnifiedEndpoint::open(&data_dir)
+        let restored = UnifiedEndpoint::open(&data_dir, &idp_server::AppConfig::default())
             .await
             .expect("reopen unified endpoint");
         assert_eq!(restored.endpoint_id(), endpoint_id);
@@ -178,7 +181,7 @@ mod tests {
     #[tokio::test]
     async fn iroh_rejects_connections_after_peer_revocation() {
         let data_dir = test_dir();
-        let unified = UnifiedEndpoint::open(&data_dir)
+        let unified = UnifiedEndpoint::open(&data_dir, &idp_server::AppConfig::default())
             .await
             .expect("open unified endpoint");
         let peer = Endpoint::builder(presets::Minimal)

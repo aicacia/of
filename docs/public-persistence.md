@@ -107,103 +107,107 @@ Repository history fixtures use public sync sessions over trusted test-only chan
 
 ## Joining from empty local owner stores
 
-A purpose-specific equal-Node enrollment receipt binds the Installation, Device/member,
-endpoint, independent public signer and approving User to a pinned approving peer.
-`OwnerProvisioner::record_node_join_approval` persists that receipt, not public owner
-state, context-export permission or local readiness. The independent private signer
-remains in the local secure-store adapter. Replaying the receipt must not activate trust,
-create grants or override a learned revocation.
+Equal-Node enrollment persists an exact, pinned-peer signed receipt binding Installation,
+Device/member, endpoint, name, owner User and independent public signer. That receipt is
+an anchor, not a context grant or local trust. Private signer material remains local.
+Ordinary `SecurityProtocol::synchronize` still requires already-trusted peers and all of
+its marker-3 candidate, historical-value, current outbound and incoming checks.
 
-The existing `SecurityProtocol::synchronize` is an **already-trusted peer** session, not
-initial bootstrap. Before opening a history stream it requires local signer/member
-trust; subsequent admission requires authenticated remote membership, its exact approved
-Device, an active conflict-clear User owner, and the relevant locally evaluated
-`IdpSecuritySync` or `ManagementSecuritySync` permission. A fresh joining database has
-none of this public baseline. Enrollment on the approving Node does not establish it
-on the joining Node. The registered bootstrap ALPN currently denies every request.
+### Purpose-specific admission and exchange
 
-Consequently, initial authorized public bootstrap is not implemented. The native
-`node_join_receipt_cannot_bootstrap_context_trust_even_after_native_reopen` regression
-uses real User authentication/token exchange, authorized pairing, separate native
-stores, independent local signer preparation and an authenticated DATA connection.
-Even with explicit context grants at the source, both joining-side context attempts
-fail at local signer/member trust before staging. No User, Device or policy rows are
-imported. Offline native reopen retains the same receipt/request and local signer
-material but remains incomplete. Its keyring is an injected test store, not an OS-keyring
-or GUI/process-restart qualification.
+The Unified host registers `SecurityProtocol::node_bootstrap_handler` on the existing
+shared endpoint's `idp-bootstrap/1` ALPN. It accepts only bootstrap stream kind4 and
+handles streams independently with connection/cancellation cleanup. It does not route
+Storage, ordinary marker3 or mesh operations through this ALPN. Standalone IdP without
+the host's two-context bootstrap handler remains denial-only.
 
-### Concrete bootstrap handoff
+`bind_node_join_endpoint` delegates ordinary admission/pairing to the existing
+`iroh-chain` hook. Its only additional admission is the exact persisted approving peer
+on the bootstrap ALPN, after rereading/verifying request/receipt and retained local key
+presence. It does not insert that peer in the general allowlist or use an expiry lease.
+`UnifiedEndpoint::open` receives the actual IdP configuration and uses this hook; normal
+host startup still restores general admission exclusively from durable trusted signers.
+The session receiver separately verifies the public/private key match through the
+owner's anchor, the actual connection's pinned endpoint/ALPN, exact local endpoint and
+Installation, and present local binding contradictions/conflicts/revocations. Transport
+admission itself is not authorization.
 
-- **Domain admission (of04 with of03):** provide explicit, purpose-bound authorization
-  for initial IdP and Management public histories from the pinned, currently trusted
-  approving endpoint to the exact enrolled joining endpoint/Device/member/signer.
-  Evaluate current active owner and exact context grants at the source; enrollment
-  approval alone is insufficient. The joining-side decision must verify these bindings
-  without requiring the public baseline it is about to receive. Do not weaken ordinary
-  marker-3 admission or treat pairing/receipt possession as general access.
-- **Delivered owner/consumer seam (of03 handoff):** use the scoped native candidate-
-  validated checked session above, historical scalar confidentiality/exact issuer
-  checks and current per-send/pre-apply authorization. Owner13 supplies current
-  candidate/related-row/conflict/tombstone evidence from the actual transaction;
-  the ordinary marker3 adapter now consumes it. The prior scalar-only observation
-  and missing-current-outbound statements are superseded. Bootstrap still needs its
-  own purpose-bound pinned evidence and current source grants; ordinary session
-  bindings must not be inferred from a receipt or empty joining stores. Incomplete
-  candidates can persist without readiness. No new owner facade, trait or historical
-  authorship ledger is demanded by this admission cycle.
-- **Readiness (of04):** only after both contexts have durably imported validated full
-  public histories and owner checks establish local trust, policy and independent
-  signing capability may completion be persisted. Verify partial-apply failures,
-  stable retries, learned revocation non-resurrection and offline issuance/reopen at
-  this actual import seam. Current receipt/denial tests do not satisfy this acceptance.
+The source independently checks current local signer membership, approved source Device
+and active conflict-clear User owner; exact joining member/endpoint/public signer,
+approved Device/name/receipt.owner and active conflict-clear receipt.owner; and that
+User's exact context Installation grant. Checks run before the accepted handshake and
+**every** subsequent owner frame, including control and terminal frames. A signed receipt
+or successful pairing cannot substitute for current grants. Denied requests close
+without an unchecked history/denial response. An admitted send may finish; later sends
+use newly learned evidence.
 
-### Receive-only bootstrap retry limitation
+Both sides consume the SAME
+`synchronize_tables_with_stage_directory_candidate_validated_checked` native owner
+pipeline: eleven public IdP tables or six separate Management policy tables, complete
+histories/conflicts/tombstones, scalar confidentiality/exact Installation validation,
+synchronous actual candidate checks, async pre-apply guards and native stage cleanup.
+The IdP bootstrap candidate guard adds the exact pinned joining Device name/owner/endpoint
+and member/key/public signer tuple to the ordinary semantic validator. Pending related
+rows do not acquire readiness; no callback publishes trust/completion.
 
-Owner13's candidate observation and ordinary marker-3 guards are delivered. A separate
-one-way execution limitation remains: the current scoped session is bidirectional on
-both `SyncRole`s. `Initiator`/`Responder` select turn ordering, not publication direction.
-Before manifest comparison or outbound selection, it exports/preflights **all** retained
-selected local rows. A joining-side candidate guard rejecting outgoing application rows
-therefore permits the first import into empty tables but rejects a subsequent exact
-retry once any imported application history is retained. This happens even when that
-history already exists at the source and no reverse row transfer would be necessary.
+Owner14 (`25bfe11fa83b9f9bf9aa0969cf7693ed4699f59d`) delivers the directional execution
+contract. Source uses `SessionConfig.direction = SendOnly`; receiver uses `ReceiveOnly`.
+The receiver sends real manifests/inventories/control but no application or catalog
+history, even after partial import/reopen or independent local changes. The source
+rejects reverse application states. Additional candidate guards deny reverse-direction
+application observations defensively. Both scoped peers must use the new complementary
+direction handshake; this is a breaking protocol update, not a compatibility wrapper.
+The former retained-row preflight retry blocker is resolved by this owner capability.
+No export filtering, pretending-empty receiver, alternate staging, database copying,
+projected baseline inserts or unchecked apply is used.
 
-The focused native `bootstrap_receive_only_guard_allows_empty_import_but_blocks_native_retry`
-regression consumes `synchronize_tables_with_stage_directory_candidate_validated_checked`
-with the same eleven public IdP tables and owner-native stages. Incoming application
-candidates at the source and outgoing application candidates at the receiver reject;
-catalog/control exchange remains permitted. The initial import succeeds with no receiver
-application State/Changes frames. After native receiver reopen, exact retry rejects at
-outgoing preflight, retaining both manifests. Adding another source User still cannot
-resume: neither side publishes receiver application data, no additional User imports,
-and prior receiver progress/source updates remain intact. This is an in-process transport
-fixture testing the public persistence boundary, not authenticated domain bootstrap.
+### Durable public readiness
 
-**Concrete owner follow-up:** provide a supported source-to-receiver scoped session
-that excludes receiver application-history export/preflight/build/recovery publication
-while retaining its real persisted progress for source inventory/delta/snapshot recovery.
-The source must not apply receiver application rows, including on malicious or resumed
-exchanges. Reuse the same candidate/historical validation, fixed schemas, native stages,
-complete histories/conflicts/tombstones, atomic pre-apply checks and failure cleanup.
-Qualify empty import, retained partial progress after cancellation/native reopen, exact
-retry, fresh source updates, hostile reverse publication and learned local revocation
-non-resurrection. No method signature or new consumer transport/persistence is prescribed.
-This is a capability absent from the current public session, not a defect in owner13's
-candidate evidence or a demand for an authorship ledger.
+Successful context sessions persist immutable, receipt-bound import journals via the
+same fsync/non-overwriting publication helper as join request/approval persistence.
+`complete_node_join_public_bootstrap` requires both journals, current unique conflict-
+clear exact local Device/member/signer trust, active owner User, both exact local context
+grants, configured local binding and verification with the retained independent private
+signer before persisting `PublicReady`. `node_join_public_ready` rechecks that durable
+local evidence; neither a journal nor an old completion marker grants permission.
+After an IdP journal exists, subsequent bootstrap checks require its exact current trust;
+after policy completion they also require current local context grants. Learned local
+revocation/rebinding therefore cannot be undone by replaying the receipt.
 
-A rejecting candidate callback is not a filter: it aborts the session. Allowing retained
-receiver rows during preflight could permit arbitrary receiver history publication;
-the current row/conflict view does not establish that every historical assignment came
-from the pinned source. Suppressing frames, pretending the receiver is empty, clearing
-retained progress, or copying/projecting source state would violate the owner protocol
-or retry/history requirements. Production purpose-bound bootstrap/readiness is not
-implemented until this execution boundary can preserve progress without reverse publication.
+This completes **public IdP/Management bootstrap**, not Storage hosting/readiness,
+resource selections/grants, Residency cleanup or desktop Setup. Those separate owner
+checks remain mandatory. Local password/client verifiers are never imported. A joining
+Node explicitly provisions its own local service credential when needed for issuance.
+Completed local readiness/issuance requires no contact with the approving peer and has
+no freshness lease; unseen remote revocation can diverge until learned, as specified.
 
-Whole-database export, unchecked apply, source database copying, projected LWW baseline
-inserts, receipt-derived grants and parallel staging are not bootstrap substitutes.
-Private/local credential tables remain excluded; complete public history, tombstones
-and conflicts stay owner-managed. Storage/resource access is a separate authorization
-boundary, not granted by successful public context bootstrap.
+### Consent schema and qualification
+
+OAuth User consent repositories store the public OAuth client identifier as TEXT, not
+the internal client-row UUID used by code/refresh records. The IdP schema and public
+validator now agree on that distinction. **Breaking fresh-schema correction:** existing
+UUID-declared consent schemas/history are not migrated or sanitized. Bootstrap rejects
+incompatible/ill-typed history; initialize compatible fresh stores rather than dropping
+history or disabling type validation.
+
+The native `authorized_node_bootstrap_imports_both_contexts_and_reopens_offline` test
+uses real User authentication/token exchange and authorized pairing, actual admission
+hooks, separate native owner stores and real authenticated bootstrap streams. It proves
+receipt-only DATA denial, IdP-only incomplete state and denied policy import, native
+restart between contexts, explicit source policy authorization, both-context completion,
+production independently signed client-token issuance, retained-history/source-update
+and exact retries without duplicates or reverse local-client publication, current source
+grant/member revocation denial on the same connection, peer-disconnected native reopen
+and fresh issuance, then locally learned revocation remaining denied across another
+reopen despite retained journals. Private storage is the injected fixture keyring.
+The native owner-direction regression separately verifies initial import, exact reopen
+retry and source updates with zero receiver application frames. Ordinary marker3 outbound
+and enrollment/atomic-activation/oversized-reply tests remain independently exercised.
+
+These are not genuine OS keyring, GUI/separate-process restart, exhaustive crash-at-every-
+write, mid-batch bootstrap interruption, or deterministic dedicated-bootstrap mid-frame
+revocation qualification. Desktop wiring, Storage/Residency/cleanup and wider platform
+acceptance remain open; independent review is required before integration.
 
 ## Remaining integration and qualification gaps
 

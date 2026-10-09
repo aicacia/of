@@ -228,7 +228,8 @@ impl PublicSecurityTable {
                 | "member_id"
                 | "active_member_id"
                 | "key_id"
-        ) || (column == "client_id" && self != Self::Clients);
+        ) || (column == "client_id"
+            && matches!(self, Self::AuthorizationCodes | Self::RefreshTokens));
         if uuid {
             return value
                 .as_str()
@@ -332,6 +333,24 @@ mod tests {
     use super::PublicSecurityTable;
     #[cfg(feature = "replica")]
     use super::public_security_tables;
+
+    #[cfg(feature = "replica")]
+    #[test]
+    fn historical_consent_client_id_is_public_oauth_text_not_internal_uuid() {
+        assert!(
+            PublicSecurityTable::Consents
+                .permits_historical_value("client_id", &db::Value::Text("human-client".into()))
+        );
+        for table in [
+            PublicSecurityTable::AuthorizationCodes,
+            PublicSecurityTable::RefreshTokens,
+        ] {
+            assert!(
+                !table
+                    .permits_historical_value("client_id", &db::Value::Text("human-client".into()))
+            );
+        }
+    }
 
     #[cfg(feature = "replica")]
     #[test]

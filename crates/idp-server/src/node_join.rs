@@ -9,6 +9,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::OwnerProvisioner;
 
+#[path = "node_join_bootstrap.rs"]
+mod bootstrap_state;
+pub use bootstrap_state::NodeJoinStage;
+#[path = "node_join_transport.rs"]
+mod transport;
+pub use transport::bind_node_join_endpoint;
+
 const PURPOSE: &str = "of.equal-node-join.v1";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -30,6 +30,9 @@ use serde::{Deserialize, Serialize};
 use storage_server::{DataProtocolHandler, DatabaseTransport};
 use tokio_util::sync::CancellationToken;
 
+#[path = "security_bootstrap.rs"]
+mod bootstrap;
+
 #[path = "security_candidates.rs"]
 mod candidates;
 

@@ -206,7 +206,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS oauth2_authorization_codes_code_hash ON oauth2
 CREATE TABLE IF NOT EXISTS oauth2_user_consents (
     id UUID PRIMARY KEY,
     user_id UUID,
-    client_id UUID,
+    client_id TEXT,
     redirect_uri TEXT,
     scope TEXT,
     authorization_details TEXT,

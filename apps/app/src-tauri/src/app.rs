@@ -135,10 +135,6 @@ pub async fn provision_initial_administrator(
         return Err("Installation setup is already complete; use authenticated administration or explicit reset".into());
     }
     let ids = load_or_create_setup_ids(&app_data_dir).map_err(|error| error.to_string())?;
-    let endpoint = UnifiedEndpoint::open(&app_data_dir.join("services/unified-endpoint"))
-        .await
-        .map_err(|error| error.to_string())?;
-    endpoint.close().await;
 
     let mut idp_config = IdpAppConfig::default();
     idp_config.data_dir = app_data_dir
@@ -148,6 +144,11 @@ pub async fn provision_initial_administrator(
     idp_config.oauth2.issuer = format!("{base_url}/idp");
     idp_config.api_public_uri = format!("{base_url}/idp");
     idp_config.ui_public_uri = base_url.clone();
+    let endpoint =
+        UnifiedEndpoint::open(&app_data_dir.join("services/unified-endpoint"), &idp_config)
+            .await
+            .map_err(|error| error.to_string())?;
+    endpoint.close().await;
     let idp = OwnerProvisioner::open(&idp_config)
         .await
         .map_err(|error| error.to_string())?;

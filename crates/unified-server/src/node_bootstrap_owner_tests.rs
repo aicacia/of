@@ -10,7 +10,9 @@ use std::{
 use db::Database;
 use idp_model::model::Id;
 use idp_service::security_sync::public_security_tables;
-use ofdb_sql::{SessionConfig, SyncMessage, SyncRole, SyncTransport, SyncValidationDirection};
+use ofdb_sql::{
+    SessionConfig, SyncDirection, SyncMessage, SyncRole, SyncTransport, SyncValidationDirection,
+};
 use tokio::sync::mpsc;
 
 use crate::security_sync_tests::sql;
@@ -92,11 +94,18 @@ async fn source_to_joiner(
             Err("invalid public history".into())
         }
     };
-    let config = SessionConfig::default();
+    let source_config = SessionConfig {
+        direction: SyncDirection::SendOnly,
+        ..Default::default()
+    };
+    let receiver_config = SessionConfig {
+        direction: SyncDirection::ReceiveOnly,
+        ..Default::default()
+    };
     let source_session = source
         .synchronize_tables_with_stage_directory_candidate_validated_checked(
             &mut a,
-            &config,
+            &source_config,
             SyncRole::Initiator,
             root.join("source-stage"),
             &tables,
@@ -115,7 +124,7 @@ async fn source_to_joiner(
     let joiner_session = joiner
         .synchronize_tables_with_stage_directory_candidate_validated_checked(
             &mut b,
-            &config,
+            &receiver_config,
             SyncRole::Responder,
             root.join("joining-stage"),
             &tables,
@@ -140,7 +149,7 @@ async fn source_to_joiner(
 }
 
 #[tokio::test]
-async fn bootstrap_receive_only_guard_allows_empty_import_but_blocks_native_retry() {
+async fn bootstrap_receive_only_preserves_native_retry_without_reverse_publication() {
     tokio::time::timeout(Duration::from_secs(180), receive_only_retry())
         .await
         .expect("native owner sessions complete");
@@ -191,14 +200,10 @@ async fn receive_only_retry() {
         published, 0,
         "exact retry must not publish joining application frames"
     );
-    assert!(
-        a.expect_err("source observes denied reverse export preflight")
-            .contains("bootstrap joiner must not publish application history")
-    );
-    assert!(
-        b.expect_err("owner preflights retained receiver rows even on an exact retry")
-            .contains("bootstrap joiner must not publish application history")
-    );
+    a.expect("send-only exact retry");
+    let received = b.expect("receive-only retry reuses retained history");
+    assert_eq!(received.sent_units, 0);
+    assert_eq!(received.sent_changes, 0);
     assert_eq!(
         joiner
             .sync_manifest()
@@ -217,19 +222,17 @@ async fn receive_only_retry() {
     sql(&source, &format!("INSERT INTO users (id, handle, name, created_at, updated_at) VALUES (CAST('{additional}' AS UUID), 'later-user', 'Later Public User', 2, 2)")).await;
     let source_updated = source.sync_manifest().await.expect("source new history");
     let (a, b, published) = source_to_joiner(&source, &joiner, &root).await;
-    assert!(
-        a.is_err() && b.is_err(),
-        "retained partial bootstrap progress blocks further source imports too"
-    );
+    a.expect("subsequent source history sends");
+    b.expect("retained receiver progress permits new source import");
     assert_eq!(
         published, 0,
         "resume cannot disclose arbitrary joining application history"
     );
-    assert_eq!(
+    assert_ne!(
         joiner
             .sync_manifest()
             .await
-            .expect("failed resume preserves retained progress"),
+            .expect("resume imports additional public history"),
         joined_before
     );
     assert_eq!(
@@ -241,8 +244,8 @@ async fn receive_only_retry() {
     );
     assert_eq!(
         sql(&joiner, "SELECT id FROM users").await[0].rows.len(),
-        1,
-        "failed resume imports no additional User or duplicate"
+        2,
+        "resume imports additional User exactly once"
     );
     drop(joiner);
     drop(source);
