@@ -84,16 +84,8 @@ pub(crate) async fn put_device_selection(
         return Err(ErrorResponse::new(ErrorCode::NotAuthorized));
     }
 
-    state
-        .control_plane
-        .validate_selection_device(
-            &body.storage_access_token,
-            &owner,
-            &state.storage_audience,
-            device_id,
-        )
-        .await
-        .map_err(|_| ErrorResponse::new(ErrorCode::AccessDenied))?;
+    require_device_owner(&state, device_id, &owner).await?;
+
     state
         .control_plane
         .validate_storage_resource(
@@ -173,6 +165,7 @@ pub(crate) async fn delete_device_resource_selection(
     )
     .await?;
     let owner = authorization.subject.to_string();
+    require_device_owner(&state, device_id, &owner).await?;
     if !state
         .selection_policies
         .deselect_resource_owned(
@@ -188,6 +181,27 @@ pub(crate) async fn delete_device_resource_selection(
         return Err(ErrorResponse::new(ErrorCode::NotFound));
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub(crate) async fn require_device_owner(
+    state: &RouterState,
+    device_id: Id,
+    owner: &str,
+) -> Result<(), ErrorResponse> {
+    let identity = state
+        .control_plane
+        .get_storage_device_identity(device_id)
+        .await
+        .map_err(|_| ErrorResponse::new(ErrorCode::AccessDenied))?;
+    let ready = state
+        .selection_policies
+        .reconcile_owner_prevalidated(device_id, &identity.owner_subject)
+        .await
+        .map_err(ErrorResponse::from)?;
+    if !ready || identity.owner_subject != owner {
+        return Err(ErrorResponse::new(ErrorCode::AccessDenied));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

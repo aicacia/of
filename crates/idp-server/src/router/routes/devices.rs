@@ -21,6 +21,10 @@ use crate::router::{
     middleware::{StandardAuthorization, authorize_bearer_client, require_identity_permission},
 };
 
+#[cfg(test)]
+#[path = "device_policy_tests.rs"]
+mod policy_tests;
+
 const DEVICE_LOOKUP_SCOPE: &str = IDP_DEVICE_LOOKUP_SCOPE;
 const DEVICE_LIST_SCOPE: &str = IDP_DEVICE_LIST_SCOPE;
 
@@ -72,6 +76,76 @@ pub(crate) async fn lookup_device_endpoint(
         device_id: device.id,
         owner_subject: device.owner_subject,
         endpoint_id,
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/devices/identities/{device_id}",
+    params(("device_id" = String, Path, description = "Device ID")),
+    responses((status = 200, description = "Locally trusted Device owner", body = DeviceEndpointIdentity)),
+    security(("authorization" = []))
+)]
+pub(crate) async fn lookup_device_identity(
+    State(state): State<RouterState>,
+    Path(device_id): Path<Id>,
+    headers: HeaderMap,
+) -> Result<Json<DeviceEndpointIdentity>, ErrorResponse> {
+    let token = headers
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| ErrorResponse::new(ErrorCode::NotAuthorized))?;
+    let caller = authorize_bearer_client(&state, token).await?;
+    if !can_lookup_device_endpoint(
+        caller.claims.principal_type,
+        &caller.claims.aud,
+        &caller.claims.scope,
+        &state.service_audience,
+    ) || device_id.is_nil()
+    {
+        return Err(ErrorResponse::new(ErrorCode::AccessDenied));
+    }
+    let device = state
+        .devices
+        .list()
+        .await
+        .map_err(|_| ErrorResponse::new(ErrorCode::ServerError))?
+        .into_iter()
+        .find(|device| device.id == device_id && device.state == DeviceState::Approved)
+        .ok_or_else(|| ErrorResponse::new(ErrorCode::NotFound))?;
+    let endpoint = device
+        .public_key
+        .parse::<EndpointId>()
+        .map_err(|_| ErrorResponse::new(ErrorCode::AccessDenied))?;
+    let issuer = state.oauth2_service.metadata().issuer;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| ErrorResponse::new(ErrorCode::ServerError))?
+        .as_secs() as i64;
+    if endpoint.to_string() != device.public_key
+        || !state
+            .replica_signers
+            .trusted_signers(&issuer, now)
+            .await
+            .map_err(|_| ErrorResponse::new(ErrorCode::AccessDenied))?
+            .iter()
+            .any(|(member, _)| {
+                member.member_id == device.id && member.endpoint_id == device.public_key
+            })
+    {
+        return Err(ErrorResponse::new(ErrorCode::AccessDenied));
+    }
+    let owner = device
+        .owner_subject
+        .parse::<Id>()
+        .map_err(|_| ErrorResponse::new(ErrorCode::AccessDenied))?;
+    state.oauth2_service.find_user_info(owner).await?;
+    Ok(Json(DeviceEndpointIdentity {
+        device_id,
+        owner_subject: device.owner_subject,
+        endpoint_id: device.public_key,
     }))
 }
 
@@ -229,11 +303,20 @@ pub(crate) async fn trusted_devices(
 )]
 pub(crate) async fn enroll_device(
     State(state): State<RouterState>,
-    StandardAuthorization { claims, .. }: StandardAuthorization,
+    actor: StandardAuthorization,
     Json(request): Json<DeviceEnrollmentRequest>,
 ) -> Result<Json<DeviceEnrollment>, ErrorResponse> {
+    require_identity_permission(
+        &state,
+        &actor,
+        IdentityAction::DevicesEnroll,
+        PermissionTarget::Installation {
+            resource: IdentityResource::Device { id: None },
+        },
+    )
+    .await?;
     DeviceEnrollmentService::new(state.devices)
-        .enroll(claims.sub, request)
+        .enroll(actor.claims.sub, request)
         .await
         .map(Json)
 }
@@ -319,11 +402,22 @@ pub(crate) async fn list_devices(
 pub(crate) async fn update_device(
     State(state): State<RouterState>,
     Path(device_id): Path<Id>,
-    StandardAuthorization { claims, .. }: StandardAuthorization,
+    actor: StandardAuthorization,
     Json(request): Json<UpdateDeviceRequest>,
 ) -> Result<Json<DeviceInfo>, ErrorResponse> {
+    require_identity_permission(
+        &state,
+        &actor,
+        IdentityAction::DevicesRename,
+        PermissionTarget::Installation {
+            resource: IdentityResource::Device {
+                id: Some(device_id),
+            },
+        },
+    )
+    .await?;
     DeviceEnrollmentService::new(state.devices)
-        .rename(&claims.sub, device_id, request)
+        .rename(&actor.claims.sub, device_id, request)
         .await
         .map(Json)
 }
@@ -338,11 +432,22 @@ pub(crate) async fn update_device(
 pub(crate) async fn revoke_device(
     State(state): State<RouterState>,
     Path(device_id): Path<Id>,
-    StandardAuthorization { claims, .. }: StandardAuthorization,
+    actor: StandardAuthorization,
 ) -> Result<(), ErrorResponse> {
+    require_identity_permission(
+        &state,
+        &actor,
+        IdentityAction::DevicesRevoke,
+        PermissionTarget::Installation {
+            resource: IdentityResource::Device {
+                id: Some(device_id),
+            },
+        },
+    )
+    .await?;
     DeviceEnrollmentService::new(state.devices)
         .revoke(
-            &claims.sub,
+            &actor.claims.sub,
             device_id,
             &state.device_identity.endpoint_id().to_string(),
         )

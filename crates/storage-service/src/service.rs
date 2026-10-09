@@ -70,7 +70,9 @@ pub struct ScopedStorageService<PeerId, S>
 where
     PeerId: Clone + fmt::Debug + Ord + Serialize + DeserializeOwned + 'static,
 {
-    _scope: S,
+    scope: S,
+    resource_id: file_system::FileSystemId,
+    local_copies: Arc<crate::local_copy::LocalCopyPolicy>,
     file_system: Arc<ScopedFileSystem<PeerId>>,
 }
 
@@ -89,15 +91,24 @@ where
             .await
             .map_err(StorageServiceError::Scope)?;
         Ok(Self {
-            _scope: scope,
+            scope,
+            resource_id,
+            local_copies: Arc::clone(&runtime.local_copies),
             file_system,
         })
+    }
+
+    fn require_local_copy(&self) -> Result<(), StorageServiceError> {
+        self.local_copies
+            .require_available(&self.scope, self.resource_id.as_uuid())
+            .map_err(|error| StorageServiceError::Scope(error.to_string()))
     }
 
     pub async fn execute(
         &self,
         request: StorageRequest,
     ) -> Result<StorageResponse, StorageServiceError> {
+        self.require_local_copy()?;
         execute(&self.file_system, request).await
     }
 
@@ -106,6 +117,7 @@ where
         path: &str,
         chunk_size: usize,
     ) -> Result<file_system::ReadStream, StorageServiceError> {
+        self.require_local_copy()?;
         self.file_system
             .stream(path, chunk_size)
             .await
@@ -125,6 +137,57 @@ where
     }
 }
 
+#[cfg(test)]
+mod policy_tests {
+    use super::StorageService;
+    use std::sync::Arc;
+    use storage_model::StorageRequest;
+
+    #[tokio::test]
+    async fn passthrough_service_cannot_delete_or_rename_metadata() {
+        let root = std::env::temp_dir().join(format!(
+            "passthrough-service-{}",
+            idp_model::model::Id::now_v7()
+        ));
+        let filesystem = Arc::new(file_system::FileSystem::open(&root, 1_u8).expect("filesystem"));
+        filesystem
+            .set_residency("", file_system::Residency::Full)
+            .await
+            .expect("Full");
+        filesystem
+            .write("original.txt", b"retain metadata")
+            .await
+            .expect("source");
+        filesystem
+            .set_residency("", file_system::Residency::Passthrough)
+            .await
+            .expect("Passthrough");
+        let service = StorageService::new(Arc::clone(&filesystem));
+        assert!(
+            service
+                .execute(StorageRequest::Delete {
+                    path: "original.txt".into()
+                })
+                .await
+                .is_err()
+        );
+        assert!(
+            service
+                .execute(StorageRequest::Rename {
+                    from: "original.txt".into(),
+                    to: "renamed.txt".into()
+                })
+                .await
+                .is_err()
+        );
+        assert!(filesystem.entry("original.txt").await.is_ok());
+        assert!(filesystem.entry("renamed.txt").await.is_err());
+        drop(service);
+        drop(filesystem);
+        std::fs::remove_dir_all(root).expect("remove fixture");
+    }
+}
+
 async fn execute<PeerId>(
     file_system: &FileSystem<PeerId>,
     request: StorageRequest,
@@ -132,6 +195,17 @@ async fn execute<PeerId>(
 where
     PeerId: Clone + fmt::Debug + Ord + Serialize + DeserializeOwned + Send + Sync + 'static,
 {
+    match &request {
+        StorageRequest::Write { path, .. }
+        | StorageRequest::Append { path, .. }
+        | StorageRequest::Delete { path }
+        | StorageRequest::CreateDir { path } => require_full(file_system, path)?,
+        StorageRequest::Rename { from, to } => {
+            require_full(file_system, from)?;
+            require_full(file_system, to)?;
+        }
+        _ => {}
+    }
     match request {
         StorageRequest::Read { path } => Ok(StorageResponse::Read {
             content: file_system
@@ -211,6 +285,25 @@ where
             Ok(StorageResponse::Listed { entries })
         }
     }
+}
+
+fn require_full<PeerId>(
+    filesystem: &FileSystem<PeerId>,
+    path: &str,
+) -> Result<(), StorageServiceError>
+where
+    PeerId: Clone + fmt::Debug + Ord + Serialize + DeserializeOwned + Send + Sync + 'static,
+{
+    if filesystem
+        .residency(path)
+        .map_err(StorageServiceError::FileSystem)?
+        != file_system::Residency::Full
+    {
+        return Err(StorageServiceError::FileSystem(
+            file_system::Error::PassthroughWrite,
+        ));
+    }
+    Ok(())
 }
 
 async fn storage_entry<PeerId>(

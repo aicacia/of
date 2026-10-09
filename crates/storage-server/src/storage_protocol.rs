@@ -233,6 +233,23 @@ impl StorageProtocolHandler {
         if self.cancellation_token.is_cancelled() {
             return false;
         }
+        let (Ok(application_id), Ok(filesystem_id)) = (
+            resource.application_id.parse(),
+            FileSystemId::parse(&resource.filesystem_id),
+        ) else {
+            return false;
+        };
+        let scope = Namespace {
+            owner_subject: resource.owner_subject.clone(),
+            application_id,
+        };
+        if self
+            .file_systems
+            .require_local_copy(&scope, filesystem_id)
+            .is_err()
+        {
+            return false;
+        }
         let Some(local) = self.management.local_replication_authorizer() else {
             return false;
         };

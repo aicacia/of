@@ -461,6 +461,73 @@ impl DbSelectionPolicyRepo {
         Ok(true)
     }
 
+    /// The caller supplies current trusted IdP ownership, never a peer claim.
+    /// An owner change remains gated until whole-resource owner cleanup is available.
+    pub async fn reconcile_owner_prevalidated(
+        &self,
+        device_id: Uuid,
+        owner_subject: &str,
+    ) -> ManagementResult<bool> {
+        if device_id.is_nil() || owner_subject.trim().is_empty() {
+            return Err(invalid("invalid Device owner binding"));
+        }
+        let pending = self.local_cleanup_pending(device_id).await?;
+        let Some(policy) = self.record(device_id).await? else {
+            return Ok(!pending);
+        };
+        if policy.owner_subject == owner_subject && !pending {
+            return Ok(true);
+        }
+        if !pending {
+            self.engine
+                .client()
+                .execute(vec![Statement::Query(Query::Insert(QueryInsert {
+                    table: "local_device_copy_cleanup".into(),
+                    row: key(device_id),
+                    returning: None,
+                }))])
+                .await
+                .map_err(db_error)?;
+        }
+        self.set_admin_allowed_prevalidated(device_id, &policy.owner_subject, false)
+            .await?;
+        self.deselect_owned(device_id, &policy.owner_subject)
+            .await?;
+        Ok(false)
+    }
+
+    pub async fn local_cleanup_pending(&self, device_id: Uuid) -> ManagementResult<bool> {
+        let table = "local_device_copy_cleanup";
+        let column = QueryColumn::new(table.into(), "device_id".into());
+        let results = self
+            .engine
+            .client()
+            .execute(vec![Statement::Query(Query::Select(QuerySelect {
+                from: QueryFrom {
+                    table: table.into(),
+                    joins: vec![],
+                },
+                projection: vec![column.clone()],
+                distinct: false,
+                predicate: Some(QueryExpr::Equals(
+                    Box::new(QueryExpr::Value(QueryExprValue::Column(column))),
+                    Box::new(QueryExpr::Value(QueryExprValue::Value(Value::Uuid(
+                        device_id,
+                    )))),
+                )),
+                aggregates: vec![],
+                text_concats: vec![],
+                group_by: vec![],
+                order_by: vec![],
+                limit: None,
+                offset: None,
+                having: None,
+            }))])
+            .await
+            .map_err(db_error)?;
+        Ok(results.iter().any(|result| !result.rows.is_empty()))
+    }
+
     pub async fn get(
         &self,
         device_id: Uuid,
@@ -705,16 +772,10 @@ impl DbSelectionPolicyRepo {
                 .map_err(db_error)?;
             self.clear(device_id).await?;
         }
-        let policy = self
-            .record(device_id)
+        self.record(device_id)
             .await?
             .ok_or_else(|| invalid("selection policy not found"))?;
-        if policy.application_id.is_none()
-            && policy.selected_kind.is_none()
-            && policy.selected_id.is_none()
-        {
-            return Ok(true);
-        }
+
         self.engine
             .client()
             .execute(vec![
@@ -1394,6 +1455,79 @@ mod tests {
             );
         }
         std::fs::remove_file(path).expect("remove test database");
+    }
+
+    #[tokio::test]
+    async fn learned_owner_change_clears_selection_and_keeps_new_owner_gated_after_reopen() {
+        let root = std::env::temp_dir().join(format!("learned-owner-{}.redb", db::Uuid::now_v7()));
+        let device_id = db::Uuid::now_v7();
+        let app = db::Uuid::now_v7();
+        let old = db::Uuid::now_v7().to_string();
+        let new = db::Uuid::now_v7().to_string();
+        {
+            let engine = std::sync::Arc::new(db::Database::open(&root).expect("open policy"));
+            super::super::up(&engine).await.expect("initialize policy");
+            let repo = super::DbSelectionPolicyRepo::new(engine);
+            repo.set_prevalidated(super::SelectionPolicy {
+                device_id,
+                owner_subject: old.clone(),
+                application_id: Some(app),
+                selected_kind: Some("database".into()),
+                selected_id: Some(db::Uuid::now_v7()),
+                admin_allowed: true,
+            })
+            .await
+            .expect("select under old local view");
+            assert_eq!(
+                repo.selected_resources_for_device(device_id)
+                    .await
+                    .expect("unaware selection")
+                    .len(),
+                1
+            );
+            assert!(
+                !repo
+                    .reconcile_owner_prevalidated(device_id, &new)
+                    .await
+                    .expect("learn owner change")
+            );
+            assert!(
+                repo.selected_resources_for_device(device_id)
+                    .await
+                    .expect("old selection cleared")
+                    .is_empty()
+            );
+            assert!(
+                !repo
+                    .reconcile_owner_prevalidated(device_id, &new)
+                    .await
+                    .expect("retry stays gated")
+            );
+        }
+        {
+            let engine = std::sync::Arc::new(db::Database::open(&root).expect("reopen policy"));
+            let repo = super::DbSelectionPolicyRepo::new(engine);
+            assert!(repo.get(device_id, &new, app).await.is_err());
+            assert!(
+                !repo
+                    .reconcile_owner_prevalidated(device_id, &old)
+                    .await
+                    .expect("owner rollback cannot bypass learned cleanup")
+            );
+            assert!(
+                repo.selected_resources_for_device(device_id)
+                    .await
+                    .expect("cleared durably")
+                    .is_empty()
+            );
+            assert!(
+                !repo
+                    .reconcile_owner_prevalidated(device_id, &new)
+                    .await
+                    .expect("restart stays gated")
+            );
+        }
+        std::fs::remove_file(root).expect("remove policy fixture");
     }
 
     #[tokio::test]

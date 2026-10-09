@@ -68,6 +68,23 @@ impl DatabaseProtocolHandler {
         let Ok(selected) = local.selected_resources(self.server.endpoint().id()).await else {
             return;
         };
+        let selected_databases = selected
+            .iter()
+            .filter(|resource| resource.kind == "database")
+            .filter_map(|resource| {
+                Some((
+                    resource.owner_subject.clone(),
+                    resource.application_id.parse().ok()?,
+                    resource.resource_id.parse().ok()?,
+                ))
+            })
+            .collect::<Vec<_>>();
+        if let Err(error) = self
+            .databases
+            .reconcile_selected_copies(&selected_databases)
+        {
+            log::warn!("database local-copy cleanup is pending: {error}");
+        }
         for peer in self.server.peers().ids() {
             if self.server.endpoint().id().to_string() >= peer.to_string() {
                 continue;
@@ -149,6 +166,23 @@ impl DatabaseProtocolHandler {
         connection: &Connection,
     ) -> bool {
         if self.cancellation_token.is_cancelled() {
+            return false;
+        }
+        let (Ok(application_id), Ok(database_id)) = (
+            resource.application_id.parse(),
+            resource.database_id.parse(),
+        ) else {
+            return false;
+        };
+        let scope = Namespace {
+            owner_subject: resource.owner_subject.clone(),
+            application_id,
+        };
+        if self
+            .databases
+            .require_local_copy(&scope, database_id)
+            .is_err()
+        {
             return false;
         }
         let Some(local) = self.management.local_replication_authorizer() else {

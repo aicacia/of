@@ -1,3 +1,4 @@
+pub(crate) mod device_restriction;
 pub(crate) mod device_selection;
 pub(crate) mod health;
 

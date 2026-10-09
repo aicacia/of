@@ -44,6 +44,11 @@ pub enum IdentityAction {
     KeysRead,
     KeysRotate,
     KeysRevoke,
+    DevicesEnroll,
+    DevicesRename,
+    DevicesRevoke,
+    DeviceRestrictionsRead,
+    DeviceRestrictionsUpdate,
     DevicePairingRead,
     DevicePairingUpdate,
     ReplicaSignersEnroll,
@@ -77,6 +82,11 @@ impl IdentityAction {
             Self::KeysRead => "idp.keys.read",
             Self::KeysRotate => "idp.keys.rotate",
             Self::KeysRevoke => "idp.keys.revoke",
+            Self::DevicesEnroll => "idp.devices.enroll",
+            Self::DevicesRename => "idp.devices.rename",
+            Self::DevicesRevoke => "idp.devices.revoke",
+            Self::DeviceRestrictionsRead => "management.device_restrictions.read",
+            Self::DeviceRestrictionsUpdate => "management.device_restrictions.update",
             Self::DevicePairingRead => "idp.device_pairing.read",
             Self::DevicePairingUpdate => "idp.device_pairing.update",
             Self::ReplicaSignersEnroll => "idp.replica_signers.enroll",
@@ -136,6 +146,10 @@ pub enum IdentityResource {
     ClientKeys {
         #[serde(rename = "clientId")]
         client_id: String,
+    },
+    Device {
+        #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>))]
+        id: Option<Id>,
     },
     DevicePairing,
     IdpSecurity,
@@ -204,6 +218,14 @@ impl PermissionEvaluationRequest {
                 A::KeysRead | A::KeysRotate | A::KeysRevoke,
                 IdentityResource::ClientKeys { client_id },
             ) => !client_id.is_empty(),
+            (A::DevicesEnroll, IdentityResource::Device { id: None }) => true,
+            (
+                A::DevicesRename
+                | A::DevicesRevoke
+                | A::DeviceRestrictionsRead
+                | A::DeviceRestrictionsUpdate,
+                IdentityResource::Device { id: Some(id) },
+            ) => !id.is_nil(),
             (A::DevicePairingRead | A::DevicePairingUpdate, IdentityResource::DevicePairing) => {
                 true
             }
@@ -261,6 +283,29 @@ mod tests {
         PermissionTarget,
     };
     use crate::model::Id;
+
+    #[test]
+    fn device_mutation_permission_requires_exact_device_and_installation_scope() {
+        let device = Id::now_v7();
+        let mut request = PermissionEvaluationRequest {
+            request_id: Id::now_v7(),
+            subject: PermissionSubject::User { id: Id::now_v7() },
+            action: IdentityAction::DevicesRename,
+            target: PermissionTarget::Installation {
+                resource: IdentityResource::Device { id: Some(device) },
+            },
+        };
+        assert_eq!(request.policy_namespace(), Some(Id::nil()));
+        request.target = PermissionTarget::Installation {
+            resource: IdentityResource::Device { id: None },
+        };
+        assert_eq!(request.policy_namespace(), None);
+        request.target = PermissionTarget::Application {
+            application_id: Id::now_v7(),
+            resource: IdentityResource::Device { id: Some(device) },
+        };
+        assert_eq!(request.policy_namespace(), None);
+    }
 
     #[test]
     fn security_sync_permissions_are_context_exact_and_installation_scoped() {

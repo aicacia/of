@@ -7,11 +7,12 @@ use idp_service::oauth2::{decode_jwt, verify_jwt};
 
 use idp_model::{
     contract::{
-        DeviceEndpointIdentity, DeviceInfo, DeviceSelfRevocationRequest, DeviceState,
-        IntrospectionRequest, IntrospectionResponse, Jwks, TrustedDevice,
+        DeviceEndpointIdentity, DeviceSelfRevocationRequest, IntrospectionRequest,
+        IntrospectionResponse, Jwks, TrustedDevice,
     },
     model::Id,
 };
+use iroh::EndpointId;
 use model::contract::{
     AuthorizationDetail, StandardClaims, StorageAuthorizationAction, TokenResponse, TokenType,
     TokenUse,
@@ -361,29 +362,30 @@ impl HostedControlPlane {
         Ok(resource.application_id)
     }
 
-    /// Selection-only check. Deselect using the locally persisted owner, without IdP access.
-    pub async fn validate_selection_device(
+    pub async fn get_storage_device_identity(
         &self,
-        read_token: &str,
-        expected_actor_subject: &str,
-        expected_storage_audience: &str,
         device_id: Id,
-    ) -> Result<(), String> {
-        let claims = self.verify_access_token(read_token).await?;
-        validate_storage_read_claims(&claims, expected_actor_subject, expected_storage_audience)?;
-        self.lookup_approved_device(read_token, device_id).await
-    }
-
-    async fn lookup_approved_device(&self, read_token: &str, device_id: Id) -> Result<(), String> {
-        let devices: Vec<DeviceInfo> = self.get_idp("devices", read_token).await?;
-        if devices
-            .iter()
-            .any(|device| device.id == device_id && device.state == DeviceState::Approved)
-        {
-            Ok(())
-        } else {
-            Err("device is not an approved device of the token subject".to_owned())
+    ) -> Result<DeviceEndpointIdentity, String> {
+        if device_id.is_nil() {
+            return Err("invalid Device ID".into());
         }
+        let token = self.idp_service_access_token().await?;
+        let identity: DeviceEndpointIdentity = self
+            .get_idp(&format!("devices/identities/{device_id}"), &token)
+            .await?;
+        if identity.device_id != device_id
+            || !identity
+                .endpoint_id
+                .parse::<EndpointId>()
+                .is_ok_and(|endpoint| endpoint.to_string() == identity.endpoint_id)
+            || !identity
+                .owner_subject
+                .parse::<Id>()
+                .is_ok_and(|owner| !owner.is_nil())
+        {
+            return Err("IdP returned an invalid Device identity".into());
+        }
+        Ok(identity)
     }
 
     pub async fn trusted_devices(&self, token: &str) -> Result<Vec<TrustedDevice>, String> {
@@ -923,30 +925,62 @@ mod tests {
 
     #[tokio::test]
     async fn selection_device_lookup_requires_approved_owner_scoped_device() {
+        let endpoint = iroh::SecretKey::generate().public().to_string();
         for (body, allowed) in [
-            (format!(r#"[{{"id":"{ID}","name":"test","publicKey":"key","address":"addr","state":"approved","createdAt":0,"updatedAt":0,"revokedAt":null}}]"#), true),
-            (format!(r#"[{{"id":"{ID}","name":"test","publicKey":"key","address":"addr","state":"pending","createdAt":0,"updatedAt":0,"revokedAt":null}}]"#), false),
-            (format!(r#"[{{"id":"{ID}","name":"test","publicKey":"key","address":"addr","state":"revoked","createdAt":0,"updatedAt":0,"revokedAt":0}}]"#), false),
-            (r#"[]"#.to_owned(), false),
-            (r#"[{"id":"00000000-0000-0000-0000-000000000002","name":"other","publicKey":"key","address":"addr","state":"approved","createdAt":0,"updatedAt":0,"revokedAt":null}]"#.to_owned(), false),
+            (
+                format!(
+                    r#"{{"deviceId":"{ID}","ownerSubject":"{APP_ID}","endpointId":"{endpoint}"}}"#
+                ),
+                true,
+            ),
+            (
+                format!(
+                    r#"{{"deviceId":"{APP_ID}","ownerSubject":"{APP_ID}","endpointId":"key"}}"#
+                ),
+                false,
+            ),
+            (
+                format!(r#"{{"deviceId":"{ID}","ownerSubject":"invalid","endpointId":"key"}}"#),
+                false,
+            ),
+            (r#"{}"#.to_owned(), false),
         ] {
             let listener = TcpListener::bind("127.0.0.1:0").expect("bind test HTTP server");
             let address = listener.local_addr().expect("read test HTTP address");
             let server = thread::spawn(move || {
-                let (mut stream, _) = listener.accept().expect("accept test request");
+                let (mut token_stream, _) =
+                    listener.accept().expect("accept service token request");
                 let mut request = [0; 4096];
+                let token_length = token_stream
+                    .read(&mut request)
+                    .expect("read service token request");
+                assert!(token_length > 0);
+                let token_body = r#"{"access_token":"service-token","token_type":"Bearer","expires_in":300,"scope":"idp.token.validate idp.device.lookup","iss":"https://issuer.example"}"#;
+                write!(token_stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{token_body}", token_body.len()).expect("write service token");
+                let (mut stream, _) = listener.accept().expect("accept test request");
                 let length = stream.read(&mut request).expect("read test request");
                 let request = String::from_utf8_lossy(&request[..length]).into_owned();
                 write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).expect("write test response");
                 request
             });
-            let control_plane = HostedControlPlane::new(&format!("http://{address}"))
-                .expect("create test control plane");
-            let result = control_plane.lookup_approved_device("secret", ID.parse().expect("valid device ID")).await;
+            let control_plane = HostedControlPlane::new_with_issuer(
+                &format!("http://{address}"),
+                "https://issuer.example",
+            )
+            .expect("create test control plane")
+            .with_idp_service_client("management-client", "secret", "idp-services")
+            .expect("scoped service client");
+            let result = control_plane
+                .get_storage_device_identity(ID.parse().expect("valid device ID"))
+                .await;
             assert_eq!(result.is_ok(), allowed);
             let request = server.join().expect("join test HTTP server");
-            assert!(request.starts_with("GET /devices HTTP/1.1"));
-            assert!(request.to_ascii_lowercase().contains("authorization: bearer secret"));
+            assert!(request.starts_with(&format!("GET /devices/identities/{ID} HTTP/1.1")));
+            assert!(
+                request
+                    .to_ascii_lowercase()
+                    .contains("authorization: bearer service-token")
+            );
         }
     }
 
@@ -956,7 +990,7 @@ mod tests {
             HostedControlPlane::new("http://127.0.0.1:1").expect("create test control plane");
         assert!(
             control_plane
-                .lookup_approved_device("secret", ID.parse().expect("valid device ID"))
+                .get_storage_device_identity(ID.parse().expect("valid device ID"))
                 .await
                 .is_err()
         );

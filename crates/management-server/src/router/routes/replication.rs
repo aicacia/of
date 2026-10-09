@@ -41,6 +41,14 @@ pub(crate) async fn selected_resources(
             log::warn!("Management endpoint identity lookup failed: {error}");
             unavailable()
         })?;
+    if !state
+        .selection_policies
+        .reconcile_owner_prevalidated(identity.device_id, &identity.owner_subject)
+        .await
+        .map_err(|_| unavailable())?
+    {
+        return Err(denied());
+    }
     let selected = state
         .selection_policies
         .selected_resources_for_device(identity.device_id)
@@ -103,6 +111,14 @@ pub(crate) async fn replication_admission(
     }
 
     for identity in [&source, &target] {
+        if !state
+            .selection_policies
+            .reconcile_owner_prevalidated(identity.device_id, &identity.owner_subject)
+            .await
+            .map_err(|_| unavailable())?
+        {
+            return Err(denied());
+        }
         let policy = state
             .selection_policies
             .get(identity.device_id, &identity.owner_subject, application_id)

@@ -21,6 +21,15 @@ struct StorageNamespaceId {
     application_id: idp_model::model::Id,
 }
 
+impl StorageNamespace for StorageNamespaceId {
+    fn user_sub(&self) -> &str {
+        &self.user_sub
+    }
+    fn application_id(&self) -> idp_model::model::Id {
+        self.application_id
+    }
+}
+
 pub type ScopedFileSystem<PeerId> = FileSystem<PeerId>;
 type ScopedResources<PeerId> =
     BTreeMap<(StorageNamespaceId, FileSystemId), Arc<ScopedFileSystem<PeerId>>>;
@@ -31,6 +40,7 @@ where
 {
     root: PathBuf,
     local_peer: PeerId,
+    pub(crate) local_copies: Arc<crate::local_copy::LocalCopyPolicy>,
 
     catalogs: StdMutex<BTreeMap<StorageNamespaceId, Arc<FileSystemCatalog>>>,
     resources: Mutex<ScopedResources<PeerId>>,
@@ -43,6 +53,9 @@ where
     pub fn new(root: PathBuf, local_peer: PeerId) -> io::Result<Self> {
         std::fs::create_dir_all(&root)?;
         Ok(Self {
+            local_copies: Arc::new(crate::local_copy::LocalCopyPolicy::new(
+                root.join("filesystem-local-copies.json"),
+            )),
             root,
             local_peer,
 
@@ -114,11 +127,44 @@ where
             .any(|entry| entry.resource.id == resource_id && entry.deleted))
     }
 
+    pub fn require_local_copy<S: StorageNamespace>(
+        &self,
+        scope: &S,
+        resource_id: FileSystemId,
+    ) -> Result<(), String> {
+        storage_namespace_id(scope)?;
+        self.local_copies
+            .require_available(scope, resource_id.as_uuid())
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn remove_local_copy<S: StorageNamespace>(
+        &self,
+        scope: &S,
+        resource_id: FileSystemId,
+    ) -> Result<(), String> {
+        let namespace = storage_namespace_id(scope)?;
+        if !self
+            .catalog(&namespace)?
+            .snapshot()
+            .map_err(|error| error.to_string())?
+            .iter()
+            .any(|entry| entry.resource.id == resource_id)
+        {
+            return Err("unknown local filesystem resource".into());
+        }
+        self.local_copies
+            .retire(scope, resource_id.as_uuid())
+            .map_err(|error| error.to_string())?;
+        Err("offs whole-resource removal with issued-handle invalidation is unavailable; cleanup remains pending".into())
+    }
+
     pub async fn register_selected_resource<S: StorageNamespace>(
         &self,
         scope: &S,
         resource_id: FileSystemId,
     ) -> Result<(), String> {
+        self.require_local_copy(scope, resource_id)?;
         let id = storage_namespace_id(scope)?;
         let catalog = self.catalog(&id)?;
         if let Some(entry) = catalog
@@ -154,6 +200,17 @@ where
         &self,
         selected: &[(String, idp_model::model::Id, FileSystemId)],
     ) -> Result<(), String> {
+        let tracked = selected
+            .iter()
+            .map(|(owner, application_id, resource_id)| {
+                (owner.clone(), *application_id, resource_id.as_uuid())
+            })
+            .collect::<Vec<_>>();
+        let tracked_pending = match self.local_copies.reconcile_selected(&tracked) {
+            Ok(()) => false,
+            Err(error) if error.kind() == io::ErrorKind::Unsupported => true,
+            Err(error) => return Err(error.to_string()),
+        };
         let selected = selected
             .iter()
             .map(|(owner, application_id, resource_id)| {
@@ -167,7 +224,7 @@ where
             })
             .collect::<BTreeSet<_>>();
         let catalogs = self.catalogs_on_disk()?;
-        let mut resources = self.resources.lock().await;
+        let mut pending = tracked_pending;
         for (namespace, catalog) in catalogs {
             for resource_id in catalog
                 .projected_selected()
@@ -176,20 +233,37 @@ where
                 if selected.contains(&(namespace.clone(), resource_id)) {
                     continue;
                 }
-                let key = (namespace.clone(), resource_id);
-                if resources
-                    .get(&key)
-                    .is_some_and(|filesystem| Arc::strong_count(filesystem) > 1)
-                {
-                    continue;
-                }
-                drop(resources.remove(&key));
-                catalog
-                    .evict_projected_copy(resource_id)
+                self.local_copies
+                    .retire(&namespace, resource_id.as_uuid())
                     .map_err(|error| error.to_string())?;
+                pending = true;
             }
         }
-        Ok(())
+        if pending {
+            Err("offs whole-resource removal with issued-handle invalidation is unavailable; cleanup remains pending".into())
+        } else {
+            Ok(())
+        }
+    }
+
+    pub async fn set_resource_residency<S: StorageNamespace>(
+        &self,
+        scope: &S,
+        resource_id: FileSystemId,
+        residency: Residency,
+    ) -> Result<(), String> {
+        let filesystem = self.open_resource(scope, resource_id).await?;
+        self.local_copies
+            .set_passthrough(
+                scope,
+                resource_id.as_uuid(),
+                residency == Residency::Passthrough,
+            )
+            .map_err(|error| error.to_string())?;
+        filesystem
+            .set_residency("", residency)
+            .await
+            .map_err(|error| error.to_string())
     }
 
     pub async fn open_resource<S: StorageNamespace>(
@@ -197,6 +271,7 @@ where
         scope: &S,
         resource_id: FileSystemId,
     ) -> Result<Arc<ScopedFileSystem<PeerId>>, String> {
+        self.require_local_copy(scope, resource_id)?;
         let id = storage_namespace_id(scope)?;
         let mut resources = self.resources.lock().await;
         if let Some(file_system) = resources.get(&(id.clone(), resource_id)) {
@@ -207,8 +282,17 @@ where
                 .open_filesystem(resource_id, self.local_peer.clone())
                 .map_err(|error| error.to_string())?,
         );
+        let residency = if self
+            .local_copies
+            .passthrough(scope, resource_id.as_uuid())
+            .map_err(|error| error.to_string())?
+        {
+            Residency::Passthrough
+        } else {
+            Residency::Full
+        };
         file_system
-            .set_residency("", Residency::Full)
+            .set_residency("", residency)
             .await
             .map_err(|error| error.to_string())?;
         resources.insert((id, resource_id), Arc::clone(&file_system));
@@ -464,7 +548,56 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn deselection_evicts_projected_copy_after_open_handles_drop() {
+    async fn passthrough_resource_stays_read_only_after_offline_restart() {
+        let root = env::temp_dir().join(format!(
+            "passthrough-resource-{}",
+            idp_model::model::Id::now_v7()
+        ));
+        let scope = Namespace {
+            user_sub: "owner",
+            application_id: idp_model::model::Id::now_v7(),
+        };
+        let runtime = ScopedFileSystemRuntime::new(root.clone(), 1_u8).expect("runtime");
+        let resource = runtime
+            .create_resource(&scope, None)
+            .await
+            .expect("resource");
+        let filesystem = runtime
+            .open_resource(&scope, resource.id)
+            .await
+            .expect("Full copy");
+        filesystem
+            .write("local.txt", b"local")
+            .await
+            .expect("Full writes");
+        runtime
+            .set_resource_residency(&scope, resource.id, file_system::Residency::Passthrough)
+            .await
+            .expect("local residency choice");
+        assert!(filesystem.write("denied.txt", b"no").await.is_err());
+        drop(filesystem);
+        drop(runtime);
+        let reopened = ScopedFileSystemRuntime::new(root.clone(), 1_u8).expect("offline reopen");
+        let filesystem = reopened
+            .open_resource(&scope, resource.id)
+            .await
+            .expect("Passthrough copy");
+        assert_eq!(
+            filesystem.residency("").expect("persisted residency"),
+            file_system::Residency::Passthrough
+        );
+        assert!(filesystem.write("denied.txt", b"no").await.is_err());
+        assert!(
+            filesystem.read("local.txt").await.is_err(),
+            "no reachable Full peer; do not pretend cached content is available"
+        );
+        drop(filesystem);
+        drop(reopened);
+        fs::remove_dir_all(root).expect("remove fixture");
+    }
+
+    #[tokio::test]
+    async fn deselection_stays_pending_without_owner_handle_invalidation() {
         let root = env::temp_dir().join(format!(
             "deselected-filesystem-runtime-{}",
             std::process::id()
@@ -495,11 +628,31 @@ mod tests {
             .join("filesystems")
             .join(projected_id.as_uuid().to_string());
         assert!(projected_root.exists());
+        let session = crate::ScopedStorageService::open_resource(
+            &runtime,
+            Namespace {
+                user_sub: namespace.user_sub,
+                application_id: namespace.application_id,
+            },
+            projected_id,
+        )
+        .await
+        .expect("open domain session before deselection");
 
         runtime
             .remove_unselected_projected_resources(&[])
             .await
-            .expect("deselection cleanup succeeds");
+            .expect_err("active use must not report cleanup completion");
+        assert!(
+            session
+                .execute(storage_model::StorageRequest::Write {
+                    path: "denied.txt".into(),
+                    content: b"deny".to_vec()
+                })
+                .await
+                .is_err(),
+            "issued domain session must not continue after retirement"
+        );
         assert!(
             projected_root.exists(),
             "active handles defer physical cleanup"
@@ -509,8 +662,8 @@ mod tests {
         runtime
             .remove_unselected_projected_resources(&[])
             .await
-            .expect("retry cleanup after handle release");
-        assert!(!projected_root.exists());
+            .expect_err("dropping a runtime Arc does not prove owner-handle invalidation");
+        assert!(projected_root.exists());
         assert_eq!(
             runtime
                 .list_resources(&namespace)
@@ -523,15 +676,12 @@ mod tests {
             runtime
                 .open_resource(&namespace, projected_id)
                 .await
-                .expect("resource can be opened after eviction")
-                .entry("cached.txt")
-                .await
                 .is_err()
         );
         runtime
             .register_selected_resource(&namespace, projected_id)
             .await
-            .expect("reselection restores projected status");
+            .expect_err("reselection cannot bypass pending cleanup");
 
         let local = runtime
             .create_resource(&namespace, Some("local".into()))
@@ -554,11 +704,26 @@ mod tests {
         runtime
             .remove_unselected_projected_resources(&[])
             .await
-            .expect("unselected local resources remain untouched");
+            .expect_err("prior projected cleanup remains pending");
         assert!(local_root.exists());
 
+        runtime
+            .remove_local_copy(&namespace, local.id)
+            .await
+            .expect_err("locally created copy is covered too");
+        assert!(runtime.open_resource(&namespace, local.id).await.is_err());
         drop(local_fs);
+        drop(session);
         drop(runtime);
+        let reopened = ScopedFileSystemRuntime::new(root.clone(), 1_u8).expect("offline restart");
+        assert!(
+            reopened
+                .open_resource(&namespace, projected_id)
+                .await
+                .is_err()
+        );
+        assert!(reopened.open_resource(&namespace, local.id).await.is_err());
+        drop(reopened);
         let _ = fs::remove_dir_all(root);
     }
 

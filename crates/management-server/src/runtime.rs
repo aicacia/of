@@ -24,6 +24,13 @@ pub async fn replication_policy(
         return Err("invalid local Device owner binding".into());
     }
     let policies = DbSelectionPolicyRepo::new(engine);
+    if !policies
+        .reconcile_owner_prevalidated(device.device_id, &device.owner_subject)
+        .await
+        .map_err(|error| error.to_string())?
+    {
+        return Err("learned Device transfer requires local cleanup".into());
+    }
     let policy = policies
         .get(device.device_id, &device.owner_subject, Id::nil())
         .await

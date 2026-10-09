@@ -1,5 +1,6 @@
 mod database_catalog;
 mod database_runtime;
+mod local_copy;
 mod scoped_file_system;
 mod service;
 

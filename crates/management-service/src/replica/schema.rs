@@ -1,6 +1,7 @@
 use db::{Database, SqlTranslator};
 
 const MIGRATIONS: &[&str] = &[
+    "CREATE TABLE IF NOT EXISTS local_device_copy_cleanup (device_id UUID PRIMARY KEY)",
     "CREATE TABLE IF NOT EXISTS roles (id UUID PRIMARY KEY, application_id UUID, name TEXT, description TEXT, revoked_at INTEGER, created_at INTEGER, updated_at INTEGER)",
     "CREATE UNIQUE INDEX IF NOT EXISTS roles_application_name ON roles (application_id, name)",
     "CREATE TABLE IF NOT EXISTS permissions (id UUID PRIMARY KEY, application_id UUID, name TEXT, description TEXT, revoked_at INTEGER, created_at INTEGER, updated_at INTEGER)",

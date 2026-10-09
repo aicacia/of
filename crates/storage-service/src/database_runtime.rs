@@ -17,6 +17,7 @@ type KvStores = BTreeMap<DatabaseKey, Arc<KvDatabase>>;
 pub struct DatabaseRuntime {
     root: PathBuf,
     catalog: DatabaseCatalog,
+    local_copies: crate::local_copy::LocalCopyPolicy,
     open: Mutex<BTreeMap<(String, idp_model::model::Id, DatabaseId), Arc<Database>>>,
     kv_open: Mutex<KvStores>,
 }
@@ -25,6 +26,9 @@ impl DatabaseRuntime {
     pub fn new(root: PathBuf) -> io::Result<Self> {
         Ok(Self {
             catalog: DatabaseCatalog::new(root.clone())?,
+            local_copies: crate::local_copy::LocalCopyPolicy::new(
+                root.join("database-local-copies.json"),
+            ),
             root,
             open: Mutex::new(BTreeMap::new()),
             kv_open: Mutex::new(BTreeMap::new()),
@@ -115,11 +119,48 @@ impl DatabaseRuntime {
         Ok(())
     }
 
+    /// Requires the current trusted local Device selection, not handshake claims.
+    pub fn reconcile_selected_copies(
+        &self,
+        selected: &[(String, idp_model::model::Id, DatabaseId)],
+    ) -> io::Result<()> {
+        self.local_copies.reconcile_selected(selected)
+    }
+
+    pub fn require_local_copy<S: StorageNamespace>(
+        &self,
+        scope: &S,
+        id: DatabaseId,
+    ) -> io::Result<()> {
+        database_path(&self.root, scope, id)?;
+        self.local_copies.require_available(scope, id)
+    }
+
+    pub fn remove_local_copy<S: StorageNamespace>(
+        &self,
+        scope: &S,
+        id: DatabaseId,
+    ) -> io::Result<()> {
+        database_path(&self.root, scope, id)?;
+        if self.catalog.get(scope, id)?.is_none() && !self.catalog.is_tombstoned(scope, id)? {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "unknown local database resource",
+            ));
+        }
+        self.local_copies.retire(scope, id)?;
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "ofdb SQL/KV whole-resource removal and issued-handle invalidation are unavailable; cleanup remains pending",
+        ))
+    }
+
     pub fn open_selected<S: StorageNamespace>(
         &self,
         scope: &S,
         id: DatabaseId,
     ) -> io::Result<Option<Arc<Database>>> {
+        self.require_local_copy(scope, id)?;
         let mut open = self
             .open
             .lock()
@@ -145,6 +186,7 @@ impl DatabaseRuntime {
         scope: &S,
         id: DatabaseId,
     ) -> io::Result<Option<Arc<KvDatabase>>> {
+        self.require_local_copy(scope, id)?;
         let mut open = self
             .kv_open
             .lock()
@@ -171,6 +213,7 @@ impl DatabaseRuntime {
         scope: &S,
         id: DatabaseId,
     ) -> io::Result<Option<Arc<Database>>> {
+        self.require_local_copy(scope, id)?;
         let mut open = self
             .open
             .lock()
@@ -246,6 +289,65 @@ mod tests {
         fn application_id(&self) -> idp_model::model::Id {
             self.application
         }
+    }
+
+    #[test]
+    fn local_copy_retirement_is_pending_without_owner_removal_and_survives_restart() {
+        let root = std::env::temp_dir().join(format!(
+            "database-retirement-{}",
+            idp_model::model::Id::now_v7()
+        ));
+        let scope = Scope {
+            subject: "owner",
+            application: idp_model::model::Id::now_v7(),
+        };
+        let runtime = DatabaseRuntime::new(root.clone()).expect("runtime");
+        let (retired, handle) = runtime.create(&scope, None).expect("managed local copy");
+        let (unrelated, other_handle) = runtime.create(&scope, None).expect("unrelated copy");
+        runtime
+            .reconcile_selected_copies(&[(scope.subject.to_owned(), scope.application, retired.id)])
+            .expect("observe trusted selection without a peer");
+        runtime
+            .reconcile_selected_copies(&[])
+            .expect_err("learned deselection retires managed copy");
+        let error = runtime
+            .remove_local_copy(&scope, retired.id)
+            .expect_err("owner API missing; do not report completion");
+        assert_eq!(error.kind(), std::io::ErrorKind::Unsupported);
+        assert!(runtime.open(&scope, retired.id).is_err());
+        assert!(runtime.open_selected(&scope, retired.id).is_err());
+        assert!(runtime.open_kv_selected(&scope, retired.id).is_err());
+        assert!(
+            runtime
+                .open(&scope, unrelated.id)
+                .expect("unrelated survives")
+                .is_some()
+        );
+        assert!(
+            !runtime
+                .is_tombstoned(&scope, retired.id)
+                .expect("not global deletion")
+        );
+        drop(handle);
+        drop(other_handle);
+        drop(runtime);
+        let reopened = DatabaseRuntime::new(root.clone()).expect("offline restart");
+        assert!(reopened.open(&scope, retired.id).is_err());
+        assert_eq!(
+            reopened
+                .remove_local_copy(&scope, retired.id)
+                .expect_err("retry stays pending")
+                .kind(),
+            std::io::ErrorKind::Unsupported
+        );
+        assert!(
+            reopened
+                .open(&scope, unrelated.id)
+                .expect("unrelated restart")
+                .is_some()
+        );
+        drop(reopened);
+        fs::remove_dir_all(root).expect("remove fixture");
     }
 
     #[test]

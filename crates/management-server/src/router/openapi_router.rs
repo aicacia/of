@@ -7,6 +7,10 @@ use crate::RouterState;
 
 use super::openapi::{__path_openapi_json, openapi_json};
 
+use super::routes::device_restriction::{
+    __path_get_device_restriction, __path_put_device_restriction, get_device_restriction,
+    put_device_restriction,
+};
 use super::routes::device_selection::{
     __path_delete_device_resource_selection, __path_delete_device_selection,
     __path_put_device_selection, delete_device_resource_selection, delete_device_selection,
@@ -55,6 +59,8 @@ pub fn openapi_router(router_state: RouterState, prefix: &str) -> OpenApiRouter 
             .routes(routes!(health))
             .routes(routes!(version))
             .routes(routes!(list_user_roles_across_applications))
+            .routes(routes!(get_device_restriction))
+            .routes(routes!(put_device_restriction))
             .routes(routes!(put_device_selection))
             .routes(routes!(delete_device_selection))
             .routes(routes!(delete_device_resource_selection))

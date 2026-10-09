@@ -273,6 +273,101 @@ async fn real_selected_production_data_handler_uses_injected_local_policy_on_exi
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn real_production_database_retirement_denies_existing_connection_with_selection_still_allowed()
+ {
+    tokio::time::timeout(std::time::Duration::from_secs(120), async {
+        let fixture = Fixture::new().await;
+        let peers = EndpointIdStore::default();
+        peers.add(fixture.peers.ids()[0]);
+        let server = Server::new(fixture.peers.endpoints[1].clone(), peers);
+        let management = crate::ManagementClient::new(
+            "http://127.0.0.1:9/management",
+            "http://127.0.0.1:9/idp",
+            "storage",
+            "isolated-test-secret",
+            "https://of03-installation.example",
+            "https://management.example",
+        )
+        .expect("unreachable remote owners")
+        .with_local_replication_authorizer(fixture.nodes[1].authorizer());
+        let cancellation = CancellationToken::new();
+        let database = super::DatabaseProtocolHandler::new(
+            server.clone(),
+            management.clone(),
+            fixture.runtimes[1].clone(),
+            fixture.nodes[1].root.join("staging"),
+            cancellation.clone(),
+        );
+        let filesystem = crate::storage_protocol::StorageProtocolHandler::new(
+            server,
+            management,
+            Arc::new(
+                storage_service::ScopedFileSystemRuntime::new(
+                    fixture.nodes[1].root.join("unused-filesystems"),
+                    fixture.peers.ids()[1],
+                )
+                .expect("filesystem runtime"),
+            ),
+            cancellation.clone(),
+        );
+        let handler = crate::DataProtocolHandler::new(database, filesystem, cancellation.clone());
+        let connection = fixture.peers.connections[1].clone();
+        let task = tokio::spawn(async move { handler.accept(connection).await });
+        let scope = Namespace {
+            owner_subject: fixture.resource.owner_subject.clone(),
+            application_id: fixture
+                .resource
+                .application_id
+                .parse()
+                .expect("Application"),
+        };
+        let id = fixture.resource.resource_id.parse().expect("resource ID");
+        let before = fixture.databases[0]
+            .sync_manifest()
+            .await
+            .expect("source state");
+        assert!(
+            fixture.nodes[1]
+                .authorizer()
+                .authorize(
+                    fixture.peers.ids()[1],
+                    fixture.peers.ids()[0],
+                    &fixture.resource
+                )
+                .await
+        );
+        assert_eq!(
+            fixture.runtimes[1]
+                .remove_local_copy(&scope, id)
+                .expect_err("missing owner capability")
+                .kind(),
+            std::io::ErrorKind::Unsupported
+        );
+        assert!(
+            production_session(&fixture).await.is_err(),
+            "pending cleanup denies DATA even with unchanged allowed selections"
+        );
+        assert_eq!(
+            fixture.databases[0]
+                .sync_manifest()
+                .await
+                .expect("source retained"),
+            before
+        );
+        assert!(
+            !fixture.runtimes[1]
+                .is_tombstoned(&scope, id)
+                .expect("catalog survives")
+        );
+        cancellation.cancel();
+        task.await.expect("DATA task").expect("shutdown");
+        fixture.peers.close().await;
+    })
+    .await
+    .expect("bounded retirement integration");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn real_production_database_admission_checks_identity_both_selections_and_local_failure() {
     tokio::time::timeout(std::time::Duration::from_secs(600), async {
         let started = std::time::Instant::now();
