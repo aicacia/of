@@ -273,12 +273,20 @@ impl DomainNode {
         );
     }
     pub fn authorizer(&self) -> LocalReplicationAuthorizer {
+        self.authorizer_retaining(Arc::new(()))
+    }
+    pub fn authorizer_retaining(
+        &self,
+        retained: Arc<dyn Send + Sync>,
+    ) -> LocalReplicationAuthorizer {
         let idp = self.idp.clone();
         let management = self.management.clone();
         LocalReplicationAuthorizer::new(move |endpoint: EndpointId| {
             let idp = idp.clone();
             let management = management.clone();
+            let retained = retained.clone();
             async move {
+                let _retained = retained;
                 let device = DbDeviceRepo::new(idp.clone())
                     .find_approved_by_public_key(&endpoint.to_string())
                     .await

@@ -175,47 +175,42 @@ impl StorageProtocolHandler {
                 return;
             }
         };
-        let handler = self.clone();
-        tokio::spawn(async move {
-            let result = async {
-                let namespace = Namespace {
-                    owner_subject: resource.owner_subject.clone(),
-                    application_id: resource
-                        .application_id
-                        .parse()
-                        .map_err(std::io::Error::other)?,
-                };
-                let filesystem_id =
-                    FileSystemId::parse(&resource.filesystem_id).map_err(std::io::Error::other)?;
-                handler.require_authorized(&resource, &connection).await?;
-                if deleted {
-                    handler
-                        .file_systems
-                        .apply_deletion_tombstone(&namespace, filesystem_id)
-                        .await
-                        .map_err(std::io::Error::other)?;
-                    transport.close();
-                    return Ok(());
-                }
-                handler
-                    .file_systems
-                    .register_selected_resource(&namespace, filesystem_id)
+        let result = async {
+            let namespace = Namespace {
+                owner_subject: resource.owner_subject.clone(),
+                application_id: resource
+                    .application_id
+                    .parse()
+                    .map_err(std::io::Error::other)?,
+            };
+            let filesystem_id =
+                FileSystemId::parse(&resource.filesystem_id).map_err(std::io::Error::other)?;
+            self.require_authorized(&resource, &connection).await?;
+            if deleted {
+                self.file_systems
+                    .apply_deletion_tombstone(&namespace, filesystem_id)
                     .await
                     .map_err(std::io::Error::other)?;
-                handler.require_authorized(&resource, &connection).await?;
-                let filesystem = handler
-                    .file_systems
-                    .open_resource(&namespace, filesystem_id)
-                    .await
-                    .map_err(std::io::Error::other)?;
-                let control = handler.operation_control(resource, connection);
-                handler.run_sync(filesystem, transport, control).await
+                transport.close();
+                return Ok(());
             }
-            .await;
-            if let Err(error) = result {
-                log::debug!("filesystem sync session ended: {error}");
-            }
-        });
+            self.file_systems
+                .register_selected_resource(&namespace, filesystem_id)
+                .await
+                .map_err(std::io::Error::other)?;
+            self.require_authorized(&resource, &connection).await?;
+            let filesystem = self
+                .file_systems
+                .open_resource(&namespace, filesystem_id)
+                .await
+                .map_err(std::io::Error::other)?;
+            let control = self.operation_control(resource, connection);
+            self.run_sync(filesystem, transport, control).await
+        }
+        .await;
+        if let Err(error) = result {
+            log::debug!("filesystem sync session ended: {error}");
+        }
     }
 
     fn operation_control(

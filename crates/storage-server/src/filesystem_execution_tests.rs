@@ -11,10 +11,12 @@ use file_system::{
     RemoteOperation, SyncMessage, Transport,
 };
 use idp_model::model::Id;
-use iroh::EndpointId;
+use iroh::{EndpointId, protocol::ProtocolHandler};
+use iroh_chain::{EndpointIdStore, Server};
 use model::contract::SelectedResource;
 use storage_model::StorageNamespace;
-use storage_service::ScopedFileSystemRuntime;
+use storage_service::{DatabaseRuntime, ScopedFileSystemRuntime};
+use tokio_util::sync::CancellationToken;
 
 use super::{FILESYSTEM_STREAM_KIND, FrameAuthorizer, IrohFileTransport, IrohResourceDescriptor};
 use crate::execution_test_support::{DomainNode, Gate, IrohPair, TestDirectory, approved_signers};
@@ -38,6 +40,15 @@ struct Fixture {
     resource: SelectedResource,
     _directory: TestDirectory,
 }
+struct Released(Option<tokio::sync::oneshot::Sender<()>>);
+impl Drop for Released {
+    fn drop(&mut self) {
+        if let Some(sender) = self.0.take() {
+            let _ = sender.send(());
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 enum Hook {
     Import,
@@ -214,6 +225,138 @@ impl Fixture {
         assert!(!deleted);
         [left, right]
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn real_selected_filesystem_parent_cancellation_releases_admitted_session() {
+    tokio::time::timeout(Duration::from_secs(120), async {
+        let fixture = Fixture::new().await;
+        let server = Server::new(
+            fixture.peers.endpoints[1].clone(),
+            EndpointIdStore::default(),
+        );
+        let runtime = Arc::new(
+            ScopedFileSystemRuntime::new(
+                fixture.nodes[1].root.join("production-files"),
+                fixture.peers.ids()[1],
+            )
+            .expect("production filesystem runtime"),
+        );
+        let scope = Scope {
+            owner: fixture.resource.owner_subject.clone(),
+            application: fixture
+                .resource
+                .application_id
+                .parse()
+                .expect("Application"),
+        };
+        let id =
+            file_system::FileSystemId::parse(&fixture.resource.resource_id).expect("resource ID");
+        runtime
+            .register_selected_resource(&scope, id)
+            .await
+            .expect("real selected resource");
+        let file = runtime.open_resource(&scope, id).await.expect("resource");
+        file.write("retained.txt", b"source retained")
+            .await
+            .expect("content");
+        file.open_handle(OpenRequest {
+            path: "retained.txt".into(),
+            revision: None,
+        })
+        .await
+        .expect("native source handle opens");
+        let (released, release) = tokio::sync::oneshot::channel();
+        let lifetime = Arc::new(Released(Some(released)));
+        let policy = fixture.nodes[1].authorizer_retaining(lifetime);
+        let management = crate::ManagementClient::new(
+            "http://127.0.0.1:9/management",
+            "http://127.0.0.1:9/idp",
+            "storage",
+            "isolated-secret",
+            "https://of03-installation.example",
+            "management",
+        )
+        .expect("unreachable remote services")
+        .with_local_replication_authorizer(policy);
+        let cancellation = CancellationToken::new();
+        let database = crate::database_protocol::DatabaseProtocolHandler::new(
+            server.clone(),
+            management.clone(),
+            Arc::new(
+                DatabaseRuntime::new(fixture.nodes[1].root.join("unused-databases"))
+                    .expect("database runtime"),
+            ),
+            fixture.nodes[1].root.join("stage"),
+            cancellation.clone(),
+        );
+        let filesystem = crate::storage_protocol::StorageProtocolHandler::new(
+            server,
+            management,
+            runtime,
+            cancellation.clone(),
+        );
+        let handler = crate::DataProtocolHandler::new(database, filesystem, cancellation);
+        let connection = fixture.peers.connections[1].clone();
+        let task = tokio::spawn(async move { handler.accept(connection).await });
+        let authorize = fixture.authorize(0);
+        let transport = IrohFileTransport::open_authorized(
+            &fixture.peers.connections[0],
+            fixture.descriptor(),
+            move |_| {
+                let authorize = authorize.clone();
+                async move { authorize().await }
+            },
+        )
+        .await
+        .expect("native selected admission");
+        let mut metadata = transport.subscribe();
+        while !matches!(
+            metadata
+                .recv()
+                .await
+                .expect("production session announcement"),
+            (_, SyncMessage::SnapshotDelta { .. })
+        ) {}
+        let mut handle = Box::new(
+            transport
+                .open(
+                    fixture.peers.ids()[1],
+                    OpenRequest {
+                        path: "retained.txt".into(),
+                        revision: None,
+                    },
+                )
+                .await
+                .expect("production session is running"),
+        );
+        assert_eq!(
+            handle.read(0, 15).await.expect("authorized resource read"),
+            bytes::Bytes::from_static(b"source retained")
+        );
+        task.abort();
+        assert!(task.await.expect_err("host task cancelled").is_cancelled());
+        tokio::time::timeout(Duration::from_secs(5), release)
+            .await
+            .expect("admitted filesystem session must not outlive its DATA parent")
+            .expect("owner evaluator released");
+        assert_eq!(
+            file.read("retained.txt").await.expect("content preserved"),
+            b"source retained"
+        );
+        assert!(
+            handle
+                .write(0, bytes::Bytes::from_static(b"denied"))
+                .await
+                .is_err(),
+            "cancelled session cannot apply later writes"
+        );
+        transport.close();
+        drop(handle);
+        fixture.peers.close().await;
+    })
+    .await
+    .expect("native parent cancellation completes");
 }
 
 async fn serve(

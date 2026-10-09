@@ -13,6 +13,8 @@ use axum::{
 use storage_model::{StorageErrorCode, StorageRequest, StorageResponse, StorageSession};
 
 pub struct StorageSocketAccess<S> {
+    pub subject: String,
+    pub application_id: String,
     pub read: bool,
     pub write: bool,
     pub expires_at: i64,
@@ -99,6 +101,8 @@ async fn serve_socket<A>(
 ) where
     A: StorageSocketAuthorizer,
 {
+    let subject = access.subject.clone();
+    let application_id = access.application_id.clone();
     loop {
         if unix_time_seconds() >= access.expires_at {
             return;
@@ -110,7 +114,13 @@ async fn serve_socket<A>(
             .authorize(token.clone(), resource_id.clone())
             .await
         {
-            Ok(access) if unix_time_seconds() < access.expires_at => access,
+            Ok(access)
+                if unix_time_seconds() < access.expires_at
+                    && access.subject == subject
+                    && access.application_id == application_id =>
+            {
+                access
+            }
             Ok(_) | Err(_) => return,
         };
         let request = serde_json::from_str::<StorageRequest>(&message);
@@ -129,7 +139,13 @@ async fn serve_socket<A>(
             .authorize(token.clone(), resource_id.clone())
             .await
         {
-            Ok(current) if unix_time_seconds() < current.expires_at => current,
+            Ok(current)
+                if unix_time_seconds() < current.expires_at
+                    && current.subject == subject
+                    && current.application_id == application_id =>
+            {
+                current
+            }
             Ok(_) | Err(_) => return,
         };
         if !(current.read || current.write)
@@ -192,6 +208,8 @@ mod tests {
     #[test]
     fn authorization_is_resource_wide_and_action_bounded() {
         let access = StorageSocketAccess {
+            subject: "user".into(),
+            application_id: "application".into(),
             read: true,
             write: false,
             expires_at: i64::MAX,
