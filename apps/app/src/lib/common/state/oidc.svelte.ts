@@ -46,6 +46,7 @@ const oidcClient = $derived.by(
       },
       fetch,
       disableNativeRequests: true,
+      storage: isTauri() ? "memory" : "local",
     }),
 );
 

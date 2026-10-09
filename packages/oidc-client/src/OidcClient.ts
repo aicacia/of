@@ -26,6 +26,7 @@ export type OidcClientEvents = {
 export type OidcClientOptions = {
   clientConfig: OidcClientConfig;
   disableNativeRequests?: boolean;
+  storage?: "local" | "memory";
   fetch?: Fetch;
 };
 
@@ -92,6 +93,8 @@ export class OidcClient<
   private readonly disableNativeRequests: boolean;
   private readonly nativeFetch: NativeFetch;
   private readonly fetch: Fetch;
+  private readonly memoryOnly: boolean;
+  private tokenResponse: OidcTokenResponse | null = null;
 
   private oidcConfigPromise: Promise<OidcConfiguration> | null = null;
   private readonly pkceVerifiersByState = new Map<string, string>();
@@ -104,6 +107,8 @@ export class OidcClient<
     this.config = OidcClient.validateConfig(options.clientConfig);
     this.pkceStoragePrefix = `${PKCE_STORAGE_PREFIX}:${this.config.authority}`;
     this.tokenStoragePrefix = `${TOKEN_STORAGE_PREFIX}:${this.config.authority}`;
+    this.memoryOnly = options.storage === "memory";
+    if (this.memoryOnly) this.removePersistentSession();
     this.disableNativeRequests = options.disableNativeRequests ?? false;
     this.nativeFetch = createNativeFetch(this.config.authority);
     this.fetch = this.config.requestTimeoutInSeconds
@@ -114,8 +119,22 @@ export class OidcClient<
       : (options.fetch ?? fetch);
   }
 
+  private removePersistentSession(): void {
+    if (typeof window === "undefined") return;
+    const storage = window.localStorage;
+    for (let index = storage.length - 1; index >= 0; index--) {
+      const key = storage.key(index);
+      if (
+        key?.startsWith(`${TOKEN_STORAGE_PREFIX}:`) ||
+        key?.startsWith(`${PKCE_STORAGE_PREFIX}:`)
+      ) {
+        storage.removeItem(key);
+      }
+    }
+  }
+
   private getStorage(): Storage | null {
-    if (typeof window === "undefined") {
+    if (this.memoryOnly || typeof window === "undefined") {
       return null;
     }
     try {
@@ -138,6 +157,10 @@ export class OidcClient<
   }
 
   private rememberTokenResponse(tokenResponse: OidcTokenResponse): void {
+    if (this.memoryOnly) {
+      this.tokenResponse = tokenResponse;
+      return;
+    }
     const storage = this.getStorage();
     if (!storage) {
       return;
@@ -146,6 +169,7 @@ export class OidcClient<
   }
 
   getStoredTokenResponse(): OidcTokenResponse | null {
+    if (this.memoryOnly) return this.tokenResponse;
     const storage = this.getStorage();
     if (!storage) {
       return null;
@@ -166,6 +190,13 @@ export class OidcClient<
   }
 
   clearStoredTokenResponse(): void {
+    this.tokenResponse = null;
+    if (this.memoryOnly) {
+      this.pkceVerifiersByState.clear();
+      this.lastPkceVerifier = null;
+      this.removePersistentSession();
+      return;
+    }
     const storage = this.getStorage();
     if (!storage) {
       return;
@@ -306,7 +337,10 @@ export class OidcClient<
       if (this.config.clientSecret) {
         body.set("client_secret", this.config.clientSecret);
       }
-    } else if (tokenEndpointAuthMethod === "none" || !this.config.clientSecret) {
+    } else if (
+      tokenEndpointAuthMethod === "none" ||
+      !this.config.clientSecret
+    ) {
       body.set("client_id", clientId);
     } else {
       headers.Authorization = `Basic ${this.encodeBasicAuth(clientId, this.config.clientSecret)}`;
@@ -653,7 +687,10 @@ export class OidcClient<
       }
     }
 
-    throw new OidcClientError("NO_ACCESS_TOKEN", "Missing refreshed access token");
+    throw new OidcClientError(
+      "NO_ACCESS_TOKEN",
+      "Missing refreshed access token",
+    );
   }
 
   static validateConfig(config: OidcClientConfig): OidcClientConfig {

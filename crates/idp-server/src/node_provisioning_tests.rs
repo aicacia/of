@@ -309,6 +309,119 @@ async fn interrupted_desktop_client_retries_exact_key_and_reset_deletes_internal
 }
 
 #[tokio::test]
+async fn reset_requires_verified_never_started_or_retained_client_references() {
+    let root = std::env::temp_dir().join(format!("reset-client-intent-{}", Id::now_v7()));
+    let config = AppConfig {
+        data_dir: root.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let provisioner = OwnerProvisioner::open_with_private_keys(&config, Secrets::default())
+        .await
+        .expect("native owner");
+    let member = Id::now_v7();
+    let signer = Id::now_v7();
+    let owner = Id::now_v7();
+    let client = Id::now_v7();
+    provisioner
+        .delete_local_secrets(member, signer, owner, &[client])
+        .await
+        .expect_err("unknown namespaces cannot be silently skipped");
+    provisioner
+        .prepare_setup_client_slots(&[client])
+        .await
+        .expect("explicit never-started Client slot");
+    provisioner
+        .delete_local_secrets(member, signer, owner, &[client])
+        .await
+        .expect("never-started slot has no private Client namespace");
+    provisioner
+        .begin_client_provisioning(&client.to_string())
+        .await
+        .expect("durable provisioning intent before Client creation");
+    provisioner
+        .delete_local_secrets(member, signer, owner, &[client])
+        .await
+        .expect_err("pending Client without an internal reference requires recovery");
+    provisioner
+        .ensure_desktop_client(client)
+        .await
+        .expect("complete exact pending provisioning");
+    provisioner
+        .delete_local_secrets(member, signer, owner, &[client])
+        .await
+        .expect("resolved references authorize exact local secret cleanup");
+    drop(provisioner);
+    std::fs::remove_dir_all(root).expect("remove native fixture");
+}
+
+#[tokio::test]
+async fn reset_retains_deleted_client_namespace_across_native_reopen_and_secret_failure() {
+    let root = std::env::temp_dir().join(format!("reset-deleted-client-{}", Id::now_v7()));
+    let config = AppConfig {
+        data_dir: root.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let secrets = Secrets::default();
+    let external = Id::now_v7();
+    let provisioner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
+        .await
+        .expect("native owner");
+    provisioner
+        .ensure_desktop_client(external)
+        .await
+        .expect("setup Client");
+    let client = provisioner
+        .oauth2
+        .client_repo
+        .find_client_by_client_id(&external.to_string())
+        .await
+        .expect("owner read")
+        .expect("Client");
+    let namespace = provisioner
+        .oauth2
+        .key_service
+        .scoped_namespace(idp_model::contract::EntityType::Client, client.id);
+    provisioner
+        .oauth2
+        .delete_client(&external.to_string())
+        .await
+        .expect("existing public Client deletion");
+    assert!(
+        secrets
+            .load(&namespace, &DerivationPath::default())
+            .expect("retained private root")
+            .is_some()
+    );
+    drop(provisioner);
+    let provisioner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
+        .await
+        .expect("native reopen without public Client row");
+    secrets.fail_delete.store(true, Ordering::SeqCst);
+    provisioner
+        .delete_local_secrets(Id::now_v7(), Id::now_v7(), Id::now_v7(), &[external])
+        .await
+        .expect_err("reset cannot succeed with orphaned private keys");
+    assert!(
+        secrets
+            .load(&namespace, &DerivationPath::default())
+            .expect("failure preserves key")
+            .is_some()
+    );
+    secrets.fail_delete.store(false, Ordering::SeqCst);
+    provisioner
+        .delete_local_secrets(Id::now_v7(), Id::now_v7(), Id::now_v7(), &[external])
+        .await
+        .expect("exact retained reference retry");
+    assert!(secrets.values.lock().expect("secret map").is_empty());
+    provisioner
+        .delete_local_secrets(Id::now_v7(), Id::now_v7(), Id::now_v7(), &[external])
+        .await
+        .expect("idempotent secret deletion");
+    drop(provisioner);
+    std::fs::remove_dir_all(root).expect("remove native fixture");
+}
+
+#[tokio::test]
 async fn secure_store_failure_keeps_initial_setup_incomplete_and_retryable() {
     let root = std::env::temp_dir().join(format!("node-interrupted-{}", Id::now_v7()));
     let config = AppConfig {

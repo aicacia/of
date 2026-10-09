@@ -11,6 +11,7 @@
     import { goto } from "$app/navigation";
     import { resolve } from "$app/paths";
     import { page } from "$app/state";
+    import { getOidcClient } from "$lib/common/state/oidc.svelte";
     import type { LayoutProps } from "./$types";
 
     let { children }: LayoutProps = $props();
@@ -37,6 +38,7 @@
     }
 
     async function onSignOut() {
+        getOidcClient().clearStoredTokenResponse();
         await goto(resolve("/signin"));
     }
 

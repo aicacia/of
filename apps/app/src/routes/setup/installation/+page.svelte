@@ -167,6 +167,7 @@
         busy = true;
         error = "";
         try {
+            getOidcClient().clearStoredTokenResponse();
             await invoke("reset_device");
         } catch (cause) {
             error = String(cause);

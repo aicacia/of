@@ -7,20 +7,20 @@ sign‑in flows.
 ## Basic usage
 
 ```ts
-import { OidcClient } from '@aicacia/oidc-client';
+import { OidcClient } from "@aicacia/oidc-client";
 
 const client = new OidcClient({
-	clientConfig: {
-		authority: 'https://provider.example.com',
-		redirectUri: 'https://app.example.com/callback',
-		// optional: clientId may be omitted if the provider supports
-		// dynamic registration
-		clientId: 'myclient'
-	}
+  clientConfig: {
+    authority: "https://provider.example.com",
+    redirectUri: "https://app.example.com/callback",
+    // optional: clientId may be omitted if the provider supports
+    // dynamic registration
+    clientId: "myclient",
+  },
 });
 
-client.on('registered', (registration) => {
-	console.log('dynamic registration client id', registration.client_id);
+client.on("registered", (registration) => {
+  console.log("dynamic registration client id", registration.client_id);
 });
 
 // redirect-based sign in
@@ -33,6 +33,12 @@ const { url, window } = await client.signin({ popup: true });
 const tokenResponse = await client.handleSigninCallback();
 const userInfo = tokenResponse ? await client.getUserInfo() : null;
 ```
+
+## Session storage
+
+Set `storage: 'memory'` in the client options for an in-memory session. Tokens and PKCE verifiers are not written to browser storage, and existing `oidc.token:` and `oidc.pkce:` caches for all authorities in the same browser storage are removed when the client is constructed or cleared. Cache-removal failures are surfaced, not silently ignored. `clearStoredTokenResponse()` clears the session. Reloading or constructing a new client requires signing in again; redirect flows that replace the client instance cannot retain a memory-only PKCE verifier.
+
+The default remains `storage: 'local'` for existing browser clients. The desktop application explicitly selects memory-only storage and clears its session on signout and reset.
 
 ## Features
 

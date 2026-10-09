@@ -175,6 +175,9 @@ pub async fn provision_initial_administrator(
     let idp = OwnerProvisioner::open(&idp_config)
         .await
         .map_err(|error| error.to_string())?;
+    idp.prepare_setup_client_slots(&setup_client_ids(&ids))
+        .await
+        .map_err(|error| error.to_string())?;
     let administrator_id = idp
         .ensure_initial_user(ids.administrator_id, ids.credential_id, &name, &password)
         .await
@@ -326,6 +329,7 @@ pub async fn join_installation(
             binding,
         )
         .await?;
+        owner.prepare_setup_client_slots(&setup_client_ids(&ids)).await?;
         protocol
             .join_from_trusted_peer(&owner, &name, &peer)
             .await?;
@@ -467,6 +471,16 @@ pub async fn restore_setup_listener(app_handle: &AppHandle<Wry>) -> io::Result<(
     crate::localhost_server::verify_localhost_server(&base_url).await
 }
 
+fn setup_client_ids(ids: &SetupIds) -> [Id; 5] {
+    [
+        ids.installation_id,
+        ids.management_to_idp_client_id,
+        ids.storage_to_idp_client_id,
+        ids.storage_to_management_client_id,
+        ids.idp_to_management_client_id,
+    ]
+}
+
 async fn provision_service_clients(
     idp: &OwnerProvisioner,
     ids: &SetupIds,
@@ -543,6 +557,8 @@ async fn provision_service_client(
     audience: &str,
     scopes: &[&str],
 ) -> io::Result<()> {
+    idp.begin_client_provisioning(&client_id.to_string())
+        .await?;
     let client_secret =
         service_secrets::ensure_secret(ids.installation_id, relationship, client_id).map_err(
             |error| {
