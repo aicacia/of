@@ -47,6 +47,14 @@ pub struct OwnerProvisioner<P: PrivateKeyRepo + Send + Sync = PrivateKeyKeyringR
 }
 
 impl OwnerProvisioner {
+    pub fn from_database(config: &AppConfig, engine: Arc<Database>) -> io::Result<Self> {
+        Ok(Self::with_database(
+            config,
+            engine,
+            PrivateKeyKeyringRepo::new(&config.oauth2.issuer).map_err(io::Error::other)?,
+        ))
+    }
+
     pub async fn open(config: &AppConfig) -> io::Result<Self> {
         Self::open_with_private_keys(
             config,
@@ -64,6 +72,10 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         idp_model::replica::up(&engine)
             .await
             .map_err(io::Error::other)?;
+        Ok(Self::with_database(config, engine, private_keys))
+    }
+
+    fn with_database(config: &AppConfig, engine: Arc<Database>, private_keys: P) -> Self {
         let keys = Arc::new(KeyService::new(
             DbKeyRepo::new(Arc::clone(&engine)),
             private_keys,
@@ -79,12 +91,12 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             keys,
             config.oauth2.clone(),
         );
-        Ok(Self {
+        Self {
             oauth2,
             engine,
             key_namespace: config.key_namespace.clone(),
-            data_dir: data_dir.to_path_buf(),
-        })
+            data_dir: PathBuf::from(&config.data_dir),
+        }
     }
 
     pub async fn ensure_initial_user(

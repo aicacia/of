@@ -3,17 +3,14 @@ use alloc::{
     string::{String, ToString},
     sync::Arc,
 };
-use std::{
-    collections::HashMap,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use std::{collections::HashMap, sync::Mutex};
 
 use key::{DerivationPath, DerivedKey};
 use keyring_core::Entry;
 
 use crate::repo::{PrivateKeyRepo, RepoError, RepoResult};
 
-static SET_CREDENTIAL_STORE: AtomicBool = AtomicBool::new(false);
+static SET_CREDENTIAL_STORE: Mutex<bool> = Mutex::new(false);
 
 pub struct PrivateKeyKeyringRepo {
     service_name: String,
@@ -31,8 +28,11 @@ impl PrivateKeyKeyringRepo {
         service_name: impl Into<String>,
         store: Arc<keyring_core::CredentialStore>,
     ) -> Self {
+        let mut initialized = SET_CREDENTIAL_STORE
+            .lock()
+            .expect("credential-store initialization lock is not poisoned");
         keyring_core::set_default_store(store);
-        SET_CREDENTIAL_STORE.store(true, Ordering::Release);
+        *initialized = true;
         Self {
             service_name: service_name.into(),
         }
@@ -87,10 +87,19 @@ fn derived_key_entry_name(namespace: &str, derivation_path: &str) -> String {
 }
 
 pub(crate) fn init_credential_store() -> keyring_core::Result<()> {
-    if SET_CREDENTIAL_STORE.compare_exchange(false, true, Ordering::Release, Ordering::Acquire)
-        == Ok(false)
-    {
-        set_credential_store()?;
+    initialize_store(&SET_CREDENTIAL_STORE, set_credential_store)
+}
+
+fn initialize_store(
+    state: &Mutex<bool>,
+    initialize: impl FnOnce() -> keyring_core::Result<()>,
+) -> keyring_core::Result<()> {
+    let mut initialized = state
+        .lock()
+        .expect("credential-store initialization lock is not poisoned");
+    if !*initialized {
+        initialize()?;
+        *initialized = true;
     }
     Ok(())
 }
@@ -108,4 +117,78 @@ fn set_credential_store() -> keyring_core::Result<()> {
     let store = android_native_keyring_store::Store::new()?;
     keyring_core::set_default_store(store);
     Ok(())
+}
+
+#[cfg(test)]
+mod initialization_tests {
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use super::initialize_store;
+
+    #[test]
+    fn failed_provider_initialization_retries_before_publishing_ready() {
+        let initialized = Mutex::new(false);
+        assert!(initialize_store(&initialized, || Err(keyring_core::Error::NoEntry)).is_err());
+        assert!(
+            !*initialized.lock().expect("initialization state"),
+            "failed initialization must not poison readiness"
+        );
+        let calls = AtomicUsize::new(0);
+        initialize_store(&initialized, || {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        })
+        .expect("retry provider setup");
+        initialize_store(&initialized, || {
+            panic!("successful initialization must be reused")
+        })
+        .expect("reuse provider");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn concurrent_callers_wait_until_provider_initialization_finishes() {
+        let initialized = Arc::new(Mutex::new(false));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        let first = std::thread::spawn({
+            let initialized = initialized.clone();
+            let calls = calls.clone();
+            move || {
+                initialize_store(&initialized, || {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    entered_tx.send(()).expect("initializer entered");
+                    resume_rx.recv().expect("resume initialization");
+                    Ok(())
+                })
+                .expect("first initialization")
+            }
+        });
+        entered_rx.recv().expect("wait for initialization start");
+        let (finished_tx, finished_rx) = std::sync::mpsc::channel();
+        let second = std::thread::spawn({
+            let initialized = initialized.clone();
+            let calls = calls.clone();
+            move || {
+                initialize_store(&initialized, || {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                })
+                .expect("second caller");
+                finished_tx.send(()).expect("second caller finished");
+            }
+        });
+        assert!(
+            finished_rx.try_recv().is_err(),
+            "no early initialized result"
+        );
+        resume_tx.send(()).expect("release initializer");
+        first.join().expect("initializer thread");
+        second.join().expect("waiting thread");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
 }

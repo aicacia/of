@@ -23,7 +23,15 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app::get_localhost_server_base_url,
             app::get_setup_stage,
+            app::get_setup_intent,
+            app::node_join_accepting,
+            app::pending_node_joins,
+            app::approve_pending_node_join,
+            app::reject_pending_node_join,
             app::provision_initial_administrator,
+            app::join_installation,
+            app::cancel_installation_setup,
+            app::retry_local_runtime,
             app::reset_device,
             app::complete_device_setup
         ])
@@ -52,9 +60,16 @@ pub fn run() {
                     app::reserve_unified_localhost_server(&app_handle).await?;
                 app::set_localhost_server_state(&app_handle, base_url.clone(), false).await;
                 if app::setup_ready(&app_data_dir).map_err(tauri::Error::Io)? {
-                    app::start_persisted_unified_runtime(&app_handle, listener, base_url)
-                        .await
-                        .map_err(tauri::Error::Io)?;
+                    if let Err(error) =
+                        app::start_persisted_unified_runtime(&app_handle, listener, base_url).await
+                    {
+                        log::error!(
+                            "local services unavailable; persisted setup retained: {error}"
+                        );
+                        app::restore_setup_listener(&app_handle)
+                            .await
+                            .map_err(tauri::Error::Io)?;
+                    }
                 } else {
                     app::init_unified_localhost_server(
                         &app_handle,

@@ -4,7 +4,7 @@ use std::{
     io::{self, Write},
     net::SocketAddr,
     path::Path,
-    sync::Mutex as StdMutex,
+    sync::{Mutex as StdMutex, OnceLock},
 };
 
 use axum::Router;
@@ -32,7 +32,21 @@ use crate::localhost_server::{
 };
 use crate::{local_api, service_secrets, service_secrets::ServiceRelationship, setup};
 
+#[path = "setup_reset.rs"]
+mod reset;
+
 static SETUP_IDS_LOCK: StdMutex<()> = StdMutex::new(());
+static SETUP_OPERATION_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+static SETUP_CANCELLATION: OnceLock<tokio::sync::watch::Sender<()>> = OnceLock::new();
+
+fn setup_cancellation() -> &'static tokio::sync::watch::Sender<()> {
+    SETUP_CANCELLATION.get_or_init(|| tokio::sync::watch::channel(()).0)
+}
+
+#[tauri::command]
+pub fn cancel_installation_setup() {
+    setup_cancellation().send_replace(());
+}
 
 const SETUP_READY_FILE: &str = "setup-ready";
 const DEVICE_READY_FILE: &str = "device-setup-ready";
@@ -115,6 +129,7 @@ pub async fn provision_initial_administrator(
     name: String,
     password: String,
 ) -> Result<String, String> {
+    let _operation = SETUP_OPERATION_LOCK.lock().await;
     if name.trim().is_empty() || password.trim().is_empty() {
         return Err("administrator name and password are required".to_owned());
     }
@@ -134,7 +149,15 @@ pub async fn provision_initial_administrator(
     if setup_ready(&app_data_dir).map_err(|error| error.to_string())? {
         return Err("Installation setup is already complete; use authenticated administration or explicit reset".into());
     }
+    if fs::symlink_metadata(app_data_dir.join(reset::JOURNAL)).is_ok() {
+        return Err("local reset is pending; retry reset before creating an Installation".into());
+    }
     let ids = load_or_create_setup_ids(&app_data_dir).map_err(|error| error.to_string())?;
+    persist_setup_intent(
+        &app_data_dir,
+        &json!({"purpose": "create", "issuer": format!("{base_url}/idp")}),
+    )
+    .map_err(|error| error.to_string())?;
 
     let mut idp_config = IdpAppConfig::default();
     idp_config.data_dir = app_data_dir
@@ -216,21 +239,7 @@ pub async fn provision_initial_administrator(
         .map_err(|error| error.to_string())?;
     if let Err(error) = start_composed_unified_runtime(&app_handle, listener, base_url, true).await
     {
-        let restore = async {
-            let (listener, base_url) = reserve_unified_localhost_server(&app_handle)
-                .await
-                .map_err(io::Error::other)?;
-            init_unified_localhost_server(
-                &app_handle,
-                init_setup_router(),
-                listener,
-                base_url.clone(),
-            )
-            .await
-            .map_err(io::Error::other)?;
-            crate::localhost_server::verify_localhost_server(&base_url).await
-        }
-        .await;
+        let restore = restore_setup_listener(&app_handle).await;
         return match restore {
             Ok(()) => Err(error.to_string()),
             Err(restore_error) => Err(format!(
@@ -240,6 +249,216 @@ pub async fn provision_initial_administrator(
     }
 
     Ok(administrator_id.to_string())
+}
+
+#[tauri::command]
+pub fn get_setup_intent(app_handle: AppHandle<Wry>) -> Result<Option<Value>, String> {
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    match fs::symlink_metadata(data_dir.join("node-setup.json")) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.to_string()),
+        Ok(_) => read_setup_intent(&data_dir)
+            .map(Some)
+            .map_err(|error| error.to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn join_installation(
+    app_handle: AppHandle<Wry>,
+    issuer: String,
+    peer: String,
+    name: String,
+) -> Result<(), String> {
+    let mut cancellation = setup_cancellation().subscribe();
+    let _operation = SETUP_OPERATION_LOCK.lock().await;
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    let config_dir = app_handle
+        .path()
+        .app_config_dir()
+        .map_err(|error| error.to_string())?;
+    reject_legacy_state(&data_dir, &config_dir).map_err(|error| error.to_string())?;
+    if fs::symlink_metadata(data_dir.join(reset::JOURNAL)).is_ok() {
+        return Err("local reset is pending; retry reset before joining".into());
+    }
+    if setup_ready(&data_dir).map_err(|error| error.to_string())? {
+        return Err(
+            "Installation setup is already complete; reset explicitly before joining".into(),
+        );
+    }
+    let intent = json!({"purpose": "join", "issuer": issuer, "peer": peer, "name": name});
+    validate_setup_intent(&intent).map_err(|error| error.to_string())?;
+    let base_url = localhost_server_base_url_for(&app_handle).await;
+    if base_url.is_empty() {
+        return Err("local HTTPS setup listener is unavailable".into());
+    }
+    let ids = load_or_create_setup_ids(&data_dir).map_err(|error| error.to_string())?;
+    persist_setup_intent(&data_dir, &intent).map_err(|error| error.to_string())?;
+    let mut config = IdpAppConfig {
+        data_dir: data_dir.join("services/idp").to_string_lossy().into_owned(),
+        ..IdpAppConfig::default()
+    };
+    config.oauth2.issuer = issuer;
+    config.api_public_uri = format!("{base_url}/idp");
+    config.ui_public_uri = base_url.clone();
+    let endpoint = UnifiedEndpoint::open(&data_dir.join("services/unified-endpoint"), &config)
+        .await
+        .map_err(|error| error.to_string())?;
+    let result = tokio::select! {
+        biased;
+        _ = cancellation.changed() => Err(io::Error::new(io::ErrorKind::Interrupted, "join cancelled; retained setup can be retried or reset locally")),
+        result = async {
+        let binding = node_binding(&data_dir, &ids)?;
+        let (protocol, owner) = unified_server::SecurityProtocol::open_node_bootstrap(
+            &endpoint,
+            &config,
+            &data_dir.join("services/management"),
+            binding,
+        )
+        .await?;
+        protocol
+            .join_from_trusted_peer(&owner, &name, &peer)
+            .await?;
+        provision_service_clients(
+            &owner,
+            &ids,
+            &base_url,
+            &format!("{base_url}/idp"),
+            &format!("{base_url}/storage"),
+        )
+        .await
+    } => result,
+    };
+    endpoint.close().await;
+    result.map_err(|error| error.to_string())?;
+    close(&app_handle)
+        .await
+        .map_err(|error| error.to_string())?;
+    let (listener, base_url) = reserve_unified_localhost_server(&app_handle)
+        .await
+        .map_err(|error| error.to_string())?;
+    if let Err(error) = start_composed_unified_runtime(&app_handle, listener, base_url, true).await
+    {
+        let restore = restore_setup_listener(&app_handle).await;
+        return Err(match restore {
+            Ok(()) => error.to_string(),
+            Err(restore) => {
+                format!("local runtime failed ({error}); setup listener restore failed ({restore})")
+            }
+        });
+    }
+    Ok(())
+}
+
+fn validate_setup_intent(value: &Value) -> io::Result<()> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| io::Error::other("Node setup intent must be an object"))?;
+    let purpose = value["purpose"].as_str().unwrap_or_default();
+    let expected = match purpose {
+        "create" => &["purpose", "issuer"][..],
+        "join" => &["purpose", "issuer", "peer", "name"][..],
+        _ => {
+            return Err(io::Error::other(
+                "unsupported Node setup purpose; explicit reset required",
+            ));
+        }
+    };
+    if object.len() != expected.len()
+        || expected.iter().any(|field| {
+            value[*field]
+                .as_str()
+                .is_none_or(|text| text.trim().is_empty())
+        })
+    {
+        return Err(io::Error::other(
+            "invalid Node setup intent; explicit reset required",
+        ));
+    }
+    if purpose == "join" {
+        idp_server::NodeJoinRequest::validate_trusted_peer(
+            value["peer"].as_str().expect("validated peer field"),
+        )?;
+        if value["name"].as_str().expect("validated name field").len() > 256 {
+            return Err(io::Error::other("local Node name exceeds 256 bytes"));
+        }
+    }
+    let issuer = reqwest::Url::parse(value["issuer"].as_str().expect("validated issuer field"))
+        .map_err(io::Error::other)?;
+    if issuer.scheme() != "https"
+        || issuer.host_str().is_none()
+        || !issuer.username().is_empty()
+        || issuer.password().is_some()
+        || issuer.fragment().is_some()
+        || issuer.query().is_some()
+    {
+        return Err(io::Error::other(
+            "canonical Installation issuer must be an HTTPS URL without credentials, query or fragment",
+        ));
+    }
+    Ok(())
+}
+
+fn read_setup_intent(directory: &Path) -> io::Result<Value> {
+    let path = directory.join("node-setup.json");
+    if !fs::symlink_metadata(&path)?.file_type().is_file() {
+        return Err(io::Error::other("Node setup intent must be a regular file"));
+    }
+    let value = serde_json::from_slice(&fs::read(path)?).map_err(io::Error::other)?;
+    validate_setup_intent(&value)?;
+    Ok(value)
+}
+
+fn persist_setup_intent(directory: &Path, value: &Value) -> io::Result<()> {
+    validate_setup_intent(value)?;
+    let path = directory.join("node-setup.json");
+    match fs::symlink_metadata(&path) {
+        Ok(_) => {
+            if read_setup_intent(directory)? != *value {
+                return Err(io::Error::other(
+                    "Node setup purpose or identity changed; explicit reset required",
+                ));
+            }
+            return fs::File::open(directory)?.sync_all();
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => (),
+        Err(error) => return Err(error),
+    }
+    let temporary = directory.join(format!(".node-setup-{}.tmp", Id::now_v7()));
+    let result = (|| {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        file.write_all(&serde_json::to_vec(value).map_err(io::Error::other)?)?;
+        file.sync_all()?;
+        match fs::hard_link(&temporary, &path) {
+            Ok(()) => (),
+            Err(error)
+                if error.kind() == io::ErrorKind::AlreadyExists
+                    && read_setup_intent(directory)? == *value => {}
+            Err(error) => return Err(error),
+        }
+        fs::File::open(directory)?.sync_all()
+    })();
+    let cleanup = fs::remove_file(temporary);
+    result.and(cleanup)
+}
+
+pub async fn restore_setup_listener(app_handle: &AppHandle<Wry>) -> io::Result<()> {
+    let (listener, base_url) = reserve_unified_localhost_server(app_handle)
+        .await
+        .map_err(io::Error::other)?;
+    init_unified_localhost_server(app_handle, init_setup_router(), listener, base_url.clone())
+        .await
+        .map_err(io::Error::other)?;
+    crate::localhost_server::verify_localhost_server(&base_url).await
 }
 
 async fn provision_service_clients(
@@ -352,7 +571,10 @@ fn unified_runtime_config(
         .join("services/idp")
         .to_string_lossy()
         .into_owned();
-    idp.oauth2.issuer = idp_api.clone();
+    idp.oauth2.issuer = read_setup_intent(app_data_dir)?["issuer"]
+        .as_str()
+        .expect("validated canonical issuer")
+        .to_owned();
     idp.oauth2.local_signer = Some(node_binding(app_data_dir, ids)?);
     idp.api_public_uri = idp_api.clone();
     idp.service_audience = Some(idp_api.clone());
@@ -480,6 +702,11 @@ fn service_client_registration(
 }
 
 pub fn setup_ready(app_data_dir: &Path) -> io::Result<bool> {
+    match fs::symlink_metadata(app_data_dir.join(reset::JOURNAL)) {
+        Ok(_) => return Ok(false),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => (),
+        Err(error) => return Err(error),
+    }
     match fs::symlink_metadata(app_data_dir.join(SETUP_READY_FILE)) {
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
         Err(error) => return Err(error),
@@ -516,6 +743,13 @@ async fn start_composed_unified_runtime(
     )?;
     let config = unified_runtime_config(&app_data_dir, listener.local_addr()?, &base_url, &ids)?;
     let mut runtime = UnifiedRuntime::build_on_listener(config, listener, base_url.clone()).await?;
+    let ready = current_public_ready(&runtime, &app_data_dir).await;
+    if !matches!(ready, Ok(true)) {
+        runtime.shutdown().await?;
+        return Err(io::Error::other(
+            "current local trust, both public contexts and independent signer are required before starting a Node",
+        ));
+    }
     let router = runtime.router();
     let listener = runtime.take_listener()?;
     let server = match start_unified_localhost_server(router, listener, &app_data_dir) {
@@ -641,12 +875,22 @@ fn load_or_create_setup_ids(app_data_dir: &Path) -> io::Result<SetupIds> {
 }
 
 fn read_setup_ids(path: &Path) -> io::Result<SetupIds> {
+    if !fs::symlink_metadata(path)?.file_type().is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "setup manifest must be a regular file; explicit recovery/reset required",
+        ));
+    }
     let value: Value = serde_json::from_slice(&fs::read(path)?).map_err(|error| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("setup manifest is corrupt ({error}); explicit reset is required"),
         )
     })?;
+    parse_setup_ids(&value)
+}
+
+fn parse_setup_ids(value: &Value) -> io::Result<SetupIds> {
     if value.get("version").and_then(Value::as_u64) != Some(2) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -735,30 +979,162 @@ pub async fn get_localhost_server_base_url(app_handle: AppHandle<Wry>) -> String
     localhost_server_base_url_for(&app_handle).await
 }
 
+async fn current_public_ready(runtime: &UnifiedRuntime, data_dir: &Path) -> io::Result<bool> {
+    if read_setup_intent(data_dir)?["purpose"] == "join" {
+        runtime.node_join_public_ready().await
+    } else {
+        runtime.node_public_ready().await
+    }
+}
+
+#[tauri::command]
+pub async fn node_join_accepting(
+    app_handle: AppHandle<Wry>,
+    bearer: String,
+    accepting: Option<bool>,
+) -> Result<bool, String> {
+    let state = app_handle
+        .try_state::<Mutex<Option<UnifiedRuntime>>>()
+        .ok_or("local runtime is unavailable")?;
+    let guard = state.lock().await;
+    guard
+        .as_ref()
+        .ok_or("local runtime is unavailable")?
+        .node_join_accepting(&bearer, accepting)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn pending_node_joins(
+    app_handle: AppHandle<Wry>,
+    bearer: String,
+) -> Result<serde_json::Value, String> {
+    let state = app_handle
+        .try_state::<Mutex<Option<UnifiedRuntime>>>()
+        .ok_or("local runtime is unavailable")?;
+    let guard = state.lock().await;
+    guard
+        .as_ref()
+        .ok_or("local runtime is unavailable")?
+        .pending_node_joins(&bearer)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn approve_pending_node_join(
+    app_handle: AppHandle<Wry>,
+    bearer: String,
+    offer_id: String,
+) -> Result<(), String> {
+    let state = app_handle
+        .try_state::<Mutex<Option<UnifiedRuntime>>>()
+        .ok_or("local runtime is unavailable")?;
+    let guard = state.lock().await;
+    guard
+        .as_ref()
+        .ok_or("local runtime is unavailable")?
+        .approve_pending_node_join(
+            &bearer,
+            offer_id.parse::<Id>().map_err(|error| error.to_string())?,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn reject_pending_node_join(
+    app_handle: AppHandle<Wry>,
+    bearer: String,
+    offer_id: String,
+) -> Result<(), String> {
+    let state = app_handle
+        .try_state::<Mutex<Option<UnifiedRuntime>>>()
+        .ok_or("local runtime is unavailable")?;
+    let guard = state.lock().await;
+    guard
+        .as_ref()
+        .ok_or("local runtime is unavailable")?
+        .reject_pending_node_join(
+            &bearer,
+            offer_id.parse::<Id>().map_err(|error| error.to_string())?,
+        )
+        .await
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub async fn get_setup_stage(app_handle: AppHandle<Wry>) -> Result<String, String> {
     let app_data_dir = app_handle
         .path()
         .app_data_dir()
         .map_err(|error| error.to_string())?;
-    setup_ready(&app_data_dir)
-        .and_then(|ready| {
-            if !ready {
-                return Ok("installation".to_owned());
+    let contexts_ready = match app_handle.try_state::<Mutex<Option<UnifiedRuntime>>>() {
+        Some(runtime) => match runtime.lock().await.as_ref() {
+            Some(runtime) => current_public_ready(runtime, &app_data_dir)
+                .await
+                .map_err(|error| error.to_string())?,
+            None => false,
+        },
+        None => false,
+    } && !localhost_server_base_url_for(&app_handle).await.is_empty();
+    local_setup_stage(&app_data_dir, contexts_ready).map_err(|error| error.to_string())
+}
+
+fn local_setup_stage(data_dir: &Path, contexts_ready: bool) -> io::Result<String> {
+    if !setup_ready(data_dir)? {
+        return Ok("installation".into());
+    }
+    if !contexts_ready {
+        return Ok("unavailable".into());
+    }
+    let ids = read_setup_ids(&data_dir.join("setup-ids.json"))?;
+    crate::setup_completion::read(
+        data_dir,
+        DEVICE_READY_FILE,
+        &ids.installation_id.to_string(),
+    )
+    .map(|complete| if complete { "ready" } else { "device" }.to_owned())
+}
+
+#[tauri::command]
+pub async fn retry_local_runtime(app_handle: AppHandle<Wry>) -> Result<(), String> {
+    let _operation = SETUP_OPERATION_LOCK.lock().await;
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    if !setup_ready(&data_dir).map_err(|error| error.to_string())? {
+        return Err("Installation setup is incomplete or reset is pending".into());
+    }
+    close(&app_handle)
+        .await
+        .map_err(|error| error.to_string())?;
+    let result = async {
+        let (listener, base_url) = reserve_unified_localhost_server(&app_handle)
+            .await
+            .map_err(io::Error::other)?;
+        start_persisted_unified_runtime(&app_handle, listener, base_url).await
+    }
+    .await;
+    if let Err(error) = result {
+        return Err(match restore_setup_listener(&app_handle).await {
+            Ok(()) => {
+                format!("local services remain unavailable; persisted setup retained: {error}")
             }
-            let ids = read_setup_ids(&app_data_dir.join("setup-ids.json"))?;
-            crate::setup_completion::read(
-                &app_data_dir,
-                DEVICE_READY_FILE,
-                &ids.installation_id.to_string(),
-            )
-            .map(|complete| if complete { "ready" } else { "device" }.to_owned())
-        })
-        .map_err(|error| error.to_string())
+            Err(restore) => format!(
+                "local services unavailable ({error}); setup listener restore failed ({restore})"
+            ),
+        });
+    }
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn complete_device_setup(app_handle: AppHandle<Wry>) -> Result<(), String> {
+    let _operation = SETUP_OPERATION_LOCK.lock().await;
     let data_dir = app_handle
         .path()
         .app_data_dir()
@@ -768,9 +1144,25 @@ pub async fn complete_device_setup(app_handle: AppHandle<Wry>) -> Result<(), Str
     }
     let ids =
         read_setup_ids(&data_dir.join("setup-ids.json")).map_err(|error| error.to_string())?;
-    if localhost_server_base_url_for(&app_handle).await.is_empty() {
-        return Err("local services are unavailable; Device setup remains incomplete".into());
+    let base_url = localhost_server_base_url_for(&app_handle).await;
+    let Some(runtime) = app_handle.try_state::<Mutex<Option<UnifiedRuntime>>>() else {
+        return Err("all three local contexts must be running before Device completion".into());
+    };
+    let ready = match runtime.lock().await.as_ref() {
+        Some(runtime) => current_public_ready(runtime, &data_dir)
+            .await
+            .map_err(|error| error.to_string())?,
+        None => false,
+    };
+    if !ready || base_url.is_empty() {
+        return Err(
+            "local services or current Node trust are unavailable; Device setup remains incomplete"
+                .into(),
+        );
     }
+    verify_unified_localhost_server(&base_url)
+        .await
+        .map_err(|error| error.to_string())?;
     crate::setup_completion::write(
         &data_dir,
         DEVICE_READY_FILE,
@@ -781,6 +1173,8 @@ pub async fn complete_device_setup(app_handle: AppHandle<Wry>) -> Result<(), Str
 
 #[tauri::command]
 pub async fn reset_device(app_handle: AppHandle<Wry>) -> Result<(), String> {
+    cancel_installation_setup();
+    let _operation = SETUP_OPERATION_LOCK.lock().await;
     let data_dir = app_handle
         .path()
         .app_data_dir()
@@ -790,100 +1184,67 @@ pub async fn reset_device(app_handle: AppHandle<Wry>) -> Result<(), String> {
         .app_config_dir()
         .map_err(|error| error.to_string())?;
 
-    let ids_path = data_dir.join("setup-ids.json");
-    let setup_ids = if ids_path.exists() {
-        Some(read_setup_ids(&ids_path).map_err(|error| error.to_string())?)
-    } else {
-        None
-    };
-    close(&app_handle)
-        .await
-        .map_err(|error| error.to_string())?;
-    if let Some(ids) = setup_ids.as_ref() {
-        let mut config = IdpAppConfig::default();
-        config.data_dir = data_dir.join("services/idp").to_string_lossy().into_owned();
-        let port =
-            fs::read_to_string(data_dir.join("https-port")).map_err(|error| error.to_string())?;
-        config.oauth2.issuer = format!("https://localhost:{}/idp", port.trim());
-        let owner = OwnerProvisioner::open(&config)
-            .await
-            .map_err(|error| error.to_string())?;
-        owner
-            .delete_local_secrets(
-                ids.member_id,
-                ids.signer_key_id,
-                ids.administrator_id,
-                &[
+    reset::begin(&data_dir, &config_dir).map_err(|error| error.to_string())?;
+    let result = async {
+        close(&app_handle).await?;
+        let data = &data_dir;
+        reset::run(&data_dir, &config_dir, |references| async move {
+            let ids = references.ids;
+            let mut config = IdpAppConfig {
+                data_dir: data.join("services/idp").to_string_lossy().into_owned(),
+                ..IdpAppConfig::default()
+            };
+            config.oauth2.issuer = references.issuer;
+            let owner = OwnerProvisioner::open(&config).await?;
+
+            owner
+                .delete_local_secrets(
+                    ids.member_id,
+                    ids.signer_key_id,
+                    ids.administrator_id,
+                    &[
+                        ids.management_to_idp_client_id,
+                        ids.storage_to_idp_client_id,
+                        ids.storage_to_management_client_id,
+                        ids.idp_to_management_client_id,
+                    ],
+                )
+                .await?;
+            for (relationship, client_id) in [
+                (
+                    ServiceRelationship::ManagementToIdp,
                     ids.management_to_idp_client_id,
+                ),
+                (
+                    ServiceRelationship::StorageToIdp,
                     ids.storage_to_idp_client_id,
+                ),
+                (
+                    ServiceRelationship::StorageToManagement,
                     ids.storage_to_management_client_id,
+                ),
+                (
+                    ServiceRelationship::IdpToManagement,
                     ids.idp_to_management_client_id,
-                ],
-            )
-            .await
-            .map_err(|error| error.to_string())?;
+                ),
+            ] {
+                service_secrets::delete_secret(ids.installation_id, relationship, client_id)?;
+            }
+            Ok(())
+        })
+        .await
     }
-    reset_local_installation(
-        &data_dir,
-        &config_dir,
-        setup_ids.as_ref(),
-        service_secrets::delete_secret,
-    )
-    .map_err(|error| error.to_string())?;
+    .await;
+    if let Err(error) = result {
+        return Err(match restore_setup_listener(&app_handle).await {
+            Ok(()) => format!("local reset remains pending; retry reset: {error}"),
+            Err(restore) => format!(
+                "local reset remains pending ({error}); setup listener restore failed ({restore})"
+            ),
+        });
+    }
     app_handle.exit(0);
     Ok(())
-}
-
-fn reset_local_installation(
-    data_dir: &Path,
-    config_dir: &Path,
-    setup_ids: Option<&SetupIds>,
-    mut delete_secret: impl FnMut(Id, ServiceRelationship, Id) -> io::Result<()>,
-) -> io::Result<()> {
-    if let Some(ids) = setup_ids {
-        for (relationship, client_id) in [
-            (
-                ServiceRelationship::ManagementToIdp,
-                ids.management_to_idp_client_id,
-            ),
-            (
-                ServiceRelationship::StorageToIdp,
-                ids.storage_to_idp_client_id,
-            ),
-            (
-                ServiceRelationship::StorageToManagement,
-                ids.storage_to_management_client_id,
-            ),
-            (
-                ServiceRelationship::IdpToManagement,
-                ids.idp_to_management_client_id,
-            ),
-        ] {
-            delete_secret(ids.installation_id, relationship, client_id)?;
-        }
-    }
-    remove_local_reset_data(data_dir, config_dir)
-}
-
-fn remove_local_reset_data(data_dir: &Path, config_dir: &Path) -> io::Result<()> {
-    remove_path(&data_dir.join("lidp.redb"))?;
-    remove_path(&config_dir.join("lidp.redb"))?;
-    remove_path(&data_dir.join("vaults"))?;
-    remove_path(&data_dir.join("storage-residency.json"))?;
-    remove_path(&data_dir.join("services"))?;
-    remove_path(&data_dir.join("setup-ids.json"))?;
-    remove_path(&data_dir.join(SETUP_READY_FILE))?;
-    remove_path(&data_dir.join(DEVICE_READY_FILE))?;
-    remove_path(&data_dir.join("https-port"))
-}
-
-fn remove_path(path: &Path) -> io::Result<()> {
-    match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.is_dir() => fs::remove_dir_all(path),
-        Ok(_) => fs::remove_file(path),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error),
-    }
 }
 
 pub async fn localhost_server_base_url_for(app_handle: &AppHandle<Wry>) -> String {
@@ -966,10 +1327,62 @@ mod tests {
 
     use idp_model::model::Id;
 
-    use super::{
-        SETUP_READY_FILE, load_or_create_setup_ids, reject_legacy_state, remove_local_reset_data,
-        reset_local_installation, setup_ready,
-    };
+    use super::{SETUP_READY_FILE, load_or_create_setup_ids, reject_legacy_state, setup_ready};
+
+    #[test]
+    fn setup_intent_pins_canonical_issuer_and_join_identity_across_retry() {
+        let root = std::env::temp_dir().join(format!("setup-intent-{}", Id::now_v7()));
+        fs::create_dir_all(&root).expect("intent fixture");
+        let intent = serde_json::json!({"purpose": "join", "issuer": "https://installation.test/idp", "name": "Independent Node", "peer": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"});
+        super::persist_setup_intent(&root, &intent).expect("persist intent before owner work");
+        super::persist_setup_intent(&root, &intent).expect("exact retry");
+        assert_eq!(
+            super::read_setup_intent(&root).expect("offline reopen"),
+            intent
+        );
+        assert!(
+            super::persist_setup_intent(
+                &root,
+                &serde_json::json!({"purpose":"create", "issuer":"https://localhost:443/idp"})
+            )
+            .is_err()
+        );
+        assert_eq!(
+            super::read_setup_intent(&root).expect("retained identity"),
+            intent
+        );
+        fs::write(root.join("node-setup.json"), b"{broken").expect("corrupt journal");
+        assert!(super::persist_setup_intent(&root, &intent).is_err());
+        assert_eq!(
+            fs::read(root.join("node-setup.json")).expect("preserved corruption"),
+            b"{broken"
+        );
+        fs::remove_dir_all(root).expect("intent fixture cleanup");
+    }
+
+    #[test]
+    fn completed_node_with_unavailable_local_contexts_preserves_completion_for_retry() {
+        let root = std::env::temp_dir().join(format!("setup-unavailable-{}", Id::now_v7()));
+        let ids = load_or_create_setup_ids(&root).expect("stable references");
+        assert_eq!(
+            super::local_setup_stage(&root, false).expect("incomplete"),
+            "installation"
+        );
+        for name in [SETUP_READY_FILE, super::DEVICE_READY_FILE] {
+            crate::setup_completion::write(&root, name, &ids.installation_id.to_string())
+                .expect("previous completed stages");
+        }
+        assert_eq!(
+            super::local_setup_stage(&root, false).expect("not unauthorized or new installation"),
+            "unavailable"
+        );
+        assert!(setup_ready(&root).expect("persisted completion retained"));
+        assert_eq!(
+            super::local_setup_stage(&root, true).expect("successful local retry needs no peer"),
+            "ready"
+        );
+        fs::remove_dir_all(root).expect("unavailable fixture cleanup");
+    }
 
     #[test]
     fn initial_administrator_has_exact_security_sync_and_signer_grants() {
@@ -1083,42 +1496,40 @@ mod tests {
         fs::remove_dir_all(data_dir).expect("remove temporary setup manifest");
     }
 
-    #[test]
-    fn explicit_reset_removes_unified_service_state_and_readiness() {
-        let root = std::env::temp_dir().join(format!("reset-state-{}", uuid::Uuid::new_v4()));
+    #[tokio::test]
+    async fn keyring_failure_during_reset_preserves_authoritative_references_and_owner_state() {
+        let root = std::env::temp_dir().join(format!("reset-keyring-{}", Id::now_v7()));
         let data_dir = root.join("data");
         let config_dir = root.join("config");
-        fs::create_dir_all(data_dir.join("services/idp")).expect("create service data root");
-        fs::write(data_dir.join("services/idp/idp.redb"), b"state")
-            .expect("write service state marker");
-        fs::write(data_dir.join("setup-ids.json"), b"ids").expect("write setup manifest marker");
-        fs::write(data_dir.join("setup-ready"), b"ready").expect("write setup readiness marker");
-
-        remove_local_reset_data(&data_dir, &config_dir).expect("remove explicit reset state");
-        assert!(!data_dir.join("services").exists());
-        assert!(!data_dir.join("setup-ids.json").exists());
-        assert!(!data_dir.join("setup-ready").exists());
-        fs::remove_dir_all(root).expect("remove reset state fixture");
-    }
-
-    #[test]
-    fn keyring_failure_during_reset_preserves_manifest_and_service_state() {
-        let root = std::env::temp_dir().join(format!("reset-keyring-{}", uuid::Uuid::new_v4()));
-        let data_dir = root.join("data");
-        let config_dir = root.join("config");
-        let ids = load_or_create_setup_ids(&data_dir).expect("create setup manifest");
-        fs::create_dir_all(data_dir.join("services/idp")).expect("create IdP state directory");
-        fs::write(data_dir.join("services/idp/idp.redb"), b"state")
-            .expect("write IdP state marker");
-
-        let error = reset_local_installation(&data_dir, &config_dir, Some(&ids), |_, _, _| {
-            Err(std::io::Error::other("keyring unavailable"))
+        let ids = load_or_create_setup_ids(&data_dir).expect("stable local secret IDs");
+        super::persist_setup_intent(
+            &data_dir,
+            &serde_json::json!({"purpose":"create", "issuer":"https://reset.test/idp"}),
+        )
+        .expect("canonical issuer");
+        fs::create_dir_all(data_dir.join("services/idp")).expect("owner state");
+        fs::write(data_dir.join("services/idp/idp.redb"), b"state").expect("retained state");
+        let error = super::reset::run(&data_dir, &config_dir, |_| async {
+            Err(std::io::Error::other(
+                "keyring unavailable after partial deletion",
+            ))
         })
-        .expect_err("reset must stop if keyring cleanup fails");
+        .await
+        .expect_err("must retain prerequisites");
         assert!(error.to_string().contains("keyring unavailable"));
-        assert!(data_dir.join("setup-ids.json").is_file());
+        assert!(!setup_ready(&data_dir).expect("reset pending"));
+        assert!(data_dir.join(super::reset::JOURNAL).is_file());
         assert!(data_dir.join("services/idp/idp.redb").is_file());
-        fs::remove_dir_all(root).expect("remove reset retry fixture");
+        super::reset::run(&data_dir, &config_dir, |references| async move {
+            assert_eq!(references.ids.installation_id, ids.installation_id);
+            assert_eq!(references.issuer, "https://reset.test/idp");
+            Ok(())
+        })
+        .await
+        .expect("idempotent deletion retry completes cleanup");
+        assert!(!data_dir.join("setup-ids.json").exists());
+        assert!(!data_dir.join("services").exists());
+        fs::remove_dir_all(root).expect("reset fixture cleanup");
     }
 
     #[test]

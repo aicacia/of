@@ -16,11 +16,7 @@ use crate::{NodeJoinApproval, NodeJoinRequest, RouterState, authorize_bearer, no
 impl RouterState {
     /// Approves only an authenticated pairing offer using a locally authenticated User session.
     /// A successful reply proves enrollment, not bootstrap of all contexts on the joining Node.
-    pub async fn approve_node_join(
-        &self,
-        offer: &PairingOffer,
-        bearer: &str,
-    ) -> io::Result<NodeJoinApproval> {
+    pub async fn authorize_node_join_approver(&self, bearer: &str) -> io::Result<Id> {
         let actor = authorize_bearer(self, bearer).await.map_err(auth_error)?;
         for (action, resource) in [
             (
@@ -41,6 +37,15 @@ impl RouterState {
             .await
             .map_err(auth_error)?;
         }
+        Ok(actor.principal.get_entity_id())
+    }
+
+    pub async fn approve_node_join(
+        &self,
+        offer: &PairingOffer,
+        bearer: &str,
+    ) -> io::Result<NodeJoinApproval> {
+        let owner = self.authorize_node_join_approver(bearer).await?;
         let request: NodeJoinRequest = serde_json::from_slice(&offer.payload)?;
         request.validate()?;
         let issuer = self.oauth2_service.metadata().issuer;
@@ -71,7 +76,6 @@ impl RouterState {
                 "approving endpoint is not a locally trusted Node",
             ));
         }
-        let owner = actor.principal.get_entity_id();
         let approval = self.device_identity.node_join_approval(request, owner)?;
         let reply = serde_json::to_vec(&approval)?;
         if reply.len() > MAX_PAIRING_PAYLOAD_LENGTH {

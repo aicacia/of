@@ -82,12 +82,21 @@ pub fn delete_secret(
         keyring
             .delete(&user, &client, key_name)
             .map_err(io::Error::other)?;
+        if keyring
+            .load(&user, &client, key_name)
+            .map_err(io::Error::other)?
+            .is_some()
+        {
+            return Err(io::Error::other(
+                "secure-store deletion was not durable; retry reset",
+            ));
+        }
     }
     Ok(())
 }
 
 fn ensure_secret_with(
-    load: impl FnOnce() -> io::Result<Option<Vec<u8>>>,
+    mut load: impl FnMut() -> io::Result<Option<Vec<u8>>>,
     store: impl FnOnce(&[u8]) -> io::Result<()>,
 ) -> io::Result<String> {
     if let Some(secret) = load()? {
@@ -98,6 +107,11 @@ fn ensure_secret_with(
     getrandom::fill(&mut bytes).map_err(io::Error::other)?;
     let secret = encode_hex(&bytes);
     store(secret.as_bytes())?;
+    if load()?.as_deref() != Some(secret.as_bytes()) {
+        return Err(io::Error::other(
+            "secure-store credential readback did not match; setup remains incomplete",
+        ));
+    }
     Ok(secret)
 }
 
@@ -171,6 +185,67 @@ mod tests {
         )
         .expect_err("failed secure storage must fail provisioning");
         assert!(error.to_string().contains("keyring unavailable"));
+    }
+
+    #[test]
+    fn successful_write_without_durable_readback_fails_closed() {
+        assert!(ensure_secret_with(|| Ok(None), |_| Ok(())).is_err());
+    }
+
+    #[test]
+    fn ambiguous_write_failure_reuses_the_retained_secret_on_retry() {
+        let stored = RefCell::new(None);
+        assert!(
+            ensure_secret_with(
+                || Ok(stored.borrow().clone()),
+                |secret| {
+                    *stored.borrow_mut() = Some(secret.to_vec());
+                    Err(std::io::Error::other("reply lost after secure-store write"))
+                },
+            )
+            .is_err()
+        );
+        let retained = stored
+            .borrow()
+            .clone()
+            .expect("write persisted before error");
+        let reused = ensure_secret_with(
+            || Ok(stored.borrow().clone()),
+            |_| panic!("retry must not replace retained credentials"),
+        )
+        .expect("retry after ambiguous write");
+        assert_eq!(reused.as_bytes(), retained);
+    }
+
+    #[test]
+    #[ignore = "writes isolated credentials to the real OS secure store"]
+    fn real_os_secure_store_retains_and_deletes_relationship_credentials() {
+        let installation = idp_model::model::Id::now_v7();
+        for relationship in [
+            ServiceRelationship::ManagementToIdp,
+            ServiceRelationship::StorageToIdp,
+            ServiceRelationship::StorageToManagement,
+            ServiceRelationship::IdpToManagement,
+        ] {
+            let client = idp_model::model::Id::now_v7();
+            let secret = super::ensure_secret(installation, relationship, client)
+                .expect("real OS write and exact readback");
+            assert_eq!(
+                super::load_secret(installation, relationship, client)
+                    .expect("real OS retained credential"),
+                secret
+            );
+            assert_eq!(
+                super::ensure_secret(installation, relationship, client)
+                    .expect("real OS exact retry"),
+                secret
+            );
+            super::delete_secret(installation, relationship, client)
+                .expect("real OS verified deletion");
+            super::delete_secret(installation, relationship, client)
+                .expect("real OS idempotent deletion retry");
+            assert!(super::load_secret(installation, relationship, client).is_err());
+        }
     }
 
     #[test]

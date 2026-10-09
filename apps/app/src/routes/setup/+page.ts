@@ -8,5 +8,12 @@ export async function load() {
   }
 
   const stage = await getSetupStage();
-  throw redirect(302, `/setup/${stage === "installation" ? "installation" : stage}`);
+  throw redirect(
+    302,
+    stage === "ready"
+      ? "/signin"
+      : stage === "device"
+        ? "/setup/device"
+        : "/setup/installation",
+  );
 }

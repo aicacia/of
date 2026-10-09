@@ -31,12 +31,19 @@ use storage_server::DatabaseTransport;
 
 #[tokio::test]
 async fn bootstrap_current_boundaries_preserve_admitted_import_and_native_retry() {
-    tokio::time::timeout(Duration::from_secs(360), interruption_boundary())
+    tokio::time::timeout(Duration::from_secs(360), interruption_boundary(false))
         .await
         .expect("dedicated bootstrap interruption completes");
 }
 
-async fn interruption_boundary() {
+#[tokio::test]
+async fn desktop_bootstrap_orchestration_completes_both_public_contexts_and_retries_offline() {
+    tokio::time::timeout(Duration::from_secs(360), interruption_boundary(true))
+        .await
+        .expect("production orchestration, offline retry and learned-revocation denial complete");
+}
+
+async fn interruption_boundary(complete: bool) {
     let root = std::env::temp_dir().join(format!("of-node-join-bootstrap-{}", Id::now_v7()));
     let issuer = format!("https://join-{}.example", Id::now_v7());
     let source_secret = SecretKey::generate();
@@ -79,7 +86,10 @@ async fn interruption_boundary() {
     for action in [
         IdentityAction::ReplicaSignersEnroll,
         IdentityAction::IdpSecuritySync,
-    ] {
+    ]
+    .into_iter()
+    .chain(complete.then_some(IdentityAction::ManagementSecuritySync))
+    {
         let permission = policy
             .create_permission(
                 idp_model::contract::INSTALLATION_POLICY_ID,
@@ -224,49 +234,6 @@ async fn interruption_boundary() {
     let request = provisioner
         .prepare_node_join(&binding, "Joining Node", source.endpoint().id())
         .expect("durable independent private signer");
-    let sending = tokio::spawn({
-        let joining = joining.clone();
-        let address = source.endpoint().addr();
-        let request = request.clone();
-        async move { request.send(&joining, address).await }
-    });
-    let offer = offers
-        .recv()
-        .await
-        .expect("real authenticated pairing offer");
-    assert!(
-        joining
-            .endpoint()
-            .connect(source.endpoint().addr(), idp_server::BOOTSTRAP_ALPN)
-            .await
-            .is_err(),
-        "no bootstrap admission before verified persisted receipt"
-    );
-    let approved = runtime
-        .approve_node_join(&offer, &bearer)
-        .await
-        .expect("purpose-specific authorized enrollment");
-    let received = sending
-        .await
-        .expect("pairing sender")
-        .expect("pinned peer signed reply");
-    assert_eq!(approved, received);
-    source_allowed.replace(
-        runtime
-            .approved_peer_ids()
-            .await
-            .expect("source admission restored only from real durable trust"),
-    );
-    provisioner
-        .record_node_join_approval(&received)
-        .expect("persist receipt");
-    provisioner
-        .record_node_join_approval(&received)
-        .expect("exact receipt retry");
-    assert!(
-        provisioner.verify_node_signer(&binding).await.is_err(),
-        "receipt is not local signer trust"
-    );
     let joining_idp = provisioner.node_join_database();
     let joining_policy = Arc::new(
         Database::open(joining_root.join("management.redb")).expect("joining policy owner"),
@@ -283,6 +250,71 @@ async fn interruption_boundary() {
         joining_root.join("security-staging"),
         CancellationToken::new(),
     );
+    // Minimal discovery has no resolver; authenticate the address before exercising the ID-only driver.
+    let address_connection = joining
+        .endpoint()
+        .connect(source.endpoint().addr(), iroh_chain::PAIRING_ALPN)
+        .await
+        .expect("learn authenticated source address");
+    assert!(
+        provisioner
+            .node_join_approval()
+            .expect("fresh receipt state")
+            .is_none()
+    );
+    let peer_id = source.endpoint().id().to_string();
+    let sending = async {
+        if complete {
+            protocol
+                .join_from_trusted_peer(&provisioner, "Joining Node", &peer_id)
+                .await
+        } else {
+            request.send(&joining, source.endpoint().addr()).await
+        }
+    };
+    let approving = async {
+        let offer = offers
+            .recv()
+            .await
+            .expect("driver sends actual authenticated offer without a persisted receipt");
+        assert!(
+            joining
+                .endpoint()
+                .connect(source.endpoint().addr(), idp_server::BOOTSTRAP_ALPN)
+                .await
+                .is_err(),
+            "no bootstrap admission before verified persisted receipt"
+        );
+        let approved = runtime
+            .approve_node_join(&offer, &bearer)
+            .await
+            .expect("purpose-specific authorized enrollment");
+        source_allowed.replace(
+            runtime
+                .approved_peer_ids()
+                .await
+                .expect("source admission restored from durable trust"),
+        );
+        // Retain the actual transport until the reply has reached the joining driver.
+        (approved, offer)
+    };
+    let (received, (approved, retained_offer)) = tokio::join!(sending, approving);
+    let received = received.expect("production driver or pinned peer signed reply");
+    assert_eq!(approved, received);
+    drop(retained_offer);
+    address_connection.close(0u32.into(), b"address learned");
+    provisioner
+        .record_node_join_approval(&received)
+        .expect("persist or retry receipt");
+    provisioner
+        .record_node_join_approval(&received)
+        .expect("exact receipt retry");
+    if !complete {
+        assert!(
+            provisioner.verify_node_signer(&binding).await.is_err(),
+            "receipt is not local signer trust"
+        );
+    }
     assert!(
         joining
             .endpoint()
@@ -296,6 +328,112 @@ async fn interruption_boundary() {
         .connect(source.endpoint().addr(), idp_server::BOOTSTRAP_ALPN)
         .await
         .expect("authenticated purpose-specific bootstrap connection");
+
+    if complete {
+        let approved = protocol
+            .join_from_trusted_peer(
+                &provisioner,
+                "Joining Node",
+                &source.endpoint().id().to_string(),
+            )
+            .await
+            .expect("production driver imports both public contexts and checks completion");
+        assert_eq!(approved, received);
+        assert!(
+            protocol
+                .node_join_public_ready(&provisioner)
+                .await
+                .expect("current public readiness")
+        );
+        assert!(
+            protocol
+                .join_from_trusted_peer(
+                    &provisioner,
+                    "Different Node",
+                    &source.endpoint().id().to_string()
+                )
+                .await
+                .is_err(),
+            "exact retry cannot rebind the name"
+        );
+        connection.close(0u32.into(), b"completed bootstrap");
+        cancellation.cancel();
+        peer_router
+            .shutdown()
+            .await
+            .expect("disconnect source before retry");
+        source.endpoint().close().await;
+        assert_eq!(
+            protocol
+                .join_from_trusted_peer(&provisioner, "Joining Node", &request.approving_peer)
+                .await
+                .expect("completed retry requires no reachable peer"),
+            approved
+        );
+        drop(protocol);
+        drop(provisioner);
+        drop(joining_idp);
+        drop(joining_policy);
+        let provisioner = OwnerProvisioner::open(&config)
+            .await
+            .expect("offline native owner reopen");
+        let policy_store = Arc::new(
+            Database::open(joining_root.join("management.redb")).expect("offline policy reopen"),
+        );
+        let protocol = SecurityProtocol::new(
+            joining.clone(),
+            provisioner.node_join_database(),
+            policy_store.clone(),
+            issuer.clone(),
+            Some(binding.clone()),
+            joining_root.join("security-staging"),
+            CancellationToken::new(),
+        );
+        assert!(
+            protocol
+                .node_join_public_ready(&provisioner)
+                .await
+                .expect("offline current readiness")
+        );
+        assert_eq!(
+            protocol
+                .join_from_trusted_peer(&provisioner, "Joining Node", &request.approving_peer)
+                .await
+                .expect("offline production retry after native reopen"),
+            approved
+        );
+        DbReplicaSignerRepo::new(provisioner.node_join_database())
+            .revoke(binding.member_id, &issuer, 11)
+            .await
+            .expect("learn local revocation");
+        assert!(
+            !protocol
+                .node_join_public_ready(&provisioner)
+                .await
+                .expect("old completion cannot override revocation")
+        );
+        assert!(
+            protocol
+                .join_from_trusted_peer(&provisioner, "Joining Node", &request.approving_peer)
+                .await
+                .is_err(),
+            "local revocation denies before contacting disconnected peer"
+        );
+        http.abort();
+        let _ = http.await;
+        joining.endpoint().close().await;
+        drop(protocol);
+        drop(provisioner);
+        drop(policy_store);
+        drop(runtime);
+        drop(storage);
+        drop(policy);
+        drop(source_security);
+        drop(source_idp);
+        drop(source_policy);
+        std::fs::remove_dir_all(root).expect("remove completed native fixture");
+        return;
+    }
 
     let mut transport = begin(&protocol, &connection, &provisioner).await;
     let mut gated = RevokeAfterHello {
