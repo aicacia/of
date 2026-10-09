@@ -188,6 +188,9 @@ type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 struct Fixture {
     idp: Arc<Database>,
+    management: Arc<Database>,
+    clients: DbClientRepo,
+    device: idp_model::contract::DeviceEndpointIdentity,
     owner: Id,
     scope: StorageNamespace,
     resource: FileSystemId,
@@ -309,10 +312,14 @@ impl Fixture {
                     .expect("injected endpoint identity"),
             ),
             identity.clone(),
-            Some(LocalPermissions::new(management)),
+            Some(LocalPermissions::new(management.clone())),
         )
         .await
         .expect("integrated owner-local IdP runtime");
+        let device = runtime
+            .approved_device_owner(identity.endpoint().id())
+            .await
+            .expect("current locally trusted Device owner");
         let mut idp_router = runtime.router();
         if let Some(gate) = catalog_gate {
             let calls = Arc::new(AtomicUsize::new(0));
@@ -367,6 +374,9 @@ impl Fixture {
         let storage_listener = Listener::start(router).await;
         Self {
             idp,
+            management,
+            clients,
+            device,
             owner,
             scope,
             resource,
@@ -537,6 +547,9 @@ async fn assert_no_response(socket: &mut Socket) {
         }
     }
 }
+
+#[path = "native_api_qualification_tests.rs"]
+mod qualification_tests;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn native_local_token_read_response_denies_learned_revocation_before_transmission() {
