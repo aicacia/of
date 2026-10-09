@@ -24,6 +24,10 @@ use storage_server::DatabaseTransport;
 
 use super::{SecurityContext, SecurityProtocol, candidates, denied, now};
 
+#[cfg(test)]
+#[path = "node_bootstrap_interruption_tests.rs"]
+mod interruption_tests;
+
 pub(super) const BOOTSTRAP_STREAM_KIND: u8 = 4;
 const PURPOSE: &str = "of.equal-node-public-bootstrap.v1";
 
