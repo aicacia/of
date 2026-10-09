@@ -1,4 +1,10 @@
-use std::{collections::BTreeMap, fs, io, path::Path, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap,
+    fs, io,
+    path::Path,
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
 
 use api::serve_listener;
 use axum::Router;
@@ -34,20 +40,80 @@ const MANAGEMENT_PREFIX: &str = "/management";
 const STORAGE_PREFIX: &str = "/storage";
 const PEER_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 
-fn owner_replication_authorizer(
+pub(crate) fn owner_replication_authorizer(
     idp: Arc<IdpRuntime>,
     management: Arc<Database>,
+    local_endpoint: iroh::EndpointId,
+    copies: Arc<OnceLock<storage_server::StorageCopyRetirement>>,
 ) -> LocalReplicationAuthorizer {
+    let cleanup = Arc::new(Mutex::new(()));
+    let copies = Arc::downgrade(&copies);
     LocalReplicationAuthorizer::new(move |endpoint| {
         let idp = Arc::clone(&idp);
         let management = Arc::clone(&management);
+        let copies = copies.clone();
+        let cleanup = Arc::clone(&cleanup);
         async move {
+            let _cleanup = if endpoint == local_endpoint {
+                Some(cleanup.lock().await)
+            } else {
+                None
+            };
             let device = idp
                 .approved_device_owner(endpoint)
                 .await
                 .map_err(|error| error.to_string())?;
+            if endpoint == local_endpoint {
+                let policies = management_service::replica::DbSelectionPolicyRepo::new(Arc::clone(
+                    &management,
+                ));
+                if !policies
+                    .reconcile_owner_prevalidated(device.device_id, &device.owner_subject)
+                    .await
+                    .map_err(|error| error.to_string())?
+                {
+                    let old_owner = policies
+                        .pending_cleanup_owner(device.device_id)
+                        .await
+                        .map_err(|error| error.to_string())?
+                        .ok_or("missing local transfer cleanup intent")?;
+                    copies
+                        .upgrade()
+                        .ok_or("Storage runtime was released")?
+                        .get()
+                        .ok_or("Storage cleanup is not ready")?
+                        .remove_owner_copies(&old_owner)
+                        .await
+                        .map_err(|error| error.to_string())?;
+                    let current = idp
+                        .approved_device_owner(endpoint)
+                        .await
+                        .map_err(|error| error.to_string())?;
+                    if current != device
+                        || !policies
+                            .complete_owner_cleanup_prevalidated(
+                                device.device_id,
+                                &old_owner,
+                                &device.owner_subject,
+                            )
+                            .await
+                            .map_err(|error| error.to_string())?
+                    {
+                        return Err("Device owner changed during local cleanup".into());
+                    }
+                }
+            }
             let (admin_allowed, resources) =
                 management_server::replication_policy(management, &device).await?;
+            if endpoint == local_endpoint {
+                copies
+                    .upgrade()
+                    .ok_or("Storage runtime was released")?
+                    .get()
+                    .ok_or("Storage cleanup is not ready")?
+                    .activate_owner(&device.owner_subject)
+                    .map_err(|error| error.to_string())?;
+            }
             Ok(DeviceReplicationPolicy {
                 device_id: device.device_id,
                 endpoint_id: endpoint,
@@ -82,6 +148,7 @@ pub struct UnifiedRuntime {
     owner: OwnerProvisioner,
     pending_joins: Mutex<PendingNodeJoins>,
     installation: String,
+    _managed_copies: Arc<OnceLock<storage_server::StorageCopyRetirement>>,
     #[cfg(test)]
     management_fixture: Arc<Database>,
 }
@@ -218,8 +285,13 @@ impl UnifiedRuntime {
                 .expect("unified Storage Management audience was set"),
         )
         .map_err(invalid_config)?;
-        let authorizer =
-            owner_replication_authorizer(Arc::clone(&idp_runtime), Arc::clone(&management_engine));
+        let copies = Arc::new(OnceLock::new());
+        let authorizer = owner_replication_authorizer(
+            Arc::clone(&idp_runtime),
+            Arc::clone(&management_engine),
+            server.endpoint().id(),
+            Arc::clone(&copies),
+        );
         let management_client = management_client.with_local_replication_authorizer(authorizer);
         let storage_state = StorageRouterState::new(&storage_config.api_public_uri)
             .with_idp_client(idp_client)
@@ -232,6 +304,14 @@ impl UnifiedRuntime {
             Some(server.clone()),
             cancellation_token.clone(),
         )?;
+
+        copies
+            .set(
+                storage_runtime
+                    .copy_retirement()
+                    .ok_or_else(|| io::Error::other("local Storage retirement is unavailable"))?,
+            )
+            .map_err(|_| io::Error::other("Storage retirement was already initialized"))?;
 
         let owner = OwnerProvisioner::from_database(&idp_config, Arc::clone(&idp_engine))?;
         let security_protocol = SecurityProtocol::new(
@@ -276,6 +356,7 @@ impl UnifiedRuntime {
             owner,
             pending_joins,
             installation: idp_config.oauth2.issuer.clone(),
+            _managed_copies: copies,
             #[cfg(test)]
             management_fixture: management_engine,
         })
@@ -939,8 +1020,30 @@ mod tests {
                 let policies = management_service::replica::DbSelectionPolicyRepo::new(
                     std::sync::Arc::clone(&management),
                 );
-                let authorizer =
-                    super::owner_replication_authorizer(std::sync::Arc::clone(&idp), management);
+                let copies = std::sync::Arc::new(std::sync::OnceLock::new());
+                assert!(
+                    copies
+                        .set(storage_server::StorageCopyRetirement::new(
+                            std::sync::Arc::new(
+                                storage_service::DatabaseRuntime::new(root.join("databases"))
+                                    .expect("native database runtime")
+                            ),
+                            std::sync::Arc::new(
+                                storage_service::ScopedFileSystemRuntime::new(
+                                    root.join("files"),
+                                    local
+                                )
+                                .expect("native filesystem runtime")
+                            ),
+                        ))
+                        .is_ok()
+                );
+                let authorizer = super::owner_replication_authorizer(
+                    std::sync::Arc::clone(&idp),
+                    management,
+                    local,
+                    std::sync::Arc::clone(&copies),
+                );
                 assert!(
                     authorizer.selected_resources(local).await.is_err(),
                     "missing local policy fails closed"

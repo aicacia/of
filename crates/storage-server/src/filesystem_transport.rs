@@ -67,6 +67,7 @@ struct Inner {
     outgoing: StdMutex<Option<mpsc::Sender<Vec<u8>>>>,
     metadata: StdMutex<Option<broadcast::Sender<IncomingMessage<EndpointId>>>>,
     sessions: StdMutex<Option<broadcast::Sender<SessionRequest<EndpointId>>>>,
+    sessions_ready: watch::Sender<bool>,
     pending: Mutex<BTreeMap<u64, mpsc::Sender<FileResponse<EndpointId>>>>,
 
     next_id: AtomicU64,
@@ -242,6 +243,7 @@ impl IrohFileTransport {
             outgoing: StdMutex::new(Some(outgoing)),
             metadata: StdMutex::new(Some(metadata)),
             sessions: StdMutex::new(Some(sessions)),
+            sessions_ready: watch::channel(false).0,
             pending: Mutex::new(BTreeMap::new()),
 
             next_id: AtomicU64::new(1),
@@ -385,7 +387,9 @@ impl FileSessionService<EndpointId> for IrohFileTransport {
     }
 
     fn subscribe_file_sessions(&self) -> broadcast::Receiver<SessionRequest<EndpointId>> {
-        subscribe(&self.inner.sessions)
+        let receiver = subscribe(&self.inner.sessions);
+        self.inner.sessions_ready.send_replace(true);
+        receiver
     }
 }
 
@@ -609,6 +613,16 @@ async fn read_loop(
                 }
             }
             WireMessage::Request { id, operation } => {
+                let mut ready = inner.sessions_ready.subscribe();
+                if !*ready.borrow_and_update() {
+                    tokio::select! {
+                        _ = shutdown.changed() => break,
+                        result = ready.changed() => if result.is_err() { break; },
+                    }
+                }
+                if authorize_frame(&inner).await.is_err() {
+                    break;
+                }
                 if inner
                     .outgoing
                     .lock()
@@ -858,6 +872,7 @@ mod authorization_tests {
                 outgoing: std::sync::Mutex::new(Some(outgoing)),
                 metadata: std::sync::Mutex::new(Some(broadcast::channel(1).0)),
                 sessions: std::sync::Mutex::new(Some(broadcast::channel(1).0)),
+                sessions_ready: watch::channel(false).0,
                 pending: Mutex::new(BTreeMap::new()),
                 next_id: AtomicU64::new(1),
                 transport_handles: AtomicUsize::new(1),
@@ -944,6 +959,7 @@ mod authorization_tests {
             outgoing: std::sync::Mutex::new(Some(outgoing)),
             metadata: std::sync::Mutex::new(Some(metadata)),
             sessions: std::sync::Mutex::new(Some(sessions)),
+            sessions_ready: watch::channel(false).0,
             pending: Mutex::new(BTreeMap::new()),
             next_id: AtomicU64::new(1),
             transport_handles: AtomicUsize::new(1),
@@ -991,6 +1007,7 @@ mod authorization_tests {
             outgoing: std::sync::Mutex::new(Some(outgoing)),
             metadata: std::sync::Mutex::new(Some(metadata)),
             sessions: std::sync::Mutex::new(Some(sessions)),
+            sessions_ready: watch::channel(false).0,
             pending: Mutex::new(BTreeMap::new()),
             next_id: AtomicU64::new(1),
             transport_handles: AtomicUsize::new(1),

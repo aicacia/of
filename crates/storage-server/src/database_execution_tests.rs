@@ -336,13 +336,10 @@ async fn real_production_database_retirement_denies_existing_connection_with_sel
                 )
                 .await
         );
-        assert_eq!(
-            fixture.runtimes[1]
-                .remove_local_copy(&scope, id)
-                .expect_err("missing owner capability")
-                .kind(),
-            std::io::ErrorKind::Unsupported
-        );
+        fixture.runtimes[1]
+            .remove_local_copy(&scope, id)
+            .await
+            .expect("both owner retirement phases complete");
         assert!(
             production_session(&fixture).await.is_err(),
             "pending cleanup denies DATA even with unchanged allowed selections"

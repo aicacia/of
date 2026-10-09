@@ -43,6 +43,45 @@ impl DatabaseCatalog {
         })
     }
 
+    pub(crate) fn owner_resources(
+        &self,
+        owner: &str,
+    ) -> io::Result<Vec<(idp_model::model::Id, DatabaseId)>> {
+        catalog_path(
+            &self.root,
+            &crate::local_copy::CopyScope(owner.to_owned(), DatabaseId::now_v7()),
+        )?;
+        let _guard = self
+            .lock
+            .lock()
+            .map_err(|_| io::Error::other("database catalog lock poisoned"))?;
+        let applications = match fs::read_dir(self.root.join("databases").join(owner)) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => return Err(error),
+        };
+        let mut resources = Vec::new();
+        for application in applications {
+            let application = application?;
+            if !application.file_type()?.is_dir() {
+                continue;
+            }
+            let app = application
+                .file_name()
+                .to_string_lossy()
+                .parse()
+                .map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidData, "invalid catalog Application")
+                })?;
+            let catalog = read_catalog(&catalog_path(
+                &self.root,
+                &crate::local_copy::CopyScope(owner.to_owned(), app),
+            )?)?;
+            resources.extend(catalog.records.into_keys().map(|id| (app, id)));
+        }
+        Ok(resources)
+    }
+
     pub fn create<S: StorageNamespace>(
         &self,
         scope: &S,

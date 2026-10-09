@@ -72,6 +72,8 @@ where
 {
     scope: S,
     resource_id: file_system::FileSystemId,
+    generation: u64,
+    content_reader: Arc<std::sync::Mutex<Option<crate::scoped_file_system::ContentReader>>>,
     local_copies: Arc<crate::local_copy::LocalCopyPolicy>,
     file_system: Arc<ScopedFileSystem<PeerId>>,
 }
@@ -86,13 +88,23 @@ where
         scope: S,
         resource_id: file_system::FileSystemId,
     ) -> Result<Self, StorageServiceError> {
+        let generation = runtime
+            .local_copies
+            .generation(&scope, resource_id.as_uuid())
+            .map_err(|error| StorageServiceError::Scope(error.to_string()))?;
         let file_system = runtime
             .open_resource(&scope, resource_id)
             .await
             .map_err(StorageServiceError::Scope)?;
+        runtime
+            .local_copies
+            .require_generation(&scope, resource_id.as_uuid(), generation)
+            .map_err(|error| StorageServiceError::Scope(error.to_string()))?;
         Ok(Self {
             scope,
             resource_id,
+            generation,
+            content_reader: Arc::clone(&runtime.content_reader),
             local_copies: Arc::clone(&runtime.local_copies),
             file_system,
         })
@@ -100,7 +112,7 @@ where
 
     fn require_local_copy(&self) -> Result<(), StorageServiceError> {
         self.local_copies
-            .require_available(&self.scope, self.resource_id.as_uuid())
+            .require_generation(&self.scope, self.resource_id.as_uuid(), self.generation)
             .map_err(|error| StorageServiceError::Scope(error.to_string()))
     }
 
@@ -109,6 +121,32 @@ where
         request: StorageRequest,
     ) -> Result<StorageResponse, StorageServiceError> {
         self.require_local_copy()?;
+        if let StorageRequest::Read { path } = &request
+            && self
+                .file_system
+                .residency(path)
+                .map_err(StorageServiceError::FileSystem)?
+                == file_system::Residency::Passthrough
+        {
+            let reader = self
+                .content_reader
+                .lock()
+                .map_err(|_| StorageServiceError::Scope("content reader lock poisoned".into()))?
+                .clone()
+                .ok_or(StorageServiceError::FileSystem(
+                    file_system::Error::ContentUnavailable,
+                ))?;
+            let content = reader(
+                self.scope.user_sub().to_owned(),
+                self.scope.application_id(),
+                self.resource_id,
+                path.clone(),
+            )
+            .await
+            .map_err(StorageServiceError::Scope)?;
+            self.require_local_copy()?;
+            return Ok(StorageResponse::Read { content });
+        }
         execute(&self.file_system, request).await
     }
 
@@ -118,6 +156,16 @@ where
         chunk_size: usize,
     ) -> Result<file_system::ReadStream, StorageServiceError> {
         self.require_local_copy()?;
+        if self
+            .file_system
+            .residency(path)
+            .map_err(StorageServiceError::FileSystem)?
+            == file_system::Residency::Passthrough
+        {
+            return Err(StorageServiceError::FileSystem(
+                file_system::Error::ContentUnavailable,
+            ));
+        }
         self.file_system
             .stream(path, chunk_size)
             .await

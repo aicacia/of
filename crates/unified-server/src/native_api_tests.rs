@@ -187,6 +187,9 @@ impl Listener {
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 struct Fixture {
+    runtime: Arc<idp_server::IdpRuntime>,
+    issuer: String,
+    keys: Arc<KeyService<DbKeyRepo, PrivateKeyKeyringRepo>>,
     idp: Arc<Database>,
     management: Arc<Database>,
     clients: DbClientRepo,
@@ -287,7 +290,7 @@ impl Fixture {
         )
         .await
         .expect("User session key");
-        let clients = DbClientRepo::new(idp.clone(), keys);
+        let clients = DbClientRepo::new(idp.clone(), Arc::clone(&keys));
         let human = clients
             .create_client(registration(
                 "human",
@@ -373,6 +376,9 @@ impl Fixture {
         .nest("/gated", gated);
         let storage_listener = Listener::start(router).await;
         Self {
+            runtime: Arc::new(runtime),
+            issuer: config.oauth2.issuer,
+            keys,
             idp,
             management,
             clients,
@@ -550,6 +556,8 @@ async fn assert_no_response(socket: &mut Socket) {
     }
 }
 
+#[path = "policy_cleanup_http_tests.rs"]
+mod policy_cleanup_tests;
 #[path = "native_api_qualification_tests.rs"]
 mod qualification_tests;
 

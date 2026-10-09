@@ -20,10 +20,10 @@ use super::routes::device_self_revocation::{__path_revoke_self, revoke_self};
 use super::routes::devices::{
     __path_enroll_device, __path_list_approved_device_endpoints, __path_list_devices,
     __path_lookup_device_endpoint, __path_lookup_device_identity, __path_pairing_acceptance,
-    __path_revoke_device, __path_set_pairing_acceptance, __path_trusted_devices,
-    __path_update_device, enroll_device, list_approved_device_endpoints, list_devices,
-    lookup_device_endpoint, lookup_device_identity, pairing_acceptance, revoke_device,
-    set_pairing_acceptance, trusted_devices, update_device,
+    __path_revoke_device, __path_set_pairing_acceptance, __path_transfer_device,
+    __path_trusted_devices, __path_update_device, enroll_device, list_approved_device_endpoints,
+    list_devices, lookup_device_endpoint, lookup_device_identity, pairing_acceptance,
+    revoke_device, set_pairing_acceptance, transfer_device, trusted_devices, update_device,
 };
 use super::routes::health::{__path_health, health};
 use super::routes::replica_signers::{
@@ -111,6 +111,7 @@ pub fn openapi_router(router_state: RouterState, prefix: &str) -> OpenApiRouter 
             .routes(routes!(list_approved_device_endpoints))
             .routes(routes!(update_device))
             .routes(routes!(revoke_device))
+            .routes(routes!(transfer_device))
             .routes(routes!(authorize_json))
             .routes(routes!(authorize_query))
             .routes(routes!(is_allowed_for_user))

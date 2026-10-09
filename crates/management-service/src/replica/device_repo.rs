@@ -38,6 +38,70 @@ impl DbDeviceRepo {
         Self { engine }
     }
 
+    /// Caller verifies exact mutation permission and an active new User in IdP.
+    pub async fn transfer_owned(
+        &self,
+        device_id: Id,
+        old_owner: &str,
+        new_owner: &str,
+    ) -> ManagementResult<bool> {
+        let Some(row) = self.record(device_id).await? else {
+            return Ok(false);
+        };
+        self.ensure_clear(device_id).await?;
+        if row.state != DeviceState::Approved
+            || row.owner_subject != old_owner
+            || old_owner == new_owner
+        {
+            return Ok(false);
+        }
+        let mut transaction = self.engine.client().transaction().await.map_err(db_error)?;
+        for table in [TABLE, "local_device_enrollments"] {
+            if !transaction
+                .row_conflicts(table, &Row::new(vec![Value::Uuid(device_id)]))
+                .await
+                .map_err(db_error)?
+                .is_empty()
+            {
+                return Err(ManagementError::InvalidInput("conflicted device".into()));
+            }
+        }
+        let Query::Select(mut query) = select() else {
+            unreachable!("Device query is a Select")
+        };
+        query.predicate = Some(QueryExpr::And(
+            Box::new(equals("id", Value::Uuid(device_id))),
+            Box::new(QueryExpr::And(
+                Box::new(equals("owner_subject", Value::Text(old_owner.to_owned()))),
+                Box::new(equals(
+                    "state",
+                    Value::Integer(DeviceState::Approved as i64),
+                )),
+            )),
+        ));
+        let results = transaction
+            .execute(vec![Statement::Query(Query::Select(query))])
+            .await
+            .map_err(db_error)?;
+        if results.iter().all(|result| result.rows.is_empty()) {
+            return Ok(false);
+        }
+        transaction
+            .execute(vec![Statement::Query(Query::Update(QueryUpdate {
+                from: from(),
+                assignments: vec![
+                    assignment("owner_subject", Value::Text(new_owner.to_owned())),
+                    assignment("updated_at", Value::Integer(now().timestamp())),
+                ],
+                predicate: Some(equals("id", Value::Uuid(device_id))),
+                returning: None,
+            }))])
+            .await
+            .map_err(db_error)?;
+        transaction.commit().await.map_err(db_error)?;
+        Ok(true)
+    }
+
     async fn records(&self) -> ManagementResult<Vec<DeviceRow>> {
         let mut results = self
             .engine

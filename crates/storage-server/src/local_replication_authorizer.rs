@@ -41,6 +41,10 @@ impl LocalReplicationAuthorizer {
         }
     }
 
+    pub async fn local_owner(&self, endpoint: EndpointId) -> Result<String, String> {
+        Ok(self.policy(endpoint).await?.owner_subject)
+    }
+
     pub async fn selected_resources(
         &self,
         endpoint: EndpointId,

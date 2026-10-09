@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use file_system::{FileSystemId, OperationControl};
+use file_system::{
+    FileHandle, FileOperation, FileSessionService, FileSystemId, MAX_FILE_READ_LENGTH, OpenRequest,
+    OperationControl, RemoteOperation, Residency,
+};
 use iroh::{
     EndpointId,
     endpoint::{Connection, RecvStream, SendStream},
@@ -38,6 +41,74 @@ impl StorageProtocolHandler {
             file_systems,
             cancellation_token,
         }
+    }
+
+    pub(crate) fn install_passthrough_reader(&self) -> Result<(), String> {
+        let files = Arc::downgrade(&self.file_systems);
+        let server = self.server.clone();
+        let management = self.management.clone();
+        let cancellation = self.cancellation_token.clone();
+        self.file_systems.set_content_reader(move |owner, app, id, path| {
+            let files = files.clone(); let server = server.clone(); let management = management.clone(); let cancellation_token = cancellation.clone();
+            async move {
+                let handler = Self { server, management, file_systems: files.upgrade().ok_or("Storage runtime is unavailable")?, cancellation_token };
+                let resource = IrohResourceDescriptor { owner_subject: owner, application_id: app.to_string(), filesystem_id: id.as_uuid().to_string() };
+                let mut failure = "no configured peers".to_owned();
+                for peer in handler.server.peers().ids() {
+                    let connected = tokio::select! { () = handler.cancellation_token.cancelled() => return Err("Storage is shutting down".into()), result = handler.server.connect_direct_with_alpn(peer, DATA_ALPN) => result };
+                    let connection = match connected { Ok(connection) => connection, Err(error) => { failure = format!("peer connection failed: {error}"); continue; } };
+                    match handler.read_remote_connection(&connection, resource.clone(), &path).await { Ok(content) => return Ok(content), Err(error) => failure = format!("peer content denied/unavailable: {error}") }
+                }
+                Err(format!("no authorized reachable Full peer supplies this content: {failure}"))
+            }
+        })
+    }
+
+    pub(crate) async fn read_remote_connection(
+        &self,
+        connection: &Connection,
+        resource: IrohResourceDescriptor,
+        path: &str,
+    ) -> std::io::Result<Vec<u8>> {
+        self.require_authorized(&resource, connection).await?;
+        let handler = self.clone();
+        let peer_connection = connection.clone();
+        let transport = IrohFileTransport::open_authorized(connection, resource, move |resource| {
+            let handler = handler.clone();
+            let connection = peer_connection.clone();
+            async move { handler.authorize(&resource, &connection).await }
+        })
+        .await?;
+        let mut handle = transport
+            .open(
+                connection.remote_id(),
+                OpenRequest {
+                    path: path.to_owned(),
+                    revision: None,
+                },
+            )
+            .await
+            .map_err(|error| {
+                std::io::Error::new(
+                    error.kind(),
+                    format!("Passthrough peer Open failed: {error}"),
+                )
+            })?;
+        let mut content = Vec::new();
+        let mut offset = 0_u64;
+        loop {
+            let bytes = tokio::select! { () = self.cancellation_token.cancelled() => return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Storage is shutting down")), result = handle.read(offset, MAX_FILE_READ_LENGTH) => result.map_err(|error| std::io::Error::new(error.kind(), format!("Passthrough peer Read at {offset} failed: {error}")))? };
+            if bytes.is_empty() {
+                break;
+            }
+            offset = offset
+                .checked_add(bytes.len() as u64)
+                .ok_or_else(|| std::io::Error::other("content offset overflow"))?;
+            content.extend_from_slice(&bytes);
+        }
+        Box::new(handle).close().await?;
+        transport.close();
+        Ok(content)
     }
 
     pub(crate) async fn synchronize_selected_peers(&self) {
@@ -219,12 +290,43 @@ impl StorageProtocolHandler {
         connection: Connection,
     ) -> OperationControl<EndpointId> {
         let handler = self.clone();
-        OperationControl::new(move |peer, _operation| {
+        OperationControl::new(move |peer, operation| {
             let handler = handler.clone();
             let resource = resource.clone();
             let connection = connection.clone();
             Box::pin(async move {
-                peer == connection.remote_id() && handler.authorize(&resource, &connection).await
+                if peer != connection.remote_id()
+                    || !handler.authorize(&resource, &connection).await
+                {
+                    return false;
+                }
+                if let RemoteOperation::Session {
+                    operation: FileOperation::Open(_) | FileOperation::Read { .. },
+                    path,
+                } = operation
+                {
+                    let Some(path) = path else {
+                        return false;
+                    };
+                    let (Ok(app), Ok(id)) = (
+                        resource.application_id.parse(),
+                        FileSystemId::parse(&resource.filesystem_id),
+                    ) else {
+                        return false;
+                    };
+                    let scope = Namespace {
+                        owner_subject: resource.owner_subject.clone(),
+                        application_id: app,
+                    };
+                    let Ok(filesystem) = handler.file_systems.open_resource(&scope, id).await
+                    else {
+                        return false;
+                    };
+                    return filesystem
+                        .residency(&path)
+                        .is_ok_and(|mode| mode == Residency::Full);
+                }
+                true
             })
         })
     }

@@ -4,6 +4,8 @@
 mod cli;
 mod config;
 #[cfg(feature = "network")]
+mod copy_retirement;
+#[cfg(feature = "network")]
 mod data_protocol;
 #[cfg(feature = "network")]
 mod database_protocol;
@@ -30,6 +32,8 @@ mod storage_protocol;
 #[cfg(feature = "cli")]
 pub use cli::run;
 pub use config::AppConfig;
+#[cfg(feature = "network")]
+pub use copy_retirement::StorageCopyRetirement;
 #[cfg(feature = "network")]
 pub use data_protocol::DataProtocolHandler;
 #[cfg(feature = "network")]
