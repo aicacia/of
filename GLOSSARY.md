@@ -5,13 +5,14 @@ Terms shared by IdP, Management, and Storage. See [the glossary map](GLOSSARY-MA
 ## Language
 
 **Installation**:
-A group of services and devices with one canonical identity issuer and one authoritative Management policy domain.
+A group of equal Nodes sharing a canonical identity issuer and trusted identity, policy, and resource data.
+
+**Node**:
+An independently usable Installation member hosting IdP, Management, and Storage, with its own local trusted state and private signer.
+_Avoid_: Authority node, privileged replica, Storage-only Node
 
 **Unified Host**:
-A host that runs IdP, Management, and Storage together while retaining their separate authority and state ownership.
-
-**Storage-only Node**:
-An Installation member that stores selected resources and uses remote identity and policy authorities without hosting an IdP replica.
+The host composing a Node's IdP, Management, and Storage contexts while retaining separate domain and state ownership.
 
 **User**:
 An authenticated human subject with a stable public identity.
@@ -20,19 +21,19 @@ An authenticated human subject with a stable public identity.
 A logical product or resource identified by a stable URI. It groups OAuth Clients and scopes storage resources owned by a User; it is not an OAuth Client.
 
 **Principal**:
-The User or OAuth Client represented by a token's subject. A Replica Signer identifies the issuing IdP member, while Device endpoint identity authenticates transport; neither is the token's subject.
+The User or OAuth Client represented by a token's subject. A Node Signer identifies the issuing Node, while Device endpoint identity authenticates transport; neither is the token's subject.
 
 **Device**:
-An Installation's persistent transport endpoint identity with a locally supplied name, public key, and reachable address. It is pending, approved, or revoked and belongs to the User who introduces it; Device identity is not resource permission.
+An Installation member's persistent domain identity bound to a transport endpoint, with a locally supplied name, public key, and reachable address. It is pending, approved, or revoked and belongs to the User who introduces it; an endpoint alone is not an Installation Device or resource permission.
 
 **Trusted Device**:
-An approved, non-revoked Device eligible to participate in the mesh. Approval is transport trust, not user authorization.
+An approved, non-revoked Device eligible to participate in the mesh. Approval is transport trust, not user or resource authorization.
 
 **Bootstrap Service**:
 The coordinator that establishes the repeatable system baseline for a new Installation through separate IdP and Management owner operations.
 
 **Installation Setup**:
-The process that establishes a new Installation or joins an existing Installation in an explicit role.
+The process that establishes a new Installation or joins it as an equal Node through a trusted peer.
 _Avoid_: Master setup, primary-node setup
 
 **Device Setup**:
@@ -46,5 +47,10 @@ The operation that removes one runtime's local setup state, synchronized data, a
 The username/password User whose supplied credentials establish administrative access and whose explicit initial permissions are granted when a new Installation is established.
 _Avoid_: Default admin, bootstrap admin
 
-**Hosted Control Plane**:
-The configured HTTP(S) authority a local runtime trusts for access-token verification and Trusted Device discovery.
+**Trusted Peer**:
+An approved Node whose authenticated identity and permitted shared data are trusted within an Installation; it has no privileged writer role and is not merely a known mesh Peer.
+
+**Device Pairing**:
+A purpose-specific exchange used to establish approved Installation Device membership. Pairing is not a general resource-access grant.
+
+Endpoint, Peer, Mesh, Broadcast, Direct Message, and Byte Stream retain their [ofnet definitions](../ofnet/GLOSSARY.md); they do not imply Installation membership or resource authorization.

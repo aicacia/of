@@ -23,7 +23,7 @@ The stable identity of one filesystem instance, independent of its local root pa
 _Avoid_: Vault ID
 
 **Database ID**:
-The stable identity of one Application database, separate from the IdP/Management control-plane database and every Filesystem ID.
+The stable identity of one Application database, separate from IdP/Management state and every Filesystem ID.
 
 **Residency**:
 A Device-local choice per filesystem path: Full stores metadata and content locally, while Passthrough stores metadata and reads content from an available Full peer but cannot write. Residency is not synchronized.

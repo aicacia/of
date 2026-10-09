@@ -1,6 +1,6 @@
 # Storage API
 
-This is a source-checked API description, not a runtime acceptance result. See [security](security.md) for peer authorization, the [unified service spec](../../../.scratch/unified-server/spec.md) for targets, and the [ticket index](../../../.scratch/unified-server/map.md) for open work.
+Route tables below preserve the API description audited on 2026-10-06, not runtime acceptance or verification of the new architecture. The target is a full offline-first Node: authenticated operations use persistent locally trusted IdP/Management state, not mandatory remote introspection. See [security](security.md), the [offline-first Nodes spec](../../../.scratch/offline-first-nodes/spec.md), and [active tickets](../../../.scratch/offline-first-nodes/map.md).
 
 ## Identity and ownership
 
@@ -33,7 +33,7 @@ Deletion tombstones the catalog and removes cached runtime references. It does n
 
 IdP owns Device enrollment, approval, and revocation. Management owns resource selections, restrictions, and replication admission. Services use authenticated owner APIs and separate repositories, including in unified hosting.
 
-Routes below show the unified `/management` prefix. Management bearer validation uses IdP introspection, requires a User principal with the Management audience, and checks the Application-scoped `devices.select` permission.
+Routes below show the unified `/management` prefix. The historical implementation uses IdP introspection, requires a User principal with the Management audience, and checks Application-scoped `devices.select`. The target validates against the Node's local trusted IdP state and local Management permissions; no reachable remote IdP is required.
 
 | Operation         | Route                                                                                    | Current behavior                                                         |
 | ----------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -43,9 +43,9 @@ Routes below show the unified `/management` prefix. Management bearer validation
 
 Selection JSON contains `applicationId`, `kind` (`database` or `filesystem`), `id`, and `storageAccessToken`. The token is not supplied through an `X-Storage-Authorization` header. The Management token's Application must match `applicationId`.
 
-Management checks the supplied Storage token's signature, configured issuer, audience/resource, use, lifetime, subject, Storage scope, and `read` action. It uses authenticated IdP Device lookup and the kind-specific Storage GET route, checking returned identity and Application. Unknown resources, identity mismatch, and unavailable owner APIs deny selection. Deselect does not need Storage, but bearer validation still depends on IdP.
+Validate the supplied Storage token's signature, configured issuer, audience/resource, use, lifetime, subject, Storage scope, and `read` action. Bind Device ownership to locally trusted IdP records and check the kind-specific resource through the Node's Storage owner API. Unknown locally unverifiable resources and identity mismatch deny selection; offline locally verified resources remain usable. Deselect does not need content availability. Historical remote lookup/introspection behavior is a cutover gap, not a target remote dependency.
 
-Selection starts empty and covers whole resources. Administrator allowance is enforced in stored policy, but no public `/devices/{device_id}/restriction` route is currently mounted. No ownership-transfer implementation is established by this contract. Local-copy cleanup and stronger Device-owner binding remain open work in the system plan.
+Selection starts empty and covers whole resources. Administrator allowance is enforced in stored policy, but no public `/devices/{device_id}/restriction` route is currently mounted. No ownership-transfer implementation is established by this contract. Local-copy cleanup and locally trusted Device-owner binding remain open work in the active Node tracker. Revocations/restrictions take effect once learned locally; previously authorized in-flight work may finish. `of` orchestrates managed-copy cleanup through public persistence-owner APIs, with generic SQL/KV cleanup in `ofdb` and filesystem cleanup in `offs`.
 
 ## Source
 

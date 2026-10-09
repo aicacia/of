@@ -10,7 +10,7 @@ Applications authenticate through OAuth/OIDC and manage resources in a `(user su
 ## Services
 
 - `idp-service` — OAuth/OIDC, users, clients, tokens, and signing keys.
-- `management-service` — applications, permissions, device ownership and approval, resource selection, administrator limits, and sync policy.
+- `management-service` — roles, permissions, resource selection, administrator restrictions, and sync policy. IdP owns Applications and Device lifecycle.
 - `storage-service` — provides authenticated database and filesystem resource APIs.
 - `storage-server` — exposes storage over WebSocket.
 - `file-system` — offline-first storage and synchronization.
@@ -29,9 +29,13 @@ The Storage API provides create, list, get, and delete routes for databases and 
 
 ## Devices
 
-Each installation has a persistent device identity. Devices enroll and pair through `management-service`.
+Every Node hosts IdP, Management, and Storage, with a persistent Device identity and an independent local private signer. Devices enroll and pair through IdP with locally checked Management permissions. Joining uses a trusted reachable peer, not a Storage-only or privileged replica role.
 
-Approved devices synchronize explicitly selected resources peer-to-peer over authenticated Iroh streams. Each peer checks approved endpoint identity, both devices' selections, administrator allowance, and matching resource kind, ID, and namespace. OAuth tokens govern API requests, not mesh synchronization. Revocation blocks new synchronization after policy converges; it cannot erase data already copied offline.
+The confirmed target allows each Node to mutate identity, policy, and resources against persistent trusted local state, including offline and after restart. No designated writer, central authorization service, promotion, or 30-second freshness lease is required. OAuth consumption is atomic locally, without a global single-use guarantee during partitions. See [system design](docs/design.md) and [active work](.scratch/offline-first-nodes/map.md); this is not a claim that implementation acceptance is complete.
+
+Approved devices synchronize explicitly selected resources peer-to-peer over authenticated Iroh streams. Each peer checks approved endpoint identity, both devices' selections, administrator allowance, and matching resource kind, ID, and namespace. OAuth tokens govern API requests, not mesh synchronization. Revocation blocks subsequent operations once learned locally; an already-authorized operation may finish. Temporary partition divergence is accepted, and revocation cannot erase data already copied offline.
+
+`ofnet`/`iroh-chain` owns reusable Iroh endpoints, mesh/pairing mechanics, endpoint allowlist enforcement, and generic connections/routing. `of` owns domain identity, policy, catalogs, endpoint-to-Installation-Device trust, local authorization, and protocol-specific transport adapters wiring persistence owners. `ofdb` owns SQL/KV persistence, CRDT sync, staging, batching, and cleanup through public `ofdb-sql`/`ofdb-kv` only. `offs` owns filesystem persistence/sync, not transport. Generic tests belong to these owners; `of` tests authorization integration. Each Node shares one `iroh-chain` endpoint/router, with endpoint identity and locally trusted membership persisted and restored by `of`. Allowlisting is not resource authorization; pairing is not general access. Mesh messages and direct streams are distinct, with no transparent multihop database/filesystem sync claim. See [networking composition and interfaces](docs/design.md#networking-composition-and-trust).
 
 ## Applications
 

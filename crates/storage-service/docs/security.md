@@ -1,58 +1,32 @@
 # Storage security and transport
 
-[Storage design](design.md) defines resource isolation; [system design](../../../docs/design.md) defines owner-service authority and bounded synchronization. This document separates source-checked behavior from acceptance targets. No tests were rerun for this documentation audit.
+[Storage design](design.md) defines resource isolation; [system design](../../../docs/design.md) defines equal offline-first Nodes and owner boundaries. This is the confirmed target contract, not verified implementation behavior. Acceptance requires results recorded against the active tickets; no tests were rerun for this documentation migration.
 
-## Authority
+## Local authorization
 
-Storage API tokens authorize API actions, not mesh synchronization. Iroh endpoint keys identify transport peers, not Users or resource grants. No delegated Device keys, certificates, endpoint-signed grants, folder ACLs, or cross-user permissions are required.
+Storage API tokens authorize API actions, not mesh synchronization. Iroh endpoint keys identify transport peers, not Users or resource grants. No Device-key delegation, folder ACLs, or cross-user permissions are introduced.
 
-IdP owns Device lifecycle. Management owns selection and admission policy. Storage uses live authenticated Management APIs, not a local replicated Management policy database. Unified hosting does not merge IdP and Management repositories.
+Every Node hosts IdP, Management, and Storage with persistent trusted local state. IdP owns Device lifecycle; Management owns selections, restrictions, and admission policy. Storage uses locally checked owner-service decisions, not a live central authority. Context repositories remain separate. Restart restores local trust without a freshness lease or peer contact; invalid/missing local evidence fails closed, while a partition alone does not.
 
-Storage obtains selected-resource metadata and admission through Management's replication routes. Management resolves approved endpoint identities through IdP, checks matching owners, and checks allowance and whole-resource selection for both Devices. Selection claims in a peer handshake are not authoritative. Storage derives local identity from its injected endpoint and remote identity from `Connection::remote_id()`.
+Derive local endpoint identity from the Node's endpoint and remote identity from the authenticated Iroh connection. Do not trust handshake owner/endpoint/selection claims or actor headers. Verify Installation, locally approved Devices and owners, both selections, restrictions, resource kind/ID, and subject/Application namespace. Discovery is not possession or permission. `of` restores persisted locally trusted approved/non-revoked membership into the shared `iroh-chain` endpoint allowlist and updates it on learned changes. `ofnet`'s connection/handshake allowlist enforcement is not resource authorization; purpose-specific pairing is not general access or domain approval.
 
-Selection starts empty. Concurrent deselection wins; a causally later selection may restore synchronization. Restriction denies admission even when selected. Resource ownership remains the User/Application namespace, not the Device key. A signed-in User lists only that namespace; background services retain selected-resource metadata, not a namespace-wide catalog.
+Selection starts empty; concurrent deselection wins, and a causally later selection may restore sync. Revocations and restrictions block subsequent operations when learned locally. Temporary partition divergence is accepted; there is no immediate global revocation or remote erasure guarantee. Transfer/reset/deselection cleanup gates local reuse once learned, not an unaware offline peer's decisions.
 
-Revocation stops future authorized work but cannot recall copied bytes. Desired transfer/reset and deselection cleanup rules are in the system plan; they are not established cleanup guarantees for all runtimes.
+## Execution boundaries
 
-## Current checks and limits
+Authorize before each actual apply operation through the generic execution hook exposed by the persistence/sync owner. This requirement does not prescribe a new trait. Admission, send/receive checks, and queued bytes do not authorize later mutation. Check API/resource reads, outbound writes, and queued socket writes at execution as well. Both peers independently check their local policy. An already-authorized in-flight operation may finish; newly learned denial blocks the next operation, even on an existing connection. Allowlist removal or another handshake is not a substitute for these checks. Failed local evaluation denies without mutation. Remote Management/IdP unreachability must not invalidate a Node's usable local trusted state.
 
-SQL/KV transport checks policy before send and before/after receive. Filesystem transport checks before/after received frames and before outgoing enqueue, including response chunks, with a periodic background check. Both inbound and outbound paths use authorization checks.
+Do not add custom quotas, timers, deadlines, periodic authorization polling, or a 30-second freshness rule. Historical 5/10/30-second wrappers and numeric memory/frame/stage limits are observations of an older implementation, not requirements of this architecture. Retain owner protocol integrity validation, actionable rejection, atomicity, source/local data preservation, and cancellation cleanup.
 
-These checks are not a guarantee of fresh authorization at each SQL apply transaction, filesystem metadata import/file operation, or queued filesystem socket write. Keep those gaps separate from the target requirement to check each bounded operation.
+## Ownership and acceptance
 
-| Boundary                              | Current limit           |
-| ------------------------------------- | ----------------------- |
-| SQL encoded message / Iroh payload    | 1 MiB                   |
-| Storage KV encoded frame              | 1 MiB                   |
-| Filesystem metadata/session frame     | 1 MiB                   |
-| Filesystem read request               | 1 MiB                   |
-| Filesystem response data chunk        | 1 MiB minus 1,024 bytes |
-| SQL default units per frame           | 64                      |
-| SQL default session accounting budget | 64 MiB                  |
-| SQL data apply batch                  | 1 MiB                   |
-| Storage file stage                    | 64 MiB per stage        |
-| Filesystem active requests            | 64                      |
-| Filesystem response channel           | 1 entry                 |
-| Filesystem transport queue            | 64 entries              |
+- `ofnet`/`iroh-chain` owns reusable endpoint/mesh/pairing mechanics, endpoint allowlist enforcement, and generic connections/routing; it does not own Installation/Device or resource policy.
+- `of` owns domain identity, policy, catalogs/namespaces, Installation/Device endpoint trust, local authorization, protocol-specific transport adapters wiring `ofdb`/`offs`, and runtime composition. It integrates local authorization with public execution seams, not internal persistence transactions.
+- `ofdb` owns SQL/KV persistence, CRDT sync, staging, batching, and cleanup. Consume public `ofdb-sql` and `ofdb-kv` only, never backend/internal crates.
+- `offs` owns filesystem persistence and synchronization, including managed-copy lifecycle, not transport. Do not retain a parallel filesystem transport in `offs` to support the old architecture.
 
-Length-prefixed SQL and filesystem transports reject oversized payload lengths before allocating payload buffers. Storage's KV limit overrides the generic sibling KV default; do not treat generic defaults as deployed Storage limits.
+A Node uses one shared `iroh-chain` endpoint/router with persisted endpoint identity and local membership, not separate per-context networking stacks. Reuse existing `ofnet` APIs during filesystem adapter extraction; move genuinely generic missing pieces only on demonstrated need. Domain/protocol integration stays in `of`, with no blanket rewrite or new mandatory networking tracker. Mesh messages and direct byte streams are distinct; mesh forwarding does not authorize or establish transparent multihop SQL/KV/filesystem sync. A forwarded message's claimed source must not be confused with the authenticated connection peer. See [ofnet vocabulary and existing source interfaces](../../../docs/design.md#networking-composition-and-trust).
 
-Storage uses 5-second connection/handshake bounds, 10-second policy-check bounds, and a 30-second bound around the combined SQL/KV or filesystem synchronization operation. The 30-second wrapper is not a distinct timer for every batch or chunk. Frame limits and stage caps do not establish total memory, disk, or concurrent-work bounds.
+Persistence owners test generic integrity, complete catalog/index atomicity, failed-batch rollback, prior valid progress, exact recovery, Tombstones, reconnect, cancellation cleanup, and writer progress. Network waits must not hold write transactions. `of` tests authorization integration through real local owner APIs and authenticated Iroh: learned revocation between receive/apply and enqueue/write, permission failure after a proven committed batch, allowed in-flight completion, offline restart, accepted partition divergence, and rejected impersonation. No global OAuth single-use partition guarantee is asserted.
 
-## Ownership and validation
-
-- `ofnet` owns authenticated transport and generic routing, not database/filesystem payload protocols.
-- `ofdb` owns database/KV persistence and synchronization.
-- `offs` owns filesystem persistence and synchronization.
-- `of` owns resource catalogs, namespace isolation, service authorization, and runtime composition. It must reuse owning-crate protocols, not add a second framing or recovery layer.
-
-Owning crates validate version, framing, and payload. Admission must precede synchronization, and the target requires renewed policy checks before each bounded operation. Do not use permissive adapters to hide missing checks.
-
-The [implementation evidence](../../../.scratch/unified-server/evidence.md) preserves recorded test results; the [ticket index](../../../.scratch/unified-server/map.md) owns remaining acceptance work. Earlier policy-replica tests do not prove the deployed live-HTTP admission path. Full outage, cancellation, resource-bound, and topology acceptance must be established separately.
-
-## Source
-
-- `crates/storage-server/src/database_protocol.rs`, `storage_protocol.rs`, and `management_client.rs`.
-- `crates/management-server/src/router/routes/replication.rs`.
-- Sibling `ofdb`: `crates/sql-sync/src/session.rs` and `iroh_transport.rs`.
-- Sibling `offs`: `crates/file-system/src/protocol.rs`, `file_service.rs`, `iroh_transport.rs`, and `sync.rs`.
+[Active tickets](../../../.scratch/offline-first-nodes/map.md) track cutover. Generic database work is blocked on `ofdb/.scratch/storage-sync/map.md`; generic filesystem work is blocked on `offs/.scratch/filesystem-sync/map.md`. Those external handoff targets are not verified by this migration. Old transport-only checks, stub outages, and historical freshness tests do not prove this contract.

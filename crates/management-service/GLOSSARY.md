@@ -1,11 +1,11 @@
 # Management
 
-The resource-policy and role-based access-control authority for an Installation. Shared terms are defined in [the root glossary](../../GLOSSARY.md). Service authority is described in [system design](../../docs/design.md); resource selection and admission are described in [Storage design](../storage-service/docs/design.md).
+The resource-policy and role-based access-control context hosted by every Node of an Installation. Shared terms are defined in [the root glossary](../../GLOSSARY.md). Service ownership is described in [system design](../../docs/design.md); resource selection and admission are described in [Storage design](../storage-service/docs/design.md).
 
 ## Language
 
 **Management Service**:
-The single authority for an Installation's roles, permissions, assignments, resource restrictions, selections, and replication policy. Applications and Device identities belong to IdP.
+The context for locally checked and peer-synchronized roles, permissions, assignments, resource restrictions, selections, and replication policy. Applications and Device identities belong to IdP.
 
 **Permission**:
 A named action with Application or Installation scope.
