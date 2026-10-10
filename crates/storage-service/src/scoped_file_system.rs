@@ -47,6 +47,7 @@ pub(crate) type ContentReader = Arc<
 pub type ScopedFileSystem<PeerId> = FileSystem<PeerId>;
 type ScopedResources<PeerId> =
     BTreeMap<(StorageNamespaceId, FileSystemId), Arc<ScopedFileSystem<PeerId>>>;
+type ResidencyUpdates = BTreeMap<(StorageNamespaceId, FileSystemId), Arc<Mutex<()>>>;
 
 pub struct ScopedFileSystemRuntime<PeerId>
 where
@@ -59,6 +60,7 @@ where
 
     catalogs: StdMutex<BTreeMap<StorageNamespaceId, Arc<FileSystemCatalog>>>,
     resources: Mutex<ScopedResources<PeerId>>,
+    residency_updates: StdMutex<ResidencyUpdates>,
     copy_catalogs:
         StdMutex<BTreeMap<(StorageNamespaceId, FileSystemId, u64), Arc<FileSystemCatalog>>>,
 }
@@ -79,6 +81,7 @@ where
 
             catalogs: StdMutex::new(BTreeMap::new()),
             resources: Mutex::new(BTreeMap::new()),
+            residency_updates: StdMutex::new(BTreeMap::new()),
             copy_catalogs: StdMutex::new(BTreeMap::new()),
         })
     }
@@ -379,6 +382,15 @@ where
         U: Future<Output = Result<(), E>>,
         E: From<String>,
     {
+        let key = (storage_namespace_id(scope).map_err(E::from)?, resource_id);
+        let update = Arc::clone(
+            self.residency_updates
+                .lock()
+                .map_err(|_| E::from("residency update locks poisoned".to_owned()))?
+                .entry(key)
+                .or_default(),
+        );
+        let _update = update.lock().await;
         let filesystem = self
             .open_resource(scope, resource_id)
             .await
@@ -619,6 +631,162 @@ mod tests {
         fn application_id(&self) -> idp_model::model::Id {
             self.application_id
         }
+    }
+
+    #[tokio::test]
+    async fn overlapping_residency_updates_preserve_live_and_reopened_mode_order() {
+        use std::{
+            future::Future,
+            task::{Context, Poll, Waker},
+        };
+
+        use file_system::Residency;
+        use tokio::sync::oneshot;
+
+        for (first_mode, second_mode) in [
+            (Residency::Passthrough, Residency::Full),
+            (Residency::Full, Residency::Passthrough),
+        ] {
+            let namespace = Namespace {
+                user_sub: "user",
+                application_id: idp_model::model::Id::now_v7(),
+            };
+            let root =
+                env::temp_dir().join(format!("residency-order-{}", namespace.application_id));
+            let runtime = ScopedFileSystemRuntime::new(root.clone(), 1_u8).expect("runtime opens");
+            let resource = runtime
+                .create_resource(&namespace, None)
+                .await
+                .expect("resource created");
+            let unrelated = runtime
+                .create_resource(&namespace, None)
+                .await
+                .expect("unrelated copy created");
+            let (release, wait) = oneshot::channel();
+            let mut first = Box::pin(runtime.set_resource_residency_checked(
+                &namespace,
+                resource.id,
+                first_mode,
+                || async {
+                    wait.await
+                        .expect("release first current authorization check");
+                    Ok::<(), String>(())
+                },
+            ));
+            let mut context = Context::from_waker(Waker::noop());
+            assert!(first.as_mut().poll(&mut context).is_pending());
+            let mut second =
+                Box::pin(runtime.set_resource_residency(&namespace, resource.id, second_mode));
+            let second_poll = second.as_mut().poll(&mut context);
+            runtime
+                .set_resource_residency(&namespace, unrelated.id, first_mode)
+                .await
+                .expect("unrelated copy is not blocked");
+            release.send(()).expect("release paused update");
+            first.await.expect("first update succeeds");
+            match second_poll {
+                Poll::Ready(result) => result.expect("second update succeeds"),
+                Poll::Pending => second
+                    .as_mut()
+                    .await
+                    .expect("queued second update succeeds"),
+            }
+            drop(second);
+            let live = runtime
+                .open_resource(&namespace, resource.id)
+                .await
+                .expect("live copy");
+            assert_eq!(live.residency("").expect("live mode"), second_mode);
+            drop(live);
+            drop(runtime);
+            let reopened = ScopedFileSystemRuntime::new(root.clone(), 1_u8).expect("native reopen");
+            assert_eq!(
+                reopened
+                    .open_resource(&namespace, resource.id)
+                    .await
+                    .expect("reopened copy")
+                    .residency("")
+                    .expect("reopened mode"),
+                second_mode,
+            );
+            drop(reopened);
+            fs::remove_dir_all(root).expect("remove owned test directory");
+        }
+    }
+
+    #[tokio::test]
+    async fn queued_residency_update_rechecks_current_authorization_before_publication() {
+        use std::{
+            future::Future,
+            sync::atomic::{AtomicBool, Ordering},
+            task::{Context, Waker},
+        };
+
+        use file_system::Residency;
+        use tokio::sync::oneshot;
+
+        let namespace = Namespace {
+            user_sub: "user",
+            application_id: idp_model::model::Id::now_v7(),
+        };
+        let root = env::temp_dir().join(format!("residency-recheck-{}", namespace.application_id));
+        let runtime = ScopedFileSystemRuntime::new(root.clone(), 1_u8).expect("runtime opens");
+        let resource = runtime
+            .create_resource(&namespace, None)
+            .await
+            .expect("resource created");
+        let (release, wait) = oneshot::channel();
+        let mut first = Box::pin(runtime.set_resource_residency_checked(
+            &namespace,
+            resource.id,
+            Residency::Passthrough,
+            || async {
+                wait.await.expect("release first check");
+                Ok::<(), String>(())
+            },
+        ));
+        let denied = AtomicBool::new(false);
+        let mut queued = Box::pin(runtime.set_resource_residency_checked(
+            &namespace,
+            resource.id,
+            Residency::Full,
+            || async {
+                if denied.load(Ordering::SeqCst) {
+                    Err("current authorization denied".to_owned())
+                } else {
+                    Ok(())
+                }
+            },
+        ));
+        let mut context = Context::from_waker(Waker::noop());
+        assert!(first.as_mut().poll(&mut context).is_pending());
+        assert!(queued.as_mut().poll(&mut context).is_pending());
+        denied.store(true, Ordering::SeqCst);
+        release.send(()).expect("release first update");
+        first.await.expect("first update admitted");
+        assert_eq!(queued.await, Err("current authorization denied".to_owned()));
+        let live = runtime
+            .open_resource(&namespace, resource.id)
+            .await
+            .expect("live copy");
+        assert_eq!(
+            live.residency("").expect("live mode"),
+            Residency::Passthrough
+        );
+        drop(live);
+        drop(runtime);
+        let reopened = ScopedFileSystemRuntime::new(root.clone(), 1_u8).expect("native reopen");
+        assert_eq!(
+            reopened
+                .open_resource(&namespace, resource.id)
+                .await
+                .expect("reopened copy")
+                .residency("")
+                .expect("reopened mode"),
+            Residency::Passthrough,
+        );
+        drop(reopened);
+        fs::remove_dir_all(root).expect("remove owned test directory");
     }
 
     #[test]
