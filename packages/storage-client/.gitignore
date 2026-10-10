@@ -7,3 +7,5 @@
 /.nyc_output/
 /npm-debug.log
 /*.tsbuildinfo
+/src/generated/.openapi-generator
+/src/generated/.openapi-generator-ignore

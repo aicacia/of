@@ -21,10 +21,13 @@
         "lint": "biome lint .",
         "format": "biome format .",
         "format:fix": "biome format --write .",
-        "test": "vitest"
+        "test": "vitest",
+        "openapi": "node ../../scripts/generate-openapi-client.mjs storage",
+        "postopenapi": "pnpm exec biome format --write src/generated"
     },
     "devDependencies": {
         "@biomejs/biome": "^2.5.3",
+        "@openapitools/openapi-generator-cli": "2.41",
         "rolldown": "^1.1.5",
         "shx": "^0.4.0",
         "typescript": "^5.9.3",

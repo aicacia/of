@@ -22,13 +22,17 @@ use super::storage_socket::__path_upgrade_socket;
         resources::list_file_systems,
         resources::get_file_system,
         resources::delete_file_system,
+        resources::residency::get_file_system_residency,
+        resources::residency::put_file_system_residency,
         upgrade_socket
     ),
     components(schemas(
         resources::CreateResourceRequest,
         resources::DatabaseDetailResponse,
         resources::FileSystemResourceResponse,
-        resources::FileSystemDetailResponse
+        resources::FileSystemDetailResponse,
+        resources::residency::ResidencyMode,
+        resources::residency::ResourceResidency
     )),
     info(title = "Storage Server", version = env!("CARGO_PKG_VERSION")),
     modifiers(&SecurityAddon)
@@ -55,7 +59,8 @@ pub fn openapi_router(router_state: RouterState, prefix: &str) -> OpenApiRouter 
         let mut paths = Paths::new();
 
         for (path, item) in openapi_spec.paths.paths {
-            let path = path.strip_prefix(prefix).unwrap_or(&path).to_owned();
+            let path = path.strip_prefix(prefix).unwrap_or(&path);
+            let path = if path.is_empty() { "/" } else { path }.to_owned();
 
             paths.paths.insert(path, item);
         }
@@ -105,6 +110,7 @@ mod tests {
             "/storage/databases/{database_id}",
             "/storage/filesystems",
             "/storage/filesystems/{filesystem_id}",
+            "/storage/filesystems/{filesystem_id}/residency",
             "/storage",
         ] {
             assert!(document.paths.paths.contains_key(path), "missing {path}");

@@ -8,12 +8,13 @@ const service = process.argv[2];
 const expectedOperations = {
   idp: ["listApplications", "listClientKeys", "listConsents"],
   management: ["listRoles", "createRole", "evaluatePermission"],
+  storage: ["getFileSystemResidency", "putFileSystemResidency"],
 }[service];
 const specUrl = process.env.OPENAPI_SPEC_URL;
 const pnpmPath = process.env.npm_execpath;
 
 if (!expectedOperations) {
-  throw new Error("Choose the idp or management client generator");
+  throw new Error("Choose the idp, management or storage client generator");
 }
 if (!specUrl) {
   throw new Error(
@@ -27,7 +28,11 @@ if (!pnpmPath) {
 }
 
 const packageDir = process.cwd();
-const sourceDir = path.join(packageDir, "src");
+const sourceDir = path.join(
+  packageDir,
+  "src",
+  ...(service === "storage" ? ["generated"] : []),
+);
 const temporaryDir = await mkdtemp(
   path.join(packageDir, ".openapi-generation-"),
 );
@@ -64,7 +69,11 @@ try {
   }
 
   const generatedApi = await readFile(
-    path.join(generatedDir, "apis/DefaultApi.ts"),
+    path.join(
+      generatedDir,
+      "apis",
+      service === "storage" ? "ResourcesResidencyApi.ts" : "DefaultApi.ts",
+    ),
     "utf8",
   );
   for (const operation of expectedOperations) {

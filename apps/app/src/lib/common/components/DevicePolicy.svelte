@@ -4,6 +4,8 @@
   import * as v from "valibot";
   import { managementApi } from "$lib/common/state/managementClient.svelte";
 
+  import ResourceResidency from "./ResourceResidency.svelte";
+
   let { devices }: { devices: DeviceInfo[] } = $props();
   let deviceId = $state("");
   let applicationId = $state("");
@@ -84,12 +86,11 @@
       <button class="btn secondary" type="button" onclick={() => updateSelection(false)} disabled={busy || !deviceId || !applicationId || !resourceId}>Deselect exact resource</button>
     </div>
   </form>
-  <fieldset disabled aria-describedby="residency-blocker">
-    <legend>Local resource Residency</legend>
-    <label>Requested mode<select><option>Full</option><option>Passthrough</option></select></label>
-    <button class="btn secondary" type="button">Apply local Residency</button>
-  </fieldset>
-  <p id="residency-blocker" role="status">Incomplete: the composed desktop runtime has no authorized public Residency/retirement handle. No Residency setting is applied or persisted here. Whole-resource cleanup remains fail-closed until owner handle invalidation/removal is supported and reviewed. Full/Passthrough is not a Node role; Passthrough content requires an authorized reachable Full peer.</p>
+  {#if kind === SelectionKind.Filesystem}
+    <ResourceResidency filesystemId={resourceId} />
+  {:else}
+    <p>Full/Passthrough Residency controls apply to whole filesystems, not databases. Choose Filesystem and enter its resource UUID above.</p>
+  {/if}
   <p>The owner API does not expose a User-readable selection directory. Mutation acknowledgements above are not presented as a current selection list.</p>
   {#if status}<p role="status">{status}</p>{/if}
   {#if error}<p role="alert">{error}</p>{/if}

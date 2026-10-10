@@ -360,18 +360,43 @@ where
         resource_id: FileSystemId,
         residency: Residency,
     ) -> Result<(), String> {
-        let filesystem = self.open_resource(scope, resource_id).await?;
+        self.set_resource_residency_checked(scope, resource_id, residency, || async {
+            Ok::<(), String>(())
+        })
+        .await
+    }
+
+    pub async fn set_resource_residency_checked<S, F, U, E>(
+        &self,
+        scope: &S,
+        resource_id: FileSystemId,
+        residency: Residency,
+        check: F,
+    ) -> Result<(), E>
+    where
+        S: StorageNamespace,
+        F: FnOnce() -> U,
+        U: Future<Output = Result<(), E>>,
+        E: From<String>,
+    {
+        let filesystem = self
+            .open_resource(scope, resource_id)
+            .await
+            .map_err(E::from)?;
+        check().await?;
+        self.require_local_copy(scope, resource_id)
+            .map_err(E::from)?;
         self.local_copies
             .set_passthrough(
                 scope,
                 resource_id.as_uuid(),
                 residency == Residency::Passthrough,
             )
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| E::from(error.to_string()))?;
         filesystem
             .set_residency("", residency)
             .await
-            .map_err(|error| error.to_string())
+            .map_err(|error| E::from(error.to_string()))
     }
 
     pub async fn open_resource<S: StorageNamespace>(

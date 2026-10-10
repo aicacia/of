@@ -397,14 +397,23 @@ impl Fixture {
         }
     }
     async fn token(&self, resource: &str, actions: Vec<StorageAuthorizationAction>) -> String {
+        self.token_for_client(resource, actions, "human").await
+    }
+
+    async fn token_for_client(
+        &self,
+        resource: &str,
+        actions: Vec<StorageAuthorizationAction>,
+        client_id: &str,
+    ) -> String {
         let url = format!("{}/oauth2/token", self.idp_listener.base);
         let response = self
             .http
             .post(&url)
-            .basic_auth("human", Some("human-secret"))
+            .basic_auth(client_id, Some(format!("{client_id}-secret")))
             .form(&[
                 ("grant_type", "password"),
-                ("client_id", "human"),
+                ("client_id", client_id),
                 ("username", "administrator"),
                 ("password", "valid-password"),
                 ("scope", "openid"),
@@ -424,7 +433,7 @@ impl Fixture {
         let response = self
             .http
             .post(url)
-            .basic_auth("human", Some("human-secret"))
+            .basic_auth(client_id, Some(format!("{client_id}-secret")))
             .form(&[
                 (
                     "grant_type",
@@ -560,6 +569,8 @@ async fn assert_no_response(socket: &mut Socket) {
 mod policy_cleanup_tests;
 #[path = "native_api_qualification_tests.rs"]
 mod qualification_tests;
+#[path = "residency_http_tests.rs"]
+mod residency_tests;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn native_local_token_read_response_denies_learned_revocation_before_transmission() {

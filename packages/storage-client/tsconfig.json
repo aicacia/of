@@ -2,6 +2,7 @@
     "extends": "../../tsconfig.base.json",
     "compilerOptions": {
         "rootDir": "./src",
+        "noUncheckedIndexedAccess": false,
         "allowImportingTsExtensions": false,
         "module": "Node16",
         "moduleResolution": "Node16",

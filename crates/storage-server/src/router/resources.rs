@@ -17,6 +17,9 @@ use crate::{
     RouterState, StorageAuthorization, authorize_storage_token, scoped_file_system_socket_router,
 };
 
+#[path = "residency.rs"]
+pub(super) mod residency;
+
 #[derive(Clone)]
 pub(super) struct ResourceState {
     pub router: RouterState,
@@ -104,6 +107,10 @@ pub fn resource_router(
         .route(
             "/storage/filesystems/{filesystem_id}",
             get(get_file_system).delete(delete_file_system),
+        )
+        .route(
+            "/storage/filesystems/{filesystem_id}/residency",
+            get(residency::get_file_system_residency).put(residency::put_file_system_residency),
         )
         .with_state(state.clone());
     if let (Some(idp_client), Some(file_systems)) = (state.router.idp_client, state.file_systems) {

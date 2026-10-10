@@ -14,20 +14,34 @@ Use IdP-issued Storage-audience access tokens from sign-in or exchange. Check th
 
 Routes below show the unified `/storage` prefix; standalone prefixes are configurable.
 
-| Operation         | Route                                         | Action  | Success |
-| ----------------- | --------------------------------------------- | ------- | ------- |
-| Create database   | `POST /storage/databases`                     | `write` | `201`   |
-| List databases    | `GET /storage/databases`                      | `read`  | `200`   |
-| Get database      | `GET /storage/databases/{database_id}`        | `read`  | `200`   |
-| Delete database   | `DELETE /storage/databases/{database_id}`     | `write` | `204`   |
-| Create filesystem | `POST /storage/filesystems`                   | `write` | `201`   |
-| List filesystems  | `GET /storage/filesystems`                    | `read`  | `200`   |
-| Get filesystem    | `GET /storage/filesystems/{filesystem_id}`    | `read`  | `200`   |
-| Delete filesystem | `DELETE /storage/filesystems/{filesystem_id}` | `write` | `204`   |
+| Operation            | Route                                                | Action  | Success |
+| -------------------- | ---------------------------------------------------- | ------- | ------- |
+| Create database      | `POST /storage/databases`                            | `write` | `201`   |
+| List databases       | `GET /storage/databases`                             | `read`  | `200`   |
+| Get database         | `GET /storage/databases/{database_id}`               | `read`  | `200`   |
+| Delete database      | `DELETE /storage/databases/{database_id}`            | `write` | `204`   |
+| Create filesystem    | `POST /storage/filesystems`                          | `write` | `201`   |
+| List filesystems     | `GET /storage/filesystems`                           | `read`  | `200`   |
+| Get filesystem       | `GET /storage/filesystems/{filesystem_id}`           | `read`  | `200`   |
+| Delete filesystem    | `DELETE /storage/filesystems/{filesystem_id}`        | `write` | `204`   |
+| Read local Residency | `GET /storage/filesystems/{filesystem_id}/residency` | `read`  | `200`   |
+| Set local Residency  | `PUT /storage/filesystems/{filesystem_id}/residency` | `write` | `204`   |
 
 Create accepts an optional `name`. List returns only the caller's namespace. Unknown, deleted, wrong-kind, and wrong-namespace resources do not grant access; a delete that finds no matching resource returns `404`.
 
 Deletion tombstones the catalog and removes cached runtime references. It does not invalidate existing in-process handles or guarantee immediate removal of all physical or offline copies. Deselection is a separate policy operation. Passthrough filesystems retain metadata without local file content and do not permit writes.
+
+## Local whole-filesystem Residency
+
+GET returns `{ "mode": "full" }` or `{ "mode": "passthrough" }`. PUT accepts exactly that body; unknown modes/fields (including paths) reject. These are filesystem-only operations on this Node, not the Device selected in Management, database modes, or synchronized policy.
+
+Existing Storage authorization requires a current User access token with `storage:filesystems` audience/resource and the exact typed action (`read` for GET, `write` for PUT). The verified subject/Application namespace and exact local catalog filesystem ID determine the target; clients cannot provide an owner or Application override. Unified hosting additionally checks current local Device owner/policy and pending transfer cleanup through its existing owner callback. Unknown/wrong-namespace/deleted targets return404; fenced local copies return409. Neither setting Full nor reading a mode lifts cleanup fences, selects a resource, grants permission, or completes setup.
+
+PUT uses `ScopedFileSystemRuntime::set_resource_residency_checked`: after asynchronous local opening, current actor authorization is checked again immediately before local policy publication, outside an owner write transaction. GET rechecks authorization and local-copy availability before returning its result. An admitted operation may finish; later operations evaluate learned denial. The existing trusted runtime setter delegates through the same implementation.
+
+A204 means the whole-resource local policy and owner mode update succeeded, not that all content is available, a Full peer is reachable, or old cached bytes were erased. Failures do not claim success or silently reset policy/content. Publication failure before rename preserves prior durable state; failure/cancellation after publication may retain progress, so read/retry against current authorization. This is not a cross-owner crash-atomic rollback guarantee. Passthrough content uses the existing authorized peer path; no per-path durability or remote streaming endpoint is added.
+
+The desktop uses generated `ResourcesResidencyApi` against the verified local `/storage` listener, with a transient explicitly supplied Storage User token cleared after each attempt. It does not reuse a Management token, redirect a resource denial into setup/reset, or present a mode acknowledgement as readiness.
 
 ## Management selection API
 
@@ -59,5 +73,6 @@ IdP `PUT /devices/{device_id}/owner` accepts exactly `{ "ownerSubject": "User UU
 
 - Storage handlers: `crates/storage-server/src/router/resources.rs`.
 - Storage authorization: `crates/storage-server/src/router/storage_authorization.rs`.
+- Residency handlers: `crates/storage-server/src/router/residency.rs`.
 - Selection handlers: `crates/management-server/src/router/routes/device_selection.rs`.
 - Owner API checks: `crates/management-service/src/hosted_control_plane.rs`.

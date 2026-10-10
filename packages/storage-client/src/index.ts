@@ -1,3 +1,8 @@
+export { Configuration as StorageOwnerConfiguration } from "./generated/runtime.js";
+export { ResourcesResidencyApi } from "./generated/apis/ResourcesResidencyApi.js";
+export { ResidencyMode } from "./generated/models/ResidencyMode.js";
+export type { ResourceResidency } from "./generated/models/ResourceResidency.js";
+
 export type StorageRequest =
     | { type: "read"; path: string }
     | { type: "write"; path: string; content: number[] }
