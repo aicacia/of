@@ -20,11 +20,14 @@ storage:
 
 service_clients:
   management_idp:
-    client_id: REPLACE_WITH_MANAGEMENT_IDP_CLIENT_ID
+    client_id: REPLACE_WITH_MANAGEMENT_IDP_CLIENT_UUID
     audience: https://identity.example/service
   storage_idp:
-    client_id: REPLACE_WITH_STORAGE_IDP_CLIENT_ID
+    client_id: REPLACE_WITH_STORAGE_IDP_CLIENT_UUID
     audience: https://identity.example/service
   storage_management:
-    client_id: REPLACE_WITH_STORAGE_MANAGEMENT_CLIENT_ID
+    client_id: REPLACE_WITH_STORAGE_MANAGEMENT_CLIENT_UUID
     audience: https://storage.example
+  idp_management:
+    client_id: REPLACE_WITH_IDP_MANAGEMENT_CLIENT_UUID
+    audience: idp-management

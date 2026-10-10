@@ -20,17 +20,21 @@ required-features = ["cli"]
 [features]
 default = []
 cli = ["dep:clap", "dep:cli", "dep:dotenvy", "dep:env_logger", "tokio/signal"]
-completions = ["cli", "cli/completions"]
+completions = ["cli", "dep:clap_complete"]
 swagger-ui = ["idp-server/swagger-ui", "management-server/swagger-ui", "storage-server/swagger-ui"]
 
 [dependencies]
 # CLI
 clap = { version = "4.6", default-features = false, features = ["std", "derive", "help"], optional = true }
+clap_complete = { version = "4.5", default-features = false, features = [], optional = true }
 cli = { path = "../cli", default-features = false, features = ["std"], optional = true }
 dotenvy = { version = "0.15", default-features = false, features = [], optional = true }
 
 # Configuration
 config = { version = "0.15", default-features = false, features = ["yaml"] }
+
+# Credential verifiers
+rust-argon2 = { version = "3.0", default-features = false }
 
 # Internal
 api = { path = "../api", default-features = false, features = [] }
@@ -41,6 +45,7 @@ idp-service = { path = "../idp-service", default-features = false, features = ["
 iroh-chain = { path = "../../../ofnet/crates/iroh-chain", default-features = false, features = [] }
 management-server = { path = "../management-server", default-features = false }
 management-service = { path = "../management-service", default-features = false, features = ["replica", "std"] }
+model = { path = "../model", default-features = false, features = ["std"] }
 storage-server = { path = "../storage-server", default-features = false, features = ["network"] }
 
 # Persistence
@@ -71,7 +76,6 @@ tower-http = { version = "0.7", default-features = false, features = ["cors", "t
 [dev-dependencies]
 # Storage API integration
 file-system = { path = "../../../offs/crates/file-system", default-features = false, features = [] }
-model = { path = "../model", default-features = false, features = ["std"] }
 storage-model = { path = "../storage-model", default-features = false, features = ["std"] }
 storage-service = { path = "../storage-service", default-features = false, features = [] }
 

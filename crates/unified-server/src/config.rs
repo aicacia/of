@@ -2,12 +2,14 @@ use std::{net::SocketAddr, path::Path};
 
 use serde::Deserialize;
 
+#[derive(Clone)]
 pub struct ServiceClientCredentials {
     pub client_id: String,
     pub client_secret: String,
     pub audience: String,
 }
 
+#[derive(Clone)]
 pub struct UnifiedConfig {
     pub listen_addr: SocketAddr,
     pub endpoint_data_dir: std::path::PathBuf,
@@ -58,6 +60,12 @@ struct ServiceClientConfig {
 struct ClientConfig {
     client_id: String,
     audience: String,
+}
+
+impl UnifiedConfig {
+    pub fn local_provisioning_directory(&self) -> std::path::PathBuf {
+        self.endpoint_data_dir.with_extension("provisioning")
+    }
 }
 
 impl TryFrom<&Path> for UnifiedConfig {
