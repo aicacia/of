@@ -19,9 +19,16 @@ use crate::{
 
 #[tokio::test]
 async fn authorized_node_bootstrap_imports_both_contexts_and_reopens_offline() {
-    tokio::time::timeout(Duration::from_secs(600), receipt_boundary())
+    tokio::time::timeout(Duration::from_secs(600), receipt_boundary(false))
         .await
         .expect("native approval, context denial and offline reopen complete");
+}
+
+#[tokio::test]
+async fn owner_cutover_node_bootstrap_reopens_offline() {
+    tokio::time::timeout(Duration::from_secs(600), receipt_boundary(true))
+        .await
+        .expect("initial native bootstrap and offline owner retry complete");
 }
 
 async fn issue_local_token(
@@ -30,6 +37,7 @@ async fn issue_local_token(
     server: &Server,
     secret: &SecretKey,
     binding: &NodeSignerBinding,
+    client: Id,
     policy: Arc<Database>,
 ) {
     use idp_model::contract::{
@@ -38,13 +46,13 @@ async fn issue_local_token(
     };
     use tower::ServiceExt;
     owner
-        .ensure_infrastructure_client(ClientRegistration {
+        .ensure_setup_infrastructure_client(ClientRegistration {
             application: ApplicationRegistration {
                 name: Some("Joining local service".into()),
                 uri: "https://joining-service.test".into(),
                 description: None,
             },
-            client_id: Some("joining-client".into()),
+            client_id: Some(client.to_string()),
             client_secret: Some("local-secret".into()),
             client_id_issued_at: None,
             client_secret_expires_at: None,
@@ -85,7 +93,7 @@ async fn issue_local_token(
     .expect("production independent local issuance runtime");
     let response = runtime.router().oneshot(http::Request::builder().method("POST").uri("/idp/oauth2/token")
         .header(http::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(axum::body::Body::from("grant_type=client_credentials&client_id=joining-client&client_secret=local-secret&scope=idp.token.validate&audience=https%3A%2F%2Fjoining-service.test"))
+        .body(axum::body::Body::from(format!("grant_type=client_credentials&client_id={client}&client_secret=local-secret&scope=idp.token.validate&audience=https%3A%2F%2Fjoining-service.test")))
         .expect("production client-credentials request")).await.expect("local token route");
     let status = response.status();
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -112,7 +120,7 @@ async fn issue_local_token(
     assert_ne!(claims.sub, binding.member_id.to_string());
 }
 
-async fn receipt_boundary() {
+async fn receipt_boundary(initial_and_offline_only: bool) {
     let started = std::time::Instant::now();
     let root = std::env::temp_dir().join(format!("of-node-join-bootstrap-{}", Id::now_v7()));
     let issuer = format!("https://join-{}.example", Id::now_v7());
@@ -298,6 +306,20 @@ async fn receipt_boundary() {
     let provisioner = OwnerProvisioner::open(&config)
         .await
         .expect("fresh native joining owner with injected keyring");
+    let local_client = Id::now_v7();
+    assert!(
+        provisioner
+            .prepare_node_join(&binding, "Joining Node", source.endpoint().id())
+            .is_err()
+    );
+    provisioner
+        .prepare_fresh_setup_secret_inventory(fixture.administrator, &[local_client])
+        .await
+        .expect("fresh joining User and exact local Client inventory");
+    provisioner
+        .prepare_setup_client_slots(&[local_client])
+        .await
+        .expect("complete inventory before independent Node private work");
     let request = provisioner
         .prepare_node_join(&binding, "Joining Node", source.endpoint().id())
         .expect("durable independent private signer");
@@ -451,6 +473,10 @@ async fn receipt_boundary() {
     let provisioner = OwnerProvisioner::open(&config)
         .await
         .expect("native restart between context imports");
+    provisioner
+        .prepare_setup_client_slots(&[local_client])
+        .await
+        .expect("partial restart retains exact preparation");
     let joining_idp = provisioner.node_join_database();
     let protocol = SecurityProtocol::new(
         joining.clone(),
@@ -504,96 +530,99 @@ async fn receipt_boundary() {
         &joining,
         &joining_secret,
         &binding,
+        local_client,
         joining_policy.clone(),
     )
     .await;
     eprintln!("bootstrap locally issued token: {:?}", started.elapsed());
-    let updated = Id::now_v7();
-    crate::security_sync_tests::sql(&source_idp, &format!("INSERT INTO users (id, handle, name, created_at, updated_at) VALUES (CAST('{updated}' AS UUID), 'source-update', 'New Public User', 2, 2)")).await;
-    let retry = protocol
-        .receive_node_bootstrap(&connection, &provisioner, SecurityContext::Idp)
-        .await
-        .expect("retained history and local-only client do not block source update retry");
-    assert_eq!(
-        retry.sent_units, 0,
-        "receiver cannot publish application/catalog history"
-    );
-    assert_eq!(
-        retry.sent_changes, 0,
-        "receiver cannot publish local mutations"
-    );
-    assert_eq!(
-        crate::security_sync_tests::sql(
-            &joining_idp,
-            &format!("SELECT id FROM users WHERE id = CAST('{updated}' AS UUID)")
-        )
-        .await[0]
-            .rows
-            .len(),
-        1
-    );
-    assert!(
-        crate::security_sync_tests::sql(
-            &source_idp,
-            "SELECT id FROM clients WHERE client_id = 'joining-client'"
-        )
-        .await[0]
-            .rows
-            .is_empty(),
-        "joining local client is never published to source"
-    );
-    protocol
-        .receive_node_bootstrap(&connection, &provisioner, SecurityContext::Idp)
-        .await
-        .expect("exact unchanged retry");
-    eprintln!(
-        "bootstrap source update and exact retry: {:?}",
-        started.elapsed()
-    );
-    assert_eq!(
-        crate::security_sync_tests::sql(
-            &joining_idp,
-            &format!(
-                "SELECT id FROM idp_replica_members WHERE member_id = CAST('{}' AS UUID)",
-                binding.member_id
-            )
-        )
-        .await[0]
-            .rows
-            .len(),
-        1,
-        "retries cannot duplicate member"
-    );
-    policy
-        .remove_permission_from_role(
-            idp_model::contract::INSTALLATION_POLICY_ID,
-            role.id,
-            permission.id,
-        )
-        .await
-        .expect("learned source context revocation");
-    assert!(
-        protocol
-            .receive_node_bootstrap(&connection, &provisioner, SecurityContext::Management)
+    if !initial_and_offline_only {
+        let updated = Id::now_v7();
+        crate::security_sync_tests::sql(&source_idp, &format!("INSERT INTO users (id, handle, name, created_at, updated_at) VALUES (CAST('{updated}' AS UUID), 'source-update', 'New Public User', 2, 2)")).await;
+        let retry = protocol
+            .receive_node_bootstrap(&connection, &provisioner, SecurityContext::Idp)
             .await
-            .is_err(),
-        "existing connection cannot reuse receipt after source grant revocation"
-    );
-    DbReplicaSignerRepo::new(source_idp.clone())
-        .revoke(binding.member_id, &issuer, 10)
-        .await
-        .expect("source learns joined membership revocation");
-    assert!(
+            .expect("retained history and local-only client do not block source update retry");
+        assert_eq!(
+            retry.sent_units, 0,
+            "receiver cannot publish application/catalog history"
+        );
+        assert_eq!(
+            retry.sent_changes, 0,
+            "receiver cannot publish local mutations"
+        );
+        assert_eq!(
+            crate::security_sync_tests::sql(
+                &joining_idp,
+                &format!("SELECT id FROM users WHERE id = CAST('{updated}' AS UUID)")
+            )
+            .await[0]
+                .rows
+                .len(),
+            1
+        );
+        assert!(
+            crate::security_sync_tests::sql(
+                &source_idp,
+                &format!("SELECT id FROM clients WHERE client_id = '{local_client}'")
+            )
+            .await[0]
+                .rows
+                .is_empty(),
+            "joining local client is never published to source"
+        );
         protocol
             .receive_node_bootstrap(&connection, &provisioner, SecurityContext::Idp)
             .await
-            .is_err(),
-        "revoked source membership denies receipt retry"
-    );
-    eprintln!(
-        "bootstrap revocation denials complete: {:?}",
-        started.elapsed()
-    );
+            .expect("exact unchanged retry");
+        eprintln!(
+            "bootstrap source update and exact retry: {:?}",
+            started.elapsed()
+        );
+        assert_eq!(
+            crate::security_sync_tests::sql(
+                &joining_idp,
+                &format!(
+                    "SELECT id FROM idp_replica_members WHERE member_id = CAST('{}' AS UUID)",
+                    binding.member_id
+                )
+            )
+            .await[0]
+                .rows
+                .len(),
+            1,
+            "retries cannot duplicate member"
+        );
+        policy
+            .remove_permission_from_role(
+                idp_model::contract::INSTALLATION_POLICY_ID,
+                role.id,
+                permission.id,
+            )
+            .await
+            .expect("learned source context revocation");
+        assert!(
+            protocol
+                .receive_node_bootstrap(&connection, &provisioner, SecurityContext::Management)
+                .await
+                .is_err(),
+            "existing connection cannot reuse receipt after source grant revocation"
+        );
+        DbReplicaSignerRepo::new(source_idp.clone())
+            .revoke(binding.member_id, &issuer, 10)
+            .await
+            .expect("source learns joined membership revocation");
+        assert!(
+            protocol
+                .receive_node_bootstrap(&connection, &provisioner, SecurityContext::Idp)
+                .await
+                .is_err(),
+            "revoked source membership denies receipt retry"
+        );
+        eprintln!(
+            "bootstrap revocation denials complete: {:?}",
+            started.elapsed()
+        );
+    }
     connection.close(0u32.into(), b"test complete");
     drop(protocol);
     drop(provisioner);
@@ -617,6 +646,16 @@ async fn receipt_boundary() {
     let provisioner = OwnerProvisioner::open(&config)
         .await
         .expect("offline native reopen");
+    provisioner
+        .prepare_setup_client_slots(&[local_client])
+        .await
+        .expect("offline retained preparation");
+    assert!(
+        provisioner
+            .prepare_fresh_setup_secret_inventory(fixture.administrator, &[local_client])
+            .await
+            .is_err()
+    );
     eprintln!("bootstrap offline owner reopened: {:?}", started.elapsed());
     let restarted = idp_server::bind_node_join_endpoint(
         &config,
@@ -650,6 +689,7 @@ async fn receipt_boundary() {
         &restarted,
         &joining_secret,
         &binding,
+        local_client,
         reopened_policy.clone(),
     )
     .await;

@@ -12,8 +12,8 @@ use db::Database;
 use futures_util::{SinkExt, StreamExt};
 use idp_model::{
     contract::{
-        ApplicationRegistration, ClientProfile, ClientRegistration, ClientType, EntityType,
-        GrantType, TokenEndpointAuthMethod,
+        ApplicationRegistration, ClientProfile, ClientRegistration, ClientType, GrantType,
+        TokenEndpointAuthMethod,
     },
     model::Id,
 };
@@ -243,32 +243,78 @@ impl Fixture {
             .await
             .expect("native owner provisioning");
         let owner = Id::now_v7();
+        let service_client = Id::now_v7();
+        assert!(provisioner.prepare_node_signer(&binding).is_err());
+        provisioner
+            .prepare_fresh_setup_secret_inventory(owner, &[service_client])
+            .await
+            .expect("fresh exact User and service Client inventory");
+        provisioner
+            .prepare_setup_client_slots(&[service_client])
+            .await
+            .expect("complete inventory before private production");
+        assert!(provisioner.prepare_setup_client_slots(&[]).await.is_err());
         provisioner
             .ensure_initial_user(owner, Id::now_v7(), "administrator", "valid-password")
             .await
             .expect("real local User");
         provisioner
+            .ensure_initial_user_signing_key(owner)
+            .await
+            .expect("captured initial User signing key");
+        provisioner
             .ensure_initial_node(&binding, owner, "API Node")
             .await
             .expect("independent locally trusted signer");
+        let mut service_registration = registration(
+            "storage-service",
+            vec![GrantType::ClientCredentials],
+            vec![
+                "idp.device.lookup".into(),
+                "idp.device.list".into(),
+                "idp.token.validate".into(),
+            ],
+            vec![
+                "idp-services".into(),
+                "storage:filesystems".into(),
+                "storage:databases".into(),
+            ],
+            TokenEndpointAuthMethod::ClientSecretPost,
+        );
+        service_registration.client_id = Some(service_client.to_string());
         provisioner
-            .ensure_infrastructure_client(registration(
-                "storage-service",
-                vec![GrantType::ClientCredentials],
-                vec![
-                    "idp.device.lookup".into(),
-                    "idp.device.list".into(),
-                    "idp.token.validate".into(),
-                ],
-                vec![
-                    "idp-services".into(),
-                    "storage:filesystems".into(),
-                    "storage:databases".into(),
-                ],
-                TokenEndpointAuthMethod::ClientSecretPost,
-            ))
+            .ensure_setup_infrastructure_client(service_registration.clone())
             .await
-            .expect("least-privilege service OAuth");
+            .expect("captured least-privilege service OAuth");
+        let public = provisioner
+            .verify_node_signer(&binding)
+            .await
+            .expect("initial signer");
+        drop(provisioner);
+        let provisioner = idp_server::OwnerProvisioner::open(&config)
+            .await
+            .expect("existing native owner reopen");
+        provisioner
+            .prepare_setup_client_slots(&[service_client])
+            .await
+            .expect("retained exact inventory");
+        assert!(
+            provisioner
+                .prepare_fresh_setup_secret_inventory(owner, &[service_client])
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            provisioner
+                .verify_node_signer(&binding)
+                .await
+                .expect("retained signer"),
+            public
+        );
+        provisioner
+            .ensure_setup_infrastructure_client(service_registration)
+            .await
+            .expect("exact captured Client retry");
         drop(provisioner);
         let idp = Arc::new(
             Database::open(directory.0.join("idp/idp.redb")).expect("reopen native IdP owner"),
@@ -278,18 +324,7 @@ impl Fixture {
             PrivateKeyKeyringRepo::new(&config.oauth2.issuer).expect("retained local private keys"),
             config.key_namespace.clone(),
         ));
-        keys.ensure_entity_master_key(EntityType::User, owner, "valid-password")
-            .expect("User master key");
-        keys.create_key(
-            None,
-            EntityType::User,
-            owner,
-            true,
-            "User session key".into(),
-            None,
-        )
-        .await
-        .expect("User session key");
+
         let clients = DbClientRepo::new(idp.clone(), Arc::clone(&keys));
         let human = clients
             .create_client(registration(
@@ -344,7 +379,7 @@ impl Fixture {
         let idp_listener = Listener::start(idp_router).await;
         let client = IdpClient::new(
             &idp_listener.base,
-            "storage-service",
+            &service_client.to_string(),
             "storage-service-secret",
             &config.oauth2.issuer,
             "idp-services",
@@ -571,6 +606,50 @@ mod policy_cleanup_tests;
 mod qualification_tests;
 #[path = "residency_http_tests.rs"]
 mod residency_tests;
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn native_owner_cutover_captures_initial_secrets_and_reuses_reopened_owner() {
+    tokio::time::timeout(Duration::from_secs(240), async {
+        let fixture = Fixture::new(Gate::default()).await;
+        let inventory: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(fixture._directory.0.join("idp/setup-secret-inventory.json"))
+                .expect("retained preparation manifest"),
+        )
+        .expect("exact inventory JSON");
+        assert_eq!(inventory["owner"], fixture.owner.to_string());
+        assert_eq!(inventory["phase"], "ready");
+        let slots = inventory["clients"]
+            .as_array()
+            .expect("ordered Client slots");
+        assert_eq!(slots.len(), 1);
+        for slot in [
+            slots[0].as_str().expect("canonical Client ID").to_owned(),
+            format!("user:{}", fixture.owner),
+        ] {
+            let reference: serde_json::Value = serde_json::from_slice(
+                &std::fs::read(
+                    fixture
+                        ._directory
+                        .0
+                        .join("idp/local-client-key-references")
+                        .join(format!("{}.json", slot.replace(':', "-"))),
+                )
+                .expect("captured initial secret reference"),
+            )
+            .expect("reference JSON");
+            assert_eq!(reference["state"], "resolved");
+        }
+        fixture
+            .token(
+                "storage:filesystems",
+                vec![StorageAuthorizationAction::Read],
+            )
+            .await;
+        fixture.stop().await;
+    })
+    .await
+    .expect("native owner cutover completes");
+}
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn native_local_token_read_response_denies_learned_revocation_before_transmission() {

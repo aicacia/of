@@ -1,12 +1,9 @@
 use db::Database;
-use idp_model::{
-    contract::{
-        ApplicationRegistration, ClientProfile, ClientRegistration, ClientType, EntityType,
-        GrantType, INSTALLATION_POLICY_ID, IdentityAction, IdentityResource,
-        MANAGEMENT_PERMISSION_EVALUATE_SCOPE, PermissionEvaluationRequest,
-        PermissionEvaluationResponse, PermissionSubject, PermissionTarget, TokenEndpointAuthMethod,
-    },
-    replica::up,
+use idp_model::contract::{
+    ApplicationRegistration, ClientProfile, ClientRegistration, ClientType, EntityType, GrantType,
+    INSTALLATION_POLICY_ID, IdentityAction, IdentityResource, MANAGEMENT_PERMISSION_EVALUATE_SCOPE,
+    PermissionEvaluationRequest, PermissionEvaluationResponse, PermissionSubject, PermissionTarget,
+    TokenEndpointAuthMethod,
 };
 use idp_service::{
     PasswordConfig,
@@ -292,11 +289,27 @@ pub(crate) async fn seed_idp(
     endpoint_id: &str,
     approved_peer_id: &str,
 ) -> PermissionFixture {
-    let database_path = root.join("idp/idp.redb");
-    fs::create_dir_all(database_path.parent().expect("IdP data directory"))
-        .expect("create IdP data directory");
-    let engine = Arc::new(Database::open(database_path).expect("open IdP fixture database"));
-    up(&engine).await.expect("initialize IdP schema");
+    let mut config = idp_server::AppConfig {
+        data_dir: root.join("idp").to_string_lossy().into_owned(),
+        ..Default::default()
+    };
+    config.oauth2.issuer = issuer.into();
+    let owner = idp_server::OwnerProvisioner::open_with_private_keys(
+        &config,
+        PrivateKeyKeyringRepo::new_with_store(issuer, test_keyring_store()),
+    )
+    .await
+    .expect("fresh native fixture owner");
+    let administrator = idp_model::model::Id::now_v7();
+    owner
+        .prepare_fresh_setup_secret_inventory(administrator, &[])
+        .await
+        .expect("fresh fixture User inventory; named catalog Clients are not setup slots");
+    owner
+        .prepare_setup_client_slots(&[])
+        .await
+        .expect("complete fixture inventory before private production");
+    let engine = owner.node_join_database();
     let applications = DbApplicationRepo::new(Arc::clone(&engine));
     let application = applications
         .create_application(
@@ -417,6 +430,23 @@ pub(crate) async fn seed_idp(
     let users = DbUserRepo::new(Arc::clone(&engine), PasswordConfig::default());
     let mut user_ids = Vec::new();
     for name in ["administrator", "app-administrator", "unassigned"] {
+        if name == "administrator" {
+            owner
+                .ensure_initial_user(
+                    administrator,
+                    idp_model::model::Id::now_v7(),
+                    name,
+                    "user-password",
+                )
+                .await
+                .expect("initial fixture User");
+            owner
+                .ensure_initial_user_signing_key(administrator)
+                .await
+                .expect("captured initial fixture User signing key");
+            user_ids.push(administrator);
+            continue;
+        }
         let user = users
             .create_user_with_password(name, "user-password")
             .await
@@ -463,7 +493,7 @@ pub(crate) async fn seed_idp(
         key_id: idp_model::model::Id::now_v7(),
         endpoint_id: endpoint_id.into(),
     };
-    let public_jwk = key_service
+    let public_jwk = owner
         .prepare_node_signer(&local_signer)
         .expect("prepare local Node signer");
     let member = idp_model::contract::ReplicaMembership {
