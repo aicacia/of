@@ -18,10 +18,12 @@ pub struct UnifiedEndpoint {
 }
 
 impl UnifiedEndpoint {
+    /// Reopens only the canonical identity; missing identity requires exact recovery.
     pub async fn open(data_dir: &Path, idp_config: &idp_server::AppConfig) -> io::Result<Self> {
-        fs::create_dir_all(data_dir)?;
         let key_path = data_dir.join(ENDPOINT_KEY_FILE);
-        let secret_key = load_or_create_secret_key(&key_path)?;
+        let secret_key = load_secret_key(&key_path)?;
+        fs::File::open(&key_path)?.sync_all()?;
+        sync_directory_ancestry(data_dir)?;
         let allowed_peers = EndpointIdStore::default();
         allowed_peers.replace([secret_key.public()]);
         let server = idp_server::bind_node_join_endpoint(
@@ -38,6 +40,27 @@ impl UnifiedEndpoint {
             secret_key,
             key_path,
         })
+    }
+
+    /// Creates an identity only for a positively fresh Node in a new endpoint directory.
+    /// Once attempted, callers must use `open`, including after a bind failure.
+    pub async fn open_fresh(
+        data_dir: &Path,
+        idp_config: &idp_server::AppConfig,
+    ) -> io::Result<Self> {
+        let parent = data_dir
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        fs::create_dir_all(parent)?;
+        fs::create_dir(data_dir)?;
+        #[cfg(test)]
+        publication_checkpoint("directory-created");
+        sync_directory_ancestry(data_dir)?;
+        #[cfg(test)]
+        publication_checkpoint("ancestry-synced");
+        publish_secret_key(data_dir)?;
+        Self::open(data_dir, idp_config).await
     }
 
     pub fn server(&self) -> &Server {
@@ -65,12 +88,7 @@ impl UnifiedEndpoint {
     }
 
     pub fn persisted_endpoint_id(data_dir: &Path) -> io::Result<EndpointId> {
-        let bytes: [u8; 32] = fs::read(data_dir.join(ENDPOINT_KEY_FILE))?
-            .try_into()
-            .map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "invalid unified endpoint key")
-            })?;
-        Ok(SecretKey::from_bytes(&bytes).public())
+        Ok(load_secret_key(&data_dir.join(ENDPOINT_KEY_FILE))?.public())
     }
 
     pub fn key_path(&self) -> &Path {
@@ -82,30 +100,72 @@ impl UnifiedEndpoint {
     }
 }
 
-fn load_or_create_secret_key(path: &Path) -> io::Result<SecretKey> {
-    match fs::read(path) {
-        Ok(bytes) => {
-            let bytes: [u8; 32] = bytes.try_into().map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "invalid unified endpoint key")
-            })?;
-            Ok(SecretKey::from_bytes(&bytes))
-        }
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            let secret_key = SecretKey::generate();
-            let mut options = OpenOptions::new();
-            options.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
-            let mut file = options.open(path)?;
-            file.write_all(&secret_key.to_bytes())?;
-            file.sync_all()?;
-            Ok(secret_key)
-        }
-        Err(error) => Err(error),
+fn load_secret_key(path: &Path) -> io::Result<SecretKey> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "unified endpoint key must be a regular file",
+        ));
     }
+    let bytes: [u8; 32] = fs::read(path)?
+        .try_into()
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid unified endpoint key"))?;
+    Ok(SecretKey::from_bytes(&bytes))
+}
+
+fn publish_secret_key(directory: &Path) -> io::Result<()> {
+    let temporary = directory.join("endpoint.key.pending");
+    let canonical = directory.join(ENDPOINT_KEY_FILE);
+    let secret_key = SecretKey::generate();
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(&temporary)?;
+    #[cfg(test)]
+    publication_checkpoint("temporary-created");
+    let bytes = secret_key.to_bytes();
+    file.write_all(&bytes[..16])?;
+    #[cfg(test)]
+    publication_checkpoint("partial-written");
+    file.write_all(&bytes[16..])?;
+    #[cfg(test)]
+    publication_checkpoint("key-written");
+    file.sync_all()?;
+    #[cfg(test)]
+    publication_checkpoint("key-synced");
+    fs::hard_link(&temporary, &canonical)?;
+    #[cfg(test)]
+    publication_checkpoint("key-published");
+    fs::File::open(directory)?.sync_all()?;
+    #[cfg(test)]
+    publication_checkpoint("publication-synced");
+    fs::remove_file(&temporary)?;
+    #[cfg(test)]
+    publication_checkpoint("temporary-removed");
+    fs::File::open(directory)?.sync_all()?;
+    #[cfg(test)]
+    publication_checkpoint("cleanup-synced");
+    Ok(())
+}
+
+#[cfg(test)]
+fn publication_checkpoint(checkpoint: &str) {
+    if std::env::var("OF_ENDPOINT_TEST_CHECKPOINT").as_deref() == Ok(checkpoint) {
+        std::process::exit(86);
+    }
+}
+
+fn sync_directory_ancestry(directory: &Path) -> io::Result<()> {
+    let absolute = std::env::current_dir()?.join(directory);
+    for ancestor in absolute.ancestors() {
+        fs::File::open(ancestor)?.sync_all()?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -122,7 +182,7 @@ mod tests {
     };
     use iroh_chain::DATA_ALPN;
 
-    use super::{UnifiedEndpoint, load_or_create_secret_key};
+    use super::UnifiedEndpoint;
 
     #[derive(Debug)]
     struct TestProtocol(tokio::sync::mpsc::UnboundedSender<()>);
@@ -143,9 +203,147 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn existing_open_refuses_missing_identity_without_creating_state() {
+        let root = test_dir();
+        let data_dir = root.join("endpoint");
+        fs::create_dir_all(&data_dir).expect("historical endpoint directory");
+        fs::write(root.join("idp.redb"), b"surviving owner metadata")
+            .expect("historical owner fixture");
+        let result = UnifiedEndpoint::open(&data_dir, &idp_server::AppConfig::default()).await;
+        assert!(matches!(result, Err(error) if error.kind() == std::io::ErrorKind::NotFound));
+        assert!(UnifiedEndpoint::persisted_endpoint_id(&data_dir).is_err());
+        assert_eq!(
+            fs::read_dir(&data_dir)
+                .expect("unchanged directory")
+                .count(),
+            0
+        );
+        fs::remove_dir_all(root).expect("remove historical fixture");
+    }
+
+    #[tokio::test]
+    async fn fresh_creation_publishes_identity_and_retry_is_exact() {
+        let root = test_dir();
+        let data_dir = root.join("new-parent/endpoint");
+        let config = idp_server::AppConfig::default();
+        let endpoint = UnifiedEndpoint::open_fresh(&data_dir, &config)
+            .await
+            .expect("positively fresh creation");
+        let identity = endpoint.endpoint_id();
+        assert_eq!(
+            UnifiedEndpoint::persisted_endpoint_id(&data_dir).expect("published identity"),
+            identity
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(endpoint.key_path())
+                    .expect("key metadata")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+        endpoint.close().await;
+        assert!(
+            matches!(UnifiedEndpoint::open_fresh(&data_dir, &config).await, Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists)
+        );
+        let reopened = UnifiedEndpoint::open(&data_dir, &config)
+            .await
+            .expect("exact retry");
+        assert_eq!(reopened.endpoint_id(), identity);
+        reopened.close().await;
+        fs::remove_file(data_dir.join("endpoint.key")).expect("simulate canonical key loss");
+        assert!(UnifiedEndpoint::open(&data_dir, &config).await.is_err());
+        assert!(
+            UnifiedEndpoint::open_fresh(&data_dir, &config)
+                .await
+                .is_err()
+        );
+        assert!(UnifiedEndpoint::persisted_endpoint_id(&data_dir).is_err());
+        fs::remove_dir_all(root).expect("remove fresh fixture");
+    }
+
+    #[tokio::test]
+    async fn endpoint_publication_child() {
+        let Some(directory) = std::env::var_os("OF_ENDPOINT_TEST_DIRECTORY") else {
+            return;
+        };
+        UnifiedEndpoint::open_fresh(
+            std::path::Path::new(&directory),
+            &idp_server::AppConfig::default(),
+        )
+        .await
+        .expect("child fresh publication")
+        .close()
+        .await;
+    }
+
+    #[tokio::test]
+    async fn interrupted_publication_reopens_exactly_or_refuses_missing_canonical_identity() {
+        for (checkpoint, published) in [
+            ("directory-created", false),
+            ("ancestry-synced", false),
+            ("temporary-created", false),
+            ("partial-written", false),
+            ("key-written", false),
+            ("key-synced", false),
+            ("key-published", true),
+            ("publication-synced", true),
+            ("temporary-removed", true),
+            ("cleanup-synced", true),
+        ] {
+            let root = test_dir();
+            let directory = root.join("parent/endpoint");
+            let status =
+                std::process::Command::new(std::env::current_exe().expect("test executable"))
+                    .args([
+                        "--exact",
+                        "endpoint::tests::endpoint_publication_child",
+                        "--nocapture",
+                    ])
+                    .env("OF_ENDPOINT_TEST_DIRECTORY", &directory)
+                    .env("OF_ENDPOINT_TEST_CHECKPOINT", checkpoint)
+                    .status()
+                    .expect("run interrupted endpoint child");
+            assert_eq!(
+                status.code(),
+                Some(86),
+                "checkpoint {checkpoint} must execute"
+            );
+            let config = idp_server::AppConfig::default();
+            assert!(
+                matches!(UnifiedEndpoint::open_fresh(&directory, &config).await, Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists)
+            );
+            if published {
+                let identity = UnifiedEndpoint::persisted_endpoint_id(&directory)
+                    .expect("complete canonical publication");
+                let endpoint = UnifiedEndpoint::open(&directory, &config)
+                    .await
+                    .expect("exact interrupted retry");
+                assert_eq!(endpoint.endpoint_id(), identity);
+                endpoint.close().await;
+                let endpoint = UnifiedEndpoint::open(&directory, &config)
+                    .await
+                    .expect("second exact retry");
+                assert_eq!(endpoint.endpoint_id(), identity);
+                endpoint.close().await;
+            } else {
+                assert!(
+                    matches!(UnifiedEndpoint::open(&directory, &config).await, Err(error) if error.kind() == std::io::ErrorKind::NotFound)
+                );
+                assert!(UnifiedEndpoint::persisted_endpoint_id(&directory).is_err());
+            }
+            fs::remove_dir_all(root).expect("remove interrupted fixture");
+        }
+    }
+
+    #[tokio::test]
     async fn owns_one_persisted_endpoint_and_matches_idp_identity() {
         let data_dir = test_dir();
-        let endpoint = UnifiedEndpoint::open(&data_dir, &idp_server::AppConfig::default())
+        let endpoint = UnifiedEndpoint::open_fresh(&data_dir, &idp_server::AppConfig::default())
             .await
             .expect("open unified endpoint");
         let endpoint_id = endpoint.endpoint_id();
@@ -181,7 +379,7 @@ mod tests {
     #[tokio::test]
     async fn iroh_rejects_connections_after_peer_revocation() {
         let data_dir = test_dir();
-        let unified = UnifiedEndpoint::open(&data_dir, &idp_server::AppConfig::default())
+        let unified = UnifiedEndpoint::open_fresh(&data_dir, &idp_server::AppConfig::default())
             .await
             .expect("open unified endpoint");
         let peer = Endpoint::builder(presets::Minimal)
@@ -221,17 +419,18 @@ mod tests {
         fs::remove_dir_all(data_dir).expect("remove endpoint test directory");
     }
 
-    #[test]
-    fn rejects_invalid_existing_key_file() {
+    #[tokio::test]
+    async fn rejects_invalid_existing_key_file() {
         let data_dir = test_dir();
         fs::create_dir_all(&data_dir).expect("create endpoint test directory");
         let path = data_dir.join("endpoint.key");
         fs::write(&path, SecretKey::generate().to_bytes()[..16].to_vec())
             .expect("write invalid endpoint key");
         assert_eq!(
-            load_or_create_secret_key(&path)
-                .expect_err("reject malformed endpoint key")
-                .kind(),
+            match UnifiedEndpoint::open(&data_dir, &idp_server::AppConfig::default()).await {
+                Err(error) => error.kind(),
+                Ok(_) => panic!("malformed endpoint key must be rejected"),
+            },
             std::io::ErrorKind::InvalidData
         );
         fs::remove_dir_all(data_dir).expect("remove endpoint test directory");
