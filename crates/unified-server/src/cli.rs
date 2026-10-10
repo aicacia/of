@@ -87,8 +87,7 @@ pub async fn run() -> io::Result<()> {
         }
         _ => (),
     }
-    let local = LocalProvisioner::open(config)?;
-    let runtime = local.build_runtime().await?;
+    let (runtime, local) = LocalProvisioner::open_runtime(config).await?;
     let cancellation_token = runtime.cancellation_token();
     let mut server_task: JoinHandle<io::Result<()>> = tokio::spawn(runtime.serve());
     tokio::select! {

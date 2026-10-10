@@ -77,6 +77,10 @@ struct Journal {
     inventory_attempted: bool,
     node_attempted: bool,
     public_signer: Option<JwkPublic>,
+    management_attempted: bool,
+    management_complete: bool,
+    storage_attempted: bool,
+    storage_initialized: bool,
     complete: bool,
 }
 
@@ -90,6 +94,61 @@ pub struct LocalProvisioner {
 }
 
 impl LocalProvisioner {
+    /// CLI existing-only startup decision; a present local journal is authoritative.
+    pub async fn open_runtime(config: UnifiedConfig) -> io::Result<(UnifiedRuntime, Option<Self>)> {
+        match fs::symlink_metadata(config.local_provisioning_directory()) {
+            Ok(_) => {
+                let local = Self::open(config)?;
+                let runtime = local.build_runtime().await?;
+                Ok((runtime, Some(local)))
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                crate::runtime::validate_config(&config)?;
+                let binding = config.idp.oauth2.local_signer.as_ref().ok_or_else(|| {
+                    invalid("existing host requires an explicit retained Node signer binding")
+                })?;
+                for root in [
+                    Path::new(&config.idp.data_dir),
+                    Path::new(&config.management.data_dir),
+                    Path::new(&config.storage.data_dir),
+                    &config.endpoint_data_dir,
+                ] {
+                    reject_symlinks(root)?;
+                    if !fs::symlink_metadata(root)?.is_dir() {
+                        return Err(invalid("existing host requires retained context roots"));
+                    }
+                }
+                require_file(&Path::new(&config.idp.data_dir).join("idp.redb"), false)?;
+                require_file(
+                    &Path::new(&config.management.data_dir).join("management.redb"),
+                    false,
+                )?;
+                require_file(&config.endpoint_data_dir.join("endpoint.key"), true)?;
+                require_storage(&config)?;
+                if UnifiedEndpoint::persisted_endpoint_id(&config.endpoint_data_dir)?.to_string()
+                    != binding.endpoint_id
+                {
+                    return Err(invalid(
+                        "existing endpoint conflicts with retained Node signer binding",
+                    ));
+                }
+                let owner = OwnerProvisioner::open(&config.idp).await?;
+                owner.verify_node_signer(binding).await?;
+                drop(owner);
+                let runtime = UnifiedRuntime::build(config).await?;
+                match runtime.node_public_ready().await {
+                    Ok(true) => Ok((runtime, None)),
+                    result => {
+                        runtime.shutdown().await?;
+                        result?;
+                        Err(invalid("existing host is not currently locally ready"))
+                    }
+                }
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     /// Publishes a new exact intent, without creating endpoint or owner private material.
     /// All four context/endpoint roots and the adjacent provisioning directory must be absent.
     pub fn create(
@@ -140,6 +199,10 @@ impl LocalProvisioner {
             inventory_attempted: false,
             node_attempted: false,
             public_signer: None,
+            management_attempted: false,
+            management_complete: false,
+            storage_attempted: false,
+            storage_initialized: false,
             complete: false,
         };
         create_private_directory(
@@ -180,6 +243,26 @@ impl LocalProvisioner {
         if journal.complete {
             let runtime = self.build_runtime().await?;
             return runtime.shutdown().await;
+        }
+        if journal.management_attempted {
+            require_directory(Path::new(&self.config.management.data_dir))?;
+            require_file(
+                &Path::new(&self.config.management.data_dir).join("management.redb"),
+                false,
+            )?;
+            if !journal.management_complete {
+                return Err(invalid(
+                    "unacknowledged Management initialization requires explicit recovery",
+                ));
+            }
+        }
+        if journal.storage_attempted {
+            if !journal.storage_initialized {
+                return Err(invalid(
+                    "unacknowledged Storage initialization requires explicit recovery",
+                ));
+            }
+            require_storage(&self.config)?;
         }
         let endpoint = if journal.endpoint_attempted {
             UnifiedEndpoint::open(&self.config.endpoint_data_dir, &self.config.idp).await?
@@ -271,30 +354,49 @@ impl LocalProvisioner {
             owner.ensure_setup_infrastructure_client(request).await?;
         }
         drop(owner);
-        create_private_directory_if_absent(Path::new(&self.config.management.data_dir))?;
-        let permissions = journal
-            .permissions
-            .iter()
-            .copied()
-            .zip(INITIAL_ACTIONS)
-            .collect::<Vec<_>>();
-        management_server::provision_initial_administrator(
-            &self.config.management,
-            journal.user,
-            journal.role,
-            &permissions,
-        )
-        .await?;
-        management_server::provision_initial_device(
-            &self.config.management,
-            journal.member,
-            journal.user,
-        )
-        .await?;
-        create_private_directory_if_absent(Path::new(&self.config.storage.data_dir))?;
+        if !journal.management_attempted {
+            require_absent(Path::new(&self.config.management.data_dir))?;
+            journal.management_attempted = true;
+            self.write(&journal)?;
+            create_private_directory(Path::new(&self.config.management.data_dir), false)?;
+            let permissions = journal
+                .permissions
+                .iter()
+                .copied()
+                .zip(INITIAL_ACTIONS)
+                .collect::<Vec<_>>();
+            management_server::provision_initial_administrator(
+                &self.config.management,
+                journal.user,
+                journal.role,
+                &permissions,
+            )
+            .await?;
+            management_server::provision_initial_device(
+                &self.config.management,
+                journal.member,
+                journal.user,
+            )
+            .await?;
+            journal.management_complete = true;
+            self.write(&journal)?;
+        }
+        let listener = tokio::net::TcpListener::bind(self.config.listen_addr).await?;
+        let api_base = format!("http://{}", listener.local_addr()?);
+        if !journal.storage_attempted {
+            require_absent(Path::new(&self.config.storage.data_dir))?;
+            journal.storage_attempted = true;
+            self.write(&journal)?;
+            create_private_directory(Path::new(&self.config.storage.data_dir), false)?;
+        }
         let mut config = self.config.clone();
         config.idp.oauth2.local_signer = Some(binding);
-        let runtime = UnifiedRuntime::build(config).await?;
+        let runtime = UnifiedRuntime::build_on_listener(config, listener, api_base).await?;
+        journal.storage_initialized = true;
+        if let Err(error) = self.write(&journal) {
+            runtime.shutdown().await?;
+            return Err(error);
+        }
         let ready = runtime.node_public_ready().await;
         runtime.shutdown().await?;
         if !ready? {
@@ -326,6 +428,7 @@ impl LocalProvisioner {
             false,
         )?;
         require_file(&self.config.endpoint_data_dir.join("endpoint.key"), true)?;
+        require_storage(&self.config)?;
         let owner = OwnerProvisioner::open(&self.config.idp).await?;
         let binding = binding(&journal)?;
         if Some(owner.verify_prepared_node_signer(&binding)?) != journal.public_signer
@@ -383,7 +486,11 @@ impl LocalProvisioner {
             || journal.inventory_attempted && journal.endpoint.is_none()
             || journal.node_attempted && !journal.inventory_attempted
             || journal.public_signer.is_some() && !journal.node_attempted
-            || journal.complete && journal.public_signer.is_none()
+            || journal.management_attempted && journal.public_signer.is_none()
+            || journal.management_complete && !journal.management_attempted
+            || journal.storage_attempted && !journal.management_complete
+            || journal.storage_initialized && !journal.storage_attempted
+            || journal.complete && !journal.storage_initialized
         {
             return Err(invalid(
                 "invalid or conflicting local intent; exact recovery required",
@@ -763,14 +870,19 @@ fn create_private_directory(path: &Path, recursive: bool) -> io::Result<()> {
     sync_ancestry(path)
 }
 
-fn create_private_directory_if_absent(path: &Path) -> io::Result<()> {
-    match fs::symlink_metadata(path) {
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            create_private_directory(path, false)
+fn require_storage(config: &UnifiedConfig) -> io::Result<()> {
+    let root = Path::new(&config.storage.data_dir);
+    require_directory(root)?;
+    for name in ["databases", "filesystems"] {
+        let path = root.join(name);
+        reject_symlinks(&path)?;
+        if !fs::symlink_metadata(path)?.is_dir() {
+            return Err(invalid(
+                "acknowledged Storage runtime roots require exact recovery",
+            ));
         }
-        Err(error) => Err(error),
-        Ok(_) => require_directory(path),
     }
+    Ok(())
 }
 
 fn private_options(create_new: bool) -> OpenOptions {

@@ -555,6 +555,323 @@ async fn local_provisioning_continues_retained_attempt_and_refuses_changed_crede
 }
 
 #[tokio::test]
+async fn local_provisioning_existing_cli_host_without_journal_starts_and_reopens() {
+    use idp_service::oauth2::NodeSignerBinding;
+    let mut fixture = Fixture::new();
+    let mut host = LocalProvisioner::create(
+        fixture.config.clone(),
+        "operator",
+        "Local Node",
+        &fixture.password,
+    )
+    .expect("explicit public owner provisioning");
+    host.provision(&fixture.password)
+        .await
+        .expect("actual current host");
+    let retained = fixture.journal();
+    fixture.config.idp.oauth2.local_signer = Some(NodeSignerBinding {
+        endpoint_id: retained["endpoint"].as_str().expect("endpoint").to_owned(),
+        member_id: retained["member"]
+            .as_str()
+            .expect("member")
+            .parse()
+            .expect("ID"),
+        key_id: retained["key"].as_str().expect("key").parse().expect("ID"),
+    });
+    let user = retained["user"]
+        .as_str()
+        .expect("User")
+        .parse()
+        .expect("ID");
+    let secrets = fixture.secrets();
+    drop(host);
+    let directory = fixture.config.local_provisioning_directory();
+    let journal_path = directory.join("intent.json");
+    let mut incomplete = retained.clone();
+    incomplete["complete"] = false.into();
+    fs::write(
+        &journal_path,
+        serde_json::to_vec(&incomplete).expect("incomplete intent"),
+    )
+    .expect("retained incomplete fixture");
+    assert!(
+        LocalProvisioner::open_runtime(fixture.config.clone())
+            .await
+            .is_err(),
+        "present incomplete journal is authoritative despite ready owner state"
+    );
+    fs::write(&journal_path, b"{}").expect("malformed journal");
+    assert!(
+        LocalProvisioner::open_runtime(fixture.config.clone())
+            .await
+            .is_err(),
+        "present malformed journal cannot fall through"
+    );
+    fs::remove_file(&journal_path).expect("lost journal within present directory");
+    assert!(
+        LocalProvisioner::open_runtime(fixture.config.clone())
+            .await
+            .is_err(),
+        "present directory with missing intent cannot fall through"
+    );
+    fs::remove_dir_all(&directory).expect("host retains owner state, not a CLI journal");
+    for _ in 0..2 {
+        let (runtime, guard) = LocalProvisioner::open_runtime(fixture.config.clone())
+            .await
+            .expect("CLI existing-only decision accepts current explicit evidence");
+        assert!(guard.is_none(), "no synthesized journal guard");
+        assert!(
+            runtime
+                .node_public_ready()
+                .await
+                .expect("current readiness")
+        );
+        exercise_running_host(runtime, &fixture.config, user).await;
+        assert!(!directory.exists(), "no journal migration or synthesis");
+        assert!(secrets == fixture.secrets(), "no private replacement");
+    }
+    // The desktop's public composition seam remains independent of CLI intent.
+    let runtime = crate::UnifiedRuntime::build(fixture.config.clone())
+        .await
+        .expect("desktop composition remains public");
+    assert!(
+        runtime
+            .node_public_ready()
+            .await
+            .expect("preprovisioned readiness")
+    );
+    runtime.shutdown().await.expect("joined shutdown");
+    let mut optional = fixture.config.clone();
+    optional.idp_management_client = None;
+    let (runtime, _) = LocalProvisioner::open_runtime(optional)
+        .await
+        .expect("existing composition does not require fresh command's fourth relationship");
+    runtime
+        .shutdown()
+        .await
+        .expect("optional relationship shutdown");
+    let endpoint = fs::read(fixture.root.join("endpoint/endpoint.key")).expect("retained endpoint");
+
+    let management_before = fs::read(fixture.root.join("management/management.redb"))
+        .expect("retained Management database");
+    let mut unbound = fixture.config.clone();
+    unbound.idp.oauth2.local_signer = None;
+    assert!(
+        LocalProvisioner::open_runtime(unbound).await.is_err(),
+        "missing explicit signer is never inferred"
+    );
+    let mut untrusted = fixture.config.clone();
+    untrusted
+        .idp
+        .oauth2
+        .local_signer
+        .as_mut()
+        .expect("binding")
+        .key_id = Id::now_v7();
+    assert!(
+        LocalProvisioner::open_runtime(untrusted.clone())
+            .await
+            .is_err(),
+        "missing trust cannot provision a new signer"
+    );
+    assert_eq!(
+        endpoint,
+        fs::read(fixture.root.join("endpoint/endpoint.key")).expect("unchanged endpoint")
+    );
+    assert!(secrets == fixture.secrets());
+    let owner = idp_server::OwnerProvisioner::open(&fixture.config.idp)
+        .await
+        .expect("retained owner");
+    let public = owner
+        .verify_node_signer(
+            fixture
+                .config
+                .idp
+                .oauth2
+                .local_signer
+                .as_ref()
+                .expect("binding"),
+        )
+        .await
+        .expect("original approved signer survives denied startup");
+    assert_eq!(
+        serde_json::to_value(public).expect("public signer"),
+        retained["public_signer"]
+    );
+    assert!(
+        owner
+            .verify_node_signer(
+                untrusted
+                    .idp
+                    .oauth2
+                    .local_signer
+                    .as_ref()
+                    .expect("missing binding")
+            )
+            .await
+            .is_err()
+    );
+    drop(owner);
+    assert_eq!(
+        management_before,
+        fs::read(fixture.root.join("management/management.redb"))
+            .expect("Management unchanged on missing trust")
+    );
+    fs::remove_file(fixture.root.join("endpoint/endpoint.key")).expect("lost endpoint");
+    assert!(
+        LocalProvisioner::open_runtime(fixture.config.clone())
+            .await
+            .is_err()
+    );
+    assert!(!fixture.root.join("endpoint/endpoint.key").exists());
+    assert!(!directory.exists());
+}
+
+#[tokio::test]
+async fn local_provisioning_lost_management_after_late_failure_denies_without_recreation() {
+    let mut fixture = Fixture::new();
+    let occupied = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("occupied listener");
+    fixture.config.listen_addr = occupied.local_addr().expect("listener address");
+    let mut host = LocalProvisioner::create(
+        fixture.config.clone(),
+        "operator",
+        "Local Node",
+        &fixture.password,
+    )
+    .expect("fresh intent");
+    assert!(host.provision(&fixture.password).await.is_err());
+    let retained = fixture.journal();
+    assert_eq!(retained["complete"], false);
+    let database = fixture.root.join("management/management.redb");
+    assert!(
+        database.is_file(),
+        "real Management initialization precedes late failure"
+    );
+    let secrets = fixture.secrets();
+    let database_before = fs::read(&database).expect("retained Management bytes");
+    let mut unacknowledged = retained.clone();
+    unacknowledged["management_complete"] = false.into();
+    unacknowledged["storage_attempted"] = false.into();
+    unacknowledged["storage_initialized"] = false.into();
+    let journal_path = fixture
+        .config
+        .local_provisioning_directory()
+        .join("intent.json");
+    fs::write(
+        &journal_path,
+        serde_json::to_vec(&unacknowledged).expect("unacknowledged Management intent"),
+    )
+    .expect("simulate interruption before Management acknowledgement");
+    let error = host
+        .provision(&fixture.password)
+        .await
+        .expect_err("attempted unacknowledged authority requires explicit recovery");
+    assert!(
+        error.to_string().contains("unacknowledged Management"),
+        "{error}"
+    );
+    assert_eq!(
+        database_before,
+        fs::read(&database).expect("unchanged Management")
+    );
+    assert!(unacknowledged == fixture.journal());
+    assert!(secrets == fixture.secrets());
+    fs::write(
+        &journal_path,
+        serde_json::to_vec(&retained).expect("acknowledged original intent"),
+    )
+    .expect("restore original retained acknowledgement");
+    fs::remove_file(&database).expect("lose attempted Management database");
+    drop(occupied);
+    assert!(
+        host.provision(&fixture.password).await.is_err(),
+        "lost authority requires recovery"
+    );
+    assert!(
+        !database.exists(),
+        "retry must not reconstruct grants or Device policy"
+    );
+    fs::remove_dir_all(fixture.root.join("management")).expect("lose Management root too");
+    assert!(host.provision(&fixture.password).await.is_err());
+    assert!(
+        !fixture.root.join("management").exists(),
+        "no replacement root"
+    );
+    assert!(
+        retained == fixture.journal(),
+        "retain exact incomplete evidence"
+    );
+    assert!(secrets == fixture.secrets(), "no new private production");
+}
+
+#[tokio::test]
+async fn local_provisioning_lost_storage_after_runtime_initialization_denies_without_recreation() {
+    let fixture = Fixture::new();
+    let mut host = LocalProvisioner::create(
+        fixture.config.clone(),
+        "operator",
+        "Local Node",
+        &fixture.password,
+    )
+    .expect("fresh intent");
+    host.provision(&fixture.password)
+        .await
+        .expect("actual initialized Storage runtime");
+    let mut retained = fixture.journal();
+    retained["complete"] = false.into();
+    let journal_path = fixture
+        .config
+        .local_provisioning_directory()
+        .join("intent.json");
+    fs::write(
+        &journal_path,
+        serde_json::to_vec(&retained).expect("incomplete intent"),
+    )
+    .expect("interruption before final completion acknowledgement");
+    let mut unacknowledged = retained.clone();
+    unacknowledged["storage_initialized"] = false.into();
+    fs::write(
+        &journal_path,
+        serde_json::to_vec(&unacknowledged).expect("unacknowledged Storage"),
+    )
+    .expect("interruption before Storage acknowledgement");
+    assert!(
+        host.provision(&fixture.password).await.is_err(),
+        "unacknowledged Storage requires recovery even with retained roots"
+    );
+    assert!(unacknowledged == fixture.journal());
+    fs::write(
+        &journal_path,
+        serde_json::to_vec(&retained).expect("acknowledged Storage"),
+    )
+    .expect("restore retained acknowledgement");
+    let root = fixture.root.join("storage");
+    assert!(root.is_dir(), "real runtime initialized Storage");
+    fs::rename(&root, fixture.root.join("lost-storage")).expect("lose retained Storage root");
+    assert!(
+        host.provision(&fixture.password).await.is_err(),
+        "lost attempted Storage is not fresh"
+    );
+    assert!(!root.exists(), "no empty replacement context");
+    assert!(retained == fixture.journal());
+    fs::rename(fixture.root.join("lost-storage"), &root).expect("restore exact retained root");
+    host.provision(&fixture.password)
+        .await
+        .expect("exact acknowledged Storage continuation");
+    fs::remove_dir_all(root.join("databases")).expect("lose acknowledged Storage runtime root");
+    assert!(
+        host.build_runtime().await.is_err(),
+        "acknowledged Storage root loss requires recovery"
+    );
+    assert!(
+        !root.join("databases").exists(),
+        "no runtime scaffold recreation after acknowledgement"
+    );
+}
+
+#[tokio::test]
 async fn local_provisioning_missing_attempted_signer_denies_without_replacement() {
     let mut fixture = Fixture::new();
     let occupied = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -626,6 +943,13 @@ async fn local_provisioning_reuses_pre_enrollment_signer_after_readback_interrup
     );
     let retained = fixture.journal();
     assert_eq!(retained["node_attempted"], true);
+    assert_eq!(
+        retained["management_attempted"], false,
+        "Management phase has genuinely never started"
+    );
+    assert_eq!(retained["storage_attempted"], false);
+    assert!(!fixture.root.join("management").exists());
+    assert!(!fixture.root.join("storage").exists());
     assert!(
         retained["public_signer"].is_null(),
         "caller has not acknowledged public signer capture yet"
@@ -639,6 +963,12 @@ async fn local_provisioning_reuses_pre_enrollment_signer_after_readback_interrup
         .expect("existing-only prepared verification before exact enrollment");
     let current = fixture.journal();
     assert_eq!(current["complete"], true);
+    assert_eq!(current["management_attempted"], true);
+    assert_eq!(current["management_complete"], true);
+    assert!(
+        fixture.root.join("management/management.redb").is_file(),
+        "first authorized Management initialization succeeds"
+    );
     for field in [
         "installation",
         "user",
