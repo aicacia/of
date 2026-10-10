@@ -1,4 +1,4 @@
-use alloc::{format, string::String};
+use alloc::{format, string::String, vec::Vec};
 
 use chrono::{DateTime, Utc};
 use idp_model::{
@@ -72,17 +72,47 @@ where
                 expires_at,
             )
             .await?;
+        let private = self.derive_private_key(&key)?;
+        let public = key.to_jwk_public(&private)?;
+        let key = self.key_repo.set_public_jwk(key.id, public).await?;
+        Ok((key, private))
+    }
 
-        let scoped_namespace = self.scoped_namespace(entity_type, entity_id);
+    /// Capture every path before the initial master or derived private writes.
+    pub async fn create_initial_key_with_capture(
+        &self,
+        entity_type: EntityType,
+        entity_id: Id,
+        name: String,
+        capture: impl FnOnce(&Key, &[DerivationPath]) -> RepoResult<()>,
+    ) -> RepoResult<(Key, DerivedKey)> {
+        let key = self
+            .key_repo
+            .create_key(None, entity_type, entity_id, true, name, None)
+            .await?;
+        capture(&key, &Self::private_paths(&key)?)?;
+        let namespace = self.scoped_namespace(entity_type, entity_id);
+        self.private_key_repo.ensure_master_key(&namespace)?;
+        let private = self.derive_private_key(&key)?;
+        let public = key.to_jwk_public(&private)?;
+        let key = self.key_repo.set_public_jwk(key.id, public).await?;
+        Ok((key, private))
+    }
 
-        let private_key = self
-            .private_key_repo
-            .ensure_derivation_path(&scoped_namespace, key.derivation_path()?)?;
+    fn derive_private_key(&self, key: &Key) -> RepoResult<DerivedKey> {
+        let namespace = self.scoped_namespace(key.entity_type, key.entity_id);
+        self.private_key_repo
+            .ensure_derivation_path(&namespace, key.derivation_path()?)
+    }
 
-        let public_jwk = key.to_jwk_public(&private_key)?;
-        let key = self.key_repo.set_public_jwk(key.id, public_jwk).await?;
-
-        Ok((key, private_key))
+    pub fn private_paths(key: &Key) -> RepoResult<Vec<DerivationPath>> {
+        let mut paths = Vec::new();
+        let mut path = Some(key.derivation_path()?);
+        while let Some(current) = path {
+            path = current.parent();
+            paths.push(current);
+        }
+        Ok(paths)
     }
 
     pub async fn delete_entity_key_material(

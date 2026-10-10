@@ -14,7 +14,7 @@ use idp_model::{
 use idp_service::{
     oauth2::NodeSignerBinding,
     replica::DbReplicaSignerRepo,
-    repo::{ClientRepo, KeyRepo, PrivateKeyRepo},
+    repo::{ClientRepo, KeyRepo, KeyService, PrivateKeyRepo, RepoError},
 };
 use iroh::EndpointId;
 use serde_json::{Value as JsonValue, json};
@@ -30,7 +30,21 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             .find_user_info(user)
             .await
             .map_err(|error| io::Error::other(format!("{error:?}")))?;
-        self.ensure_local_entity_key(EntityType::User, user, "Local User", None)
+        let slot = format!("user:{user}");
+        let inventory = self.ready_inventory()?;
+        if inventory["owner"] != json!(user) {
+            return Err(invalid("initial User conflicts with secret inventory"));
+        }
+        let mut reference = self.read_client_reference(&slot)?;
+        if reference["state"] == "never-started" {
+            reference["state"] = json!("pending");
+            self.write_client_reference(&slot, &reference)?;
+        } else if reference["state"] == "pending" {
+            return Err(invalid(
+                "unknown initial User history requires explicit recovery",
+            ));
+        }
+        self.ensure_local_entity_key(EntityType::User, user, "Local User", &slot)
             .await
     }
 
@@ -42,12 +56,16 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             .await
             .map_err(io::Error::other)?
             .ok_or_else(|| invalid("local setup client row is missing"))?;
-        self.retain_client_entity(client_id, client.id)?;
+        self.ready_inventory()?;
+        let reference = self.read_client_reference(client_id)?;
+        if reference["state"] != "resolved" || reference["entity_id"] != json!(client.id) {
+            return Err(invalid("Client lacks owner-captured secret inventory"));
+        }
         self.ensure_local_entity_key(
             EntityType::Client,
             client.id,
             &client.client_name,
-            Some(client_id),
+            client_id,
         )
         .await
     }
@@ -57,7 +75,7 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         entity: EntityType,
         id: Id,
         name: &str,
-        client_id: Option<&str>,
+        slot: &str,
     ) -> io::Result<()> {
         let keys = &self.oauth2.key_service;
         let key = match keys
@@ -67,23 +85,35 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             .map_err(io::Error::other)?
         {
             Some(key) => key,
-            None => keys
-                .key_repo()
-                .create_key(None, entity, id, true, name.into(), None)
-                .await
-                .map_err(io::Error::other)?,
+            None => {
+                if self.read_client_reference(slot)?["state"] != "pending" {
+                    return Err(invalid(
+                        "retained key metadata was lost; no replacement key was created",
+                    ));
+                }
+                let (key, _) = keys
+                    .create_initial_key_with_capture(entity, id, name.into(), |key, paths| {
+                        self.capture_initial_key(slot, key.entity_id, paths)
+                            .map_err(|error| RepoError::InvalidInput(error.to_string()))
+                    })
+                    .await
+                    .map_err(io::Error::other)?;
+                key
+            }
         };
         let namespace = keys.scoped_namespace(entity, id);
         let path = key.derivation_path().map_err(io::Error::other)?;
-        if let Some(client_id) = client_id {
-            let mut reference = self.read_client_reference(client_id)?;
-            let mut paths: Vec<String> = serde_json::from_value(reference["paths"].clone())?;
-            let value = path.to_string();
-            if !paths.contains(&value) {
-                paths.push(value);
+        let reference = self.read_client_reference(slot)?;
+        if reference["entity_id"] != json!(id) {
+            return Err(invalid("entity conflicts with captured inventory"));
+        }
+        let paths: Vec<String> = serde_json::from_value(reference["paths"].clone())?;
+        for required in KeyService::<idp_service::replica::DbKeyRepo, P>::private_paths(&key)
+            .map_err(io::Error::other)?
+        {
+            if !paths.contains(&required.to_string()) {
+                return Err(invalid("key is outside captured initial inventory"));
             }
-            reference["paths"] = json!(paths);
-            self.write_client_reference(client_id, &reference)?;
         }
         let private = if key.public_jwk.is_some() {
             keys.private_key_repo().load(&namespace, &path).map_err(io::Error::other)?
@@ -182,37 +212,144 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
                 }
                 Ok(existing)
             }
-            Err(error) if error.error == idp_model::contract::ErrorCode::InvalidClient => self
-                .oauth2
-                .register_client(request)
-                .await
-                .map_err(|error| io::Error::other(format!("{error:?}"))),
+            Err(error) if error.error == idp_model::contract::ErrorCode::InvalidClient => {
+                self.create_setup_client(request).await?;
+                self.oauth2
+                    .get_client(&client_id)
+                    .await
+                    .map_err(|error| io::Error::other(format!("{error:?}")))
+            }
             Err(error) => Err(io::Error::other(format!("{error:?}"))),
         }?;
         self.ensure_client_signing_key(&client_id).await?;
         Ok(registration)
     }
 
-    pub async fn prepare_setup_client_slots(&self, clients: &[Id]) -> io::Result<()> {
-        for id in clients {
-            if id.is_nil() {
-                return Err(invalid("non-nil setup Client slot required"));
+    /// Caller must prove exact fresh setup intent, never an attempted/historical setup.
+    /// Publishes only the preparation boundary; no private material is produced.
+    pub async fn prepare_fresh_setup_secret_inventory(
+        &self,
+        owner: Id,
+        clients: &[Id],
+    ) -> io::Result<()> {
+        if owner.is_nil() || clients.iter().any(Id::is_nil) || clients.contains(&owner) {
+            return Err(invalid("non-nil distinct setup identities required"));
+        }
+        let mut unique = clients.to_vec();
+        unique.sort();
+        unique.dedup();
+        if unique.len() != clients.len() {
+            return Err(invalid("duplicate Client slots"));
+        }
+        if self
+            .data_dir
+            .join("setup-secret-inventory.json")
+            .try_exists()?
+            || self
+                .data_dir
+                .join("local-client-key-references")
+                .try_exists()?
+        {
+            return Err(invalid("existing inventory cannot be declared fresh"));
+        }
+        for client in clients {
+            if self
+                .current_client_entity(&client.to_string())
+                .await?
+                .is_some()
+            {
+                return Err(invalid("existing Client is not fresh"));
             }
-            let external = id.to_string();
-            let path = self.client_reference_path(&external)?;
+        }
+        if !self
+            .oauth2
+            .key_service
+            .key_repo()
+            .list_by_entity_type_and_id(EntityType::User, owner)
+            .await
+            .map_err(io::Error::other)?
+            .is_empty()
+        {
+            return Err(invalid("existing User key material is not fresh"));
+        }
+        self.write_inventory(&json!({"version":1,"issuer":self.oauth2.oauth_config.issuer,"key_namespace":self.key_namespace,"owner":owner,"clients":clients,"phase":"preparing"}))
+    }
+
+    fn read_inventory(&self) -> io::Result<JsonValue> {
+        let path = self.data_dir.join("setup-secret-inventory.json");
+        if !fs::symlink_metadata(&path)?.file_type().is_file() {
+            return Err(invalid("inventory must be regular"));
+        }
+        let record: JsonValue = serde_json::from_slice(&fs::read(path)?)?;
+        let owner: Id = serde_json::from_value(record["owner"].clone())?;
+        let clients: Vec<Id> = serde_json::from_value(record["clients"].clone())?;
+        let mut unique = clients.clone();
+        unique.sort();
+        unique.dedup();
+        if record.as_object().map(|fields| fields.len()) != Some(6)
+            || record["version"] != 1
+            || record["issuer"] != self.oauth2.oauth_config.issuer
+            || record["key_namespace"] != self.key_namespace
+            || owner.is_nil()
+            || clients.iter().any(Id::is_nil)
+            || clients.contains(&owner)
+            || unique.len() != clients.len()
+            || !matches!(record["phase"].as_str(), Some("preparing" | "ready"))
+        {
+            return Err(invalid(
+                "unknown or conflicting secret inventory; explicit recovery required",
+            ));
+        }
+        Ok(record)
+    }
+
+    fn write_inventory(&self, record: &JsonValue) -> io::Result<()> {
+        write_durable_json(&self.data_dir.join("setup-secret-inventory.json"), record)?;
+        if self.read_inventory()? != *record {
+            return Err(invalid("inventory readback changed"));
+        }
+        Ok(())
+    }
+
+    fn ready_inventory(&self) -> io::Result<JsonValue> {
+        let record = self.read_inventory()?;
+        if record["phase"] != "ready" {
+            return Err(invalid("secret production barred during slot preparation"));
+        }
+        Ok(record)
+    }
+
+    pub async fn prepare_setup_client_slots(&self, clients: &[Id]) -> io::Result<()> {
+        let mut inventory = self.read_inventory()?;
+        if inventory["clients"] != json!(clients) {
+            return Err(invalid("setup Client slots conflict with inventory"));
+        }
+        let owner: Id = serde_json::from_value(inventory["owner"].clone())?;
+        let mut slots: Vec<String> = clients.iter().map(ToString::to_string).collect();
+        slots.push(format!("user:{owner}"));
+        for slot in slots {
+            let path = self.client_reference_path(&slot)?;
             if !path.try_exists()? {
-                if self.current_client_entity(&external).await?.is_some() {
-                    return Err(invalid(
-                        "existing Client requires verified key-reference recovery, not a never-started slot",
-                    ));
+                if inventory["phase"] != "preparing" {
+                    return Err(invalid("lost slot after preparation is unknown history"));
+                }
+                if !slot.starts_with("user:") && self.current_client_entity(&slot).await?.is_some()
+                {
+                    return Err(invalid("unexpected Client during verified preparation"));
                 }
                 self.write_client_reference(
-                    &external,
-                    &self.new_client_reference(&external, "never-started"),
+                    &slot,
+                    &self.new_client_reference(&slot, "never-started"),
                 )?;
-            } else {
-                self.read_client_reference(&external)?;
             }
+            let reference = self.read_client_reference(&slot)?;
+            if inventory["phase"] == "preparing" && reference["state"] != "never-started" {
+                return Err(invalid("secret attempt contradicts preparation boundary"));
+            }
+        }
+        if inventory["phase"] == "preparing" {
+            inventory["phase"] = json!("ready");
+            self.write_inventory(&inventory)?;
         }
         Ok(())
     }
@@ -255,38 +392,102 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
     }
 
     pub async fn begin_client_provisioning(&self, external: &str) -> io::Result<()> {
-        let path = self.client_reference_path(external)?;
-        let mut reference = if path.try_exists()? {
-            self.read_client_reference(external)?
-        } else {
-            self.new_client_reference(external, "pending")
-        };
-        if reference["state"] == "resolved" {
-            let current = self.current_client_entity(external).await?.ok_or_else(|| invalid("retained setup Client was deleted; explicit reset required before reprovisioning"))?;
-            if reference["entity_id"] != json!(current) {
-                return Err(invalid(
-                    "Client identity changed; no private keys were created",
-                ));
-            }
-        } else {
-            reference["state"] = json!("pending");
+        let inventory = self.ready_inventory()?;
+        if !inventory["clients"]
+            .as_array()
+            .expect("validated clients")
+            .contains(&json!(external))
+        {
+            return Err(invalid("Client outside setup inventory"));
         }
-        self.write_client_reference(external, &reference)
+        let mut reference = self.read_client_reference(external)?;
+        match reference["state"].as_str() {
+            Some("resolved") => {
+                let current = self.current_client_entity(external).await?.ok_or_else(|| {
+                    invalid("retained setup Client was deleted; explicit reset required")
+                })?;
+                if reference["entity_id"] != json!(current) {
+                    return Err(invalid("Client identity changed"));
+                }
+                Ok(())
+            }
+            Some("never-started") => {
+                if self.current_client_entity(external).await?.is_some() {
+                    return Err(invalid("unexpected existing Client"));
+                }
+                reference["state"] = json!("pending");
+                self.write_client_reference(external, &reference)
+            }
+            _ => Err(invalid(
+                "pending unknown Client history requires explicit recovery",
+            )),
+        }
+    }
+
+    async fn create_setup_client(&self, request: ClientRegistration) -> io::Result<()> {
+        let external = request
+            .client_id
+            .as_deref()
+            .ok_or_else(|| invalid("stable Client ID required"))?
+            .to_owned();
+        self.oauth2
+            .client_repo
+            .create_client_with_capture(request, |key, paths| {
+                self.capture_initial_key(&external, key.entity_id, paths)
+                    .map_err(|error| RepoError::InvalidInput(error.to_string()))
+            })
+            .await
+            .map_err(io::Error::other)?;
+        Ok(())
+    }
+
+    pub async fn ensure_setup_infrastructure_client(
+        &self,
+        request: ClientRegistration,
+    ) -> io::Result<ClientRegistration> {
+        if request.client_type != ClientType::Confidential
+            || request.allowed_grant_types != [GrantType::ClientCredentials]
+            || request
+                .client_secret
+                .as_deref()
+                .is_none_or(|value| value.trim().is_empty())
+        {
+            return Err(invalid(
+                "restricted confidential infrastructure Client required",
+            ));
+        }
+        let external = request
+            .client_id
+            .as_deref()
+            .ok_or_else(|| invalid("stable Client ID required"))?
+            .to_owned();
+        self.begin_client_provisioning(&external).await?;
+        if self.current_client_entity(&external).await?.is_none() {
+            self.create_setup_client(request.clone()).await?;
+        }
+        let registration = self
+            .oauth2
+            .ensure_infrastructure_client(request)
+            .await
+            .map_err(|error| io::Error::other(format!("{error:?}")))?;
+        self.ensure_client_signing_key(&external).await?;
+        Ok(registration)
     }
 
     fn client_reference_path(&self, external: &str) -> io::Result<std::path::PathBuf> {
-        let id: Id = external.parse().map_err(io::Error::other)?;
-        if id.is_nil() || id.to_string() != external {
+        let identity = external.strip_prefix("user:").unwrap_or(external);
+        let id: Id = identity.parse().map_err(io::Error::other)?;
+        if id.is_nil() || id.to_string() != identity {
             return Err(invalid("canonical stable setup Client ID required"));
         }
         Ok(self
             .data_dir
             .join("local-client-key-references")
-            .join(format!("{external}.json")))
+            .join(format!("{}.json", external.replace(':', "-"))))
     }
 
     fn new_client_reference(&self, external: &str, state: &str) -> JsonValue {
-        json!({"version":1,"issuer":self.oauth2.oauth_config.issuer,"key_namespace":self.key_namespace,"client_id":external,"state":state,"entity_id":null,"paths":[]})
+        json!({"version":2,"issuer":self.oauth2.oauth_config.issuer,"key_namespace":self.key_namespace,"slot":external,"state":state,"entity_id":null,"paths":[]})
     }
 
     fn read_client_reference(&self, external: &str) -> io::Result<JsonValue> {
@@ -296,10 +497,10 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         }
         let record: JsonValue = serde_json::from_slice(&fs::read(path)?)?;
         if record.as_object().map(|fields| fields.len()) != Some(7)
-            || record["version"] != 1
+            || record["version"] != 2
             || record["issuer"] != self.oauth2.oauth_config.issuer
             || record["key_namespace"] != self.key_namespace
-            || record["client_id"] != external
+            || record["slot"] != external
             || !matches!(
                 record["state"].as_str(),
                 Some("never-started" | "pending" | "resolved")
@@ -310,15 +511,28 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             ));
         }
         let paths: Vec<String> = serde_json::from_value(record["paths"].clone())?;
-        for path in paths {
-            let _: key::DerivationPath = path.parse().map_err(io::Error::other)?;
-        }
+        let parsed: Vec<key::DerivationPath> = paths
+            .iter()
+            .map(|path| path.parse().map_err(io::Error::other))
+            .collect::<io::Result<_>>()?;
         if record["state"] == "resolved" {
-            let id: Id = serde_json::from_value(record["entity_id"].clone())?;
-            if id.is_nil() {
-                return Err(invalid("nil retained internal Client identity"));
+            if parsed.len() < 2
+                || parsed.last() != Some(&key::DerivationPath::default())
+                || parsed
+                    .windows(2)
+                    .any(|pair| pair[0].parent().as_ref() != Some(&pair[1]))
+                || parsed
+                    .iter()
+                    .zip(&paths)
+                    .any(|(path, text)| path.to_string() != *text)
+            {
+                return Err(invalid("incomplete initial private path ancestry"));
             }
-        } else if !record["entity_id"].is_null() {
+            let id: Id = serde_json::from_value(record["entity_id"].clone())?;
+            if id.is_nil() || record["paths"].as_array().is_none_or(Vec::is_empty) {
+                return Err(invalid("incomplete retained initial inventory"));
+            }
+        } else if !record["entity_id"].is_null() || !paths.is_empty() {
             return Err(invalid(
                 "unresolved Client contains an unverified internal identity",
             ));
@@ -337,40 +551,34 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         if path.try_exists()? {
             self.read_client_reference(external)?;
         }
-        let temporary = directory.join(format!(".{}.tmp", Id::now_v7()));
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(&temporary)?;
-        file.write_all(&serde_json::to_vec(record)?)?;
-        file.sync_all()?;
-        fs::rename(&temporary, &path)?;
-        fs::File::open(directory)?.sync_all()?;
+        write_durable_json(&path, record)?;
         if self.read_client_reference(external)? != *record {
             return Err(invalid("Client key reference readback changed"));
         }
         Ok(())
     }
 
-    fn retain_client_entity(&self, external: &str, entity: Id) -> io::Result<()> {
-        let mut record = self.read_client_reference(external)?;
-        if record["state"] == "never-started"
-            || (record["state"] == "resolved" && record["entity_id"] != json!(entity))
-        {
+    fn capture_initial_key(
+        &self,
+        slot: &str,
+        entity: Id,
+        paths: &[key::DerivationPath],
+    ) -> io::Result<()> {
+        self.ready_inventory()?;
+        let mut record = self.read_client_reference(slot)?;
+        if record["state"] != "pending" || entity.is_nil() || paths.is_empty() {
             return Err(invalid(
-                "internal Client reference conflicts with provisioning intent",
+                "initial secret capture conflicts with pending intent",
             ));
         }
         record["state"] = json!("resolved");
         record["entity_id"] = json!(entity);
-        self.write_client_reference(external, &record)
+        record["paths"] = json!(paths.iter().map(ToString::to_string).collect::<Vec<_>>());
+        self.write_client_reference(slot, &record)
     }
 
     pub fn prepare_node_signer(&self, binding: &NodeSignerBinding) -> io::Result<JwkPublic> {
+        self.ready_inventory()?;
         validate_binding(binding)?;
         let keys = &self.oauth2.key_service;
         let namespace = format!(
@@ -421,45 +629,63 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
                 "local secret deletion requires persisted non-nil IDs",
             ));
         }
+        let inventory = self.read_inventory()?;
+        if inventory["owner"] != json!(owner) || inventory["clients"] != json!(clients) {
+            return Err(invalid("reset identities conflict with secret inventory"));
+        }
+        self.prepare_setup_client_slots(clients).await?;
         let keys = &self.oauth2.key_service;
         let mut entities = Vec::with_capacity(clients.len() + 1);
-        for client_id in clients {
-            let external = client_id.to_string();
-            let mut reference = self.read_client_reference(&external)?;
-            let current = self.current_client_entity(&external).await?;
+        let mut slots: Vec<(String, EntityType)> = clients
+            .iter()
+            .map(|id| (id.to_string(), EntityType::Client))
+            .collect();
+        slots.push((format!("user:{owner}"), EntityType::User));
+        for (slot, entity_type) in slots {
+            let reference = self.read_client_reference(&slot)?;
+            let current = if entity_type == EntityType::Client {
+                self.current_client_entity(&slot).await?
+            } else {
+                None
+            };
             if reference["state"] == "never-started" {
-                if current.is_some() {
+                if current.is_some()
+                    || (entity_type == EntityType::User
+                        && !keys
+                            .key_repo()
+                            .list_by_entity_type_and_id(entity_type, owner)
+                            .await
+                            .map_err(io::Error::other)?
+                            .is_empty())
+                {
                     return Err(invalid(
-                        "unexpected Client without local provisioning intent; reset references preserved",
+                        "unexpected entity contradicts never-started inventory",
                     ));
                 }
                 continue;
             }
-            if reference["state"] == "pending" {
-                let entity = current.ok_or_else(|| invalid("pending Client has lost internal key references; explicit verified recovery required"))?;
-                self.retain_client_entity(&external, entity)?;
-                reference = self.read_client_reference(&external)?;
-            }
-            let entity: Id = serde_json::from_value(reference["entity_id"].clone())?;
-            if current.is_some_and(|id| id != entity) {
+            if reference["state"] != "resolved" {
                 return Err(invalid(
-                    "current Client conflicts with retained internal key reference",
+                    "pending initial secret inventory is unknown; reset remains incomplete",
                 ));
             }
-            entities.push((EntityType::Client, entity, Some(reference)));
+            let entity: Id = serde_json::from_value(reference["entity_id"].clone())?;
+            if current.is_some_and(|id| id != entity)
+                || (entity_type == EntityType::User && entity != owner)
+            {
+                return Err(invalid("entity conflicts with captured inventory"));
+            }
+            entities.push((entity_type, entity, reference));
         }
-        entities.push((EntityType::User, owner, None));
         for (entity_type, entity_id, reference) in entities {
             let namespace = keys.scoped_namespace(entity_type, entity_id);
-            if let Some(reference) = reference {
-                let paths: Vec<String> = serde_json::from_value(reference["paths"].clone())?;
-                for path in paths {
-                    delete_verified(
-                        keys.private_key_repo(),
-                        &namespace,
-                        &path.parse().map_err(io::Error::other)?,
-                    )?;
-                }
+            let paths: Vec<String> = serde_json::from_value(reference["paths"].clone())?;
+            for path in paths {
+                delete_verified(
+                    keys.private_key_repo(),
+                    &namespace,
+                    &path.parse().map_err(io::Error::other)?,
+                )?;
             }
             for key in keys
                 .key_repo()
@@ -571,6 +797,30 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         self.verify_node_signer(binding).await?;
         Ok(())
     }
+}
+
+fn write_durable_json(path: &std::path::Path, record: &JsonValue) -> io::Result<()> {
+    let directory = path.parent().expect("inventory directory");
+    fs::create_dir_all(directory)?;
+    if !fs::symlink_metadata(directory)?.file_type().is_dir() {
+        return Err(invalid("inventory directory must be local"));
+    }
+    let temporary = directory.join(format!(".{}.tmp", Id::now_v7()));
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(&temporary)?;
+    file.write_all(&serde_json::to_vec(record)?)?;
+    file.sync_all()?;
+    fs::rename(&temporary, path)?;
+    for ancestor in fs::canonicalize(directory)?.ancestors() {
+        fs::File::open(ancestor)?.sync_all()?;
+    }
+    Ok(())
 }
 
 fn delete_verified<P: PrivateKeyRepo>(

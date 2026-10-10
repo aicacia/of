@@ -74,6 +74,201 @@ impl PrivateKeyRepo for Secrets {
 }
 
 #[tokio::test]
+async fn inventory_captures_client_identity_and_paths_before_first_private_write() {
+    let root = std::env::temp_dir().join(format!("inventory-capture-{}", Id::now_v7()));
+    let config = AppConfig {
+        data_dir: root.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let secrets = Secrets::default();
+    let owner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
+        .await
+        .expect("owner");
+    let client = Id::now_v7();
+    owner
+        .prepare_fresh_setup_secret_inventory(Id::now_v7(), &[client])
+        .await
+        .expect("fresh");
+    owner
+        .prepare_setup_client_slots(&[client])
+        .await
+        .expect("prepare");
+    secrets.fail.store(true, Ordering::SeqCst);
+    owner
+        .ensure_desktop_client(client)
+        .await
+        .expect_err("first private write fails");
+    let record: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(
+            root.join("local-client-key-references")
+                .join(format!("{client}.json")),
+        )
+        .expect("reference"),
+    )
+    .expect("json");
+    assert_eq!(record["state"], "resolved");
+    assert!(record["entity_id"].is_string());
+    assert!(!record["paths"].as_array().expect("paths").is_empty());
+    assert!(secrets.values.lock().expect("secrets").is_empty());
+    drop(owner);
+    std::fs::remove_dir_all(root).expect("fixture");
+}
+
+#[tokio::test]
+async fn inventory_pending_unknown_retry_is_denied() {
+    let root = std::env::temp_dir().join(format!("inventory-pending-{}", Id::now_v7()));
+    let config = AppConfig {
+        data_dir: root.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let owner = OwnerProvisioner::open_with_private_keys(&config, Secrets::default())
+        .await
+        .expect("owner");
+    let client = Id::now_v7();
+    owner
+        .prepare_fresh_setup_secret_inventory(Id::now_v7(), &[client])
+        .await
+        .expect("fresh");
+    owner
+        .prepare_setup_client_slots(&[client])
+        .await
+        .expect("prepare");
+    owner
+        .begin_client_provisioning(&client.to_string())
+        .await
+        .expect("begin");
+    let path = root
+        .join("local-client-key-references")
+        .join(format!("{client}.json"));
+    let before = std::fs::read(&path).expect("reference");
+    owner
+        .ensure_desktop_client(client)
+        .await
+        .expect_err("unknown pending history cannot register a replacement");
+    assert_eq!(std::fs::read(&path).expect("reference"), before);
+    std::fs::remove_file(&path).expect("lose references after attempt");
+    owner
+        .prepare_setup_client_slots(&[client])
+        .await
+        .expect_err("lost refs cannot become never-started");
+    owner
+        .prepare_fresh_setup_secret_inventory(Id::now_v7(), &[client])
+        .await
+        .expect_err("historical inventory cannot be replaced");
+    assert!(!path.exists());
+    drop(owner);
+    let reopened = OwnerProvisioner::open_with_private_keys(&config, Secrets::default())
+        .await
+        .expect("reopen unknown history");
+    reopened
+        .ensure_desktop_client(client)
+        .await
+        .expect_err("denial survives native reopen");
+    drop(reopened);
+    std::fs::remove_dir_all(root).expect("fixture");
+}
+
+#[tokio::test]
+async fn inventory_user_cleanup_survives_lost_key_metadata() {
+    let root = std::env::temp_dir().join(format!("inventory-user-{}", Id::now_v7()));
+    let config = AppConfig {
+        data_dir: root.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let secrets = Secrets::default();
+    let owner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
+        .await
+        .expect("owner");
+    let user = Id::now_v7();
+    owner
+        .prepare_fresh_setup_secret_inventory(user, &[])
+        .await
+        .expect("fresh");
+    owner
+        .prepare_setup_client_slots(&[])
+        .await
+        .expect("prepare");
+    owner
+        .ensure_initial_user(user, Id::now_v7(), "inventory-user", "valid-password")
+        .await
+        .expect("user");
+    owner
+        .ensure_initial_user_signing_key(user)
+        .await
+        .expect("signing key");
+    owner
+        .oauth2
+        .key_service
+        .key_repo()
+        .delete_by_entity_type_and_id(idp_model::contract::EntityType::User, user)
+        .await
+        .expect("lose metadata");
+    owner
+        .ensure_initial_user_signing_key(user)
+        .await
+        .expect_err("missing metadata cannot mint another private path");
+    owner
+        .delete_local_secrets(Id::now_v7(), Id::now_v7(), user, &[])
+        .await
+        .expect("cleanup");
+    assert!(
+        secrets.values.lock().expect("secrets").is_empty(),
+        "derived User credentials must not survive"
+    );
+    drop(owner);
+    std::fs::remove_dir_all(root).expect("fixture");
+}
+
+#[tokio::test]
+async fn inventory_partial_slot_preparation_can_reset() {
+    let root = std::env::temp_dir().join(format!("inventory-preparation-{}", Id::now_v7()));
+    let config = AppConfig {
+        data_dir: root.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let owner = OwnerProvisioner::open_with_private_keys(&config, Secrets::default())
+        .await
+        .expect("owner");
+    let clients = [Id::now_v7(), Id::now_v7()];
+    let user = Id::now_v7();
+    owner
+        .prepare_fresh_setup_secret_inventory(user, &clients)
+        .await
+        .expect("fresh boundary");
+    let blocked = root
+        .join("local-client-key-references")
+        .join(format!("{}.json", clients[1]));
+    std::fs::create_dir_all(&blocked).expect("block second slot publication");
+    owner
+        .prepare_setup_client_slots(&clients)
+        .await
+        .expect_err("partial preparation");
+    std::fs::remove_dir(&blocked).expect("unblock slot");
+    let binding = NodeSignerBinding {
+        member_id: Id::now_v7(),
+        key_id: Id::now_v7(),
+        endpoint_id: iroh::SecretKey::generate().public().to_string(),
+    };
+    owner
+        .prepare_node_signer(&binding)
+        .expect_err("preparing boundary bars private Node work");
+    owner
+        .ensure_desktop_client(clients[0])
+        .await
+        .expect_err("preparing boundary bars Client work");
+    drop(owner);
+    let owner = OwnerProvisioner::open_with_private_keys(&config, Secrets::default())
+        .await
+        .expect("reopen partial preparation");
+    owner
+        .delete_local_secrets(Id::now_v7(), Id::now_v7(), user, &clients)
+        .await
+        .expect("verified preparing boundary permits reset completion");
+    drop(owner);
+    std::fs::remove_dir_all(root).expect("fixture");
+}
+
+#[tokio::test]
 async fn restricted_desktop_client_enables_local_user_signin_and_exact_retry() {
     let root = std::env::temp_dir().join(format!("desktop-client-{}", Id::now_v7()));
     let binding = NodeSignerBinding {
@@ -90,6 +285,15 @@ async fn restricted_desktop_client_enables_local_user_signin_and_exact_retry() {
         .await
         .expect("native owner");
     let user = Id::now_v7();
+    let desktop_client = Id::now_v7();
+    provisioner
+        .prepare_fresh_setup_secret_inventory(user, &[desktop_client])
+        .await
+        .expect("fresh");
+    provisioner
+        .prepare_setup_client_slots(&[desktop_client])
+        .await
+        .expect("prepare");
     provisioner
         .ensure_initial_user(user, Id::now_v7(), "desktop-admin", "valid-password")
         .await
@@ -106,7 +310,6 @@ async fn restricted_desktop_client_enables_local_user_signin_and_exact_retry() {
         .ensure_initial_user_signing_key(user)
         .await
         .expect("exact User key retry");
-    let desktop_client = Id::now_v7();
     let first = provisioner
         .ensure_desktop_client(desktop_client)
         .await
@@ -226,6 +429,15 @@ async fn interrupted_desktop_client_retries_exact_key_and_reset_deletes_internal
         .await
         .expect("native owner");
     let external_id = Id::now_v7();
+    let user = Id::now_v7();
+    provisioner
+        .prepare_fresh_setup_secret_inventory(user, &[external_id])
+        .await
+        .expect("fresh");
+    provisioner
+        .prepare_setup_client_slots(&[external_id])
+        .await
+        .expect("prepare");
     secrets.fail.store(true, Ordering::SeqCst);
     provisioner
         .ensure_desktop_client(external_id)
@@ -290,7 +502,7 @@ async fn interrupted_desktop_client_retries_exact_key_and_reset_deletes_internal
         .store(&namespace, &retained)
         .expect("restore fixture's exact original key");
     provisioner
-        .delete_local_secrets(Id::now_v7(), Id::now_v7(), Id::now_v7(), &[external_id])
+        .delete_local_secrets(Id::now_v7(), Id::now_v7(), user, &[external_id])
         .await
         .expect("offline reset resolves stable external reference through retained owner state");
     assert!(
@@ -327,6 +539,10 @@ async fn reset_requires_verified_never_started_or_retained_client_references() {
         .await
         .expect_err("unknown namespaces cannot be silently skipped");
     provisioner
+        .prepare_fresh_setup_secret_inventory(owner, &[client])
+        .await
+        .expect("fresh");
+    provisioner
         .prepare_setup_client_slots(&[client])
         .await
         .expect("explicit never-started Client slot");
@@ -345,11 +561,11 @@ async fn reset_requires_verified_never_started_or_retained_client_references() {
     provisioner
         .ensure_desktop_client(client)
         .await
-        .expect("complete exact pending provisioning");
+        .expect_err("pending unknown history cannot be overwritten");
     provisioner
         .delete_local_secrets(member, signer, owner, &[client])
         .await
-        .expect("resolved references authorize exact local secret cleanup");
+        .expect_err("unknown history remains fail-closed");
     drop(provisioner);
     std::fs::remove_dir_all(root).expect("remove native fixture");
 }
@@ -366,6 +582,15 @@ async fn reset_retains_deleted_client_namespace_across_native_reopen_and_secret_
     let provisioner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
         .await
         .expect("native owner");
+    let user = Id::now_v7();
+    provisioner
+        .prepare_fresh_setup_secret_inventory(user, &[external])
+        .await
+        .expect("fresh");
+    provisioner
+        .prepare_setup_client_slots(&[external])
+        .await
+        .expect("prepare");
     provisioner
         .ensure_desktop_client(external)
         .await
@@ -398,7 +623,7 @@ async fn reset_retains_deleted_client_namespace_across_native_reopen_and_secret_
         .expect("native reopen without public Client row");
     secrets.fail_delete.store(true, Ordering::SeqCst);
     provisioner
-        .delete_local_secrets(Id::now_v7(), Id::now_v7(), Id::now_v7(), &[external])
+        .delete_local_secrets(Id::now_v7(), Id::now_v7(), user, &[external])
         .await
         .expect_err("reset cannot succeed with orphaned private keys");
     assert!(
@@ -409,12 +634,12 @@ async fn reset_retains_deleted_client_namespace_across_native_reopen_and_secret_
     );
     secrets.fail_delete.store(false, Ordering::SeqCst);
     provisioner
-        .delete_local_secrets(Id::now_v7(), Id::now_v7(), Id::now_v7(), &[external])
+        .delete_local_secrets(Id::now_v7(), Id::now_v7(), user, &[external])
         .await
         .expect("exact retained reference retry");
     assert!(secrets.values.lock().expect("secret map").is_empty());
     provisioner
-        .delete_local_secrets(Id::now_v7(), Id::now_v7(), Id::now_v7(), &[external])
+        .delete_local_secrets(Id::now_v7(), Id::now_v7(), user, &[external])
         .await
         .expect("idempotent secret deletion");
     drop(provisioner);
@@ -438,6 +663,14 @@ async fn secure_store_failure_keeps_initial_setup_incomplete_and_retryable() {
     let provisioner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
         .await
         .expect("open interrupted setup");
+    provisioner
+        .prepare_fresh_setup_secret_inventory(owner, &[])
+        .await
+        .expect("fresh");
+    provisioner
+        .prepare_setup_client_slots(&[])
+        .await
+        .expect("prepare");
     provisioner
         .ensure_initial_user(owner, Id::now_v7(), "admin", "valid-password")
         .await
@@ -535,6 +768,14 @@ async fn real_os_initial_node_signer_survives_native_reopen_and_offline_reset() 
         let provisioner = OwnerProvisioner::open(&config)
             .await
             .expect("real OS private-key provider");
+        provisioner
+            .prepare_fresh_setup_secret_inventory(owner, &[])
+            .await
+            .expect("fresh");
+        provisioner
+            .prepare_setup_client_slots(&[])
+            .await
+            .expect("prepare");
         provisioner
             .ensure_initial_user(
                 owner,
@@ -649,6 +890,15 @@ async fn native_initial_node_retries_and_reopens_with_independent_signing_capabi
         let provisioner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
             .await
             .expect("open native owner");
+        let slot = client_id.parse().expect("client identity");
+        provisioner
+            .prepare_fresh_setup_secret_inventory(owner, &[slot])
+            .await
+            .expect("fresh");
+        provisioner
+            .prepare_setup_client_slots(&[slot])
+            .await
+            .expect("prepare");
         provisioner
             .ensure_initial_user(owner, credential, "admin", "valid-password")
             .await
@@ -676,11 +926,11 @@ async fn native_initial_node_retries_and_reopens_with_independent_signing_capabi
             public
         );
         provisioner
-            .ensure_infrastructure_client(registration.clone())
+            .ensure_setup_infrastructure_client(registration.clone())
             .await
             .expect("local service relationship");
         provisioner
-            .ensure_infrastructure_client(registration)
+            .ensure_setup_infrastructure_client(registration)
             .await
             .expect("exact service retry");
         let token = provisioner
