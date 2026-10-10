@@ -1469,13 +1469,7 @@ async fn delete_setup_secrets(data: &Path, references: reset::ResetSecrets) -> i
             ids.member_id,
             ids.signer_key_id,
             ids.administrator_id,
-            &[
-                ids.installation_id,
-                ids.management_to_idp_client_id,
-                ids.storage_to_idp_client_id,
-                ids.storage_to_management_client_id,
-                ids.idp_to_management_client_id,
-            ],
+            &setup_client_ids(&ids),
         )
         .await?;
     for (relationship, client_id) in [
