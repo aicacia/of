@@ -3,11 +3,13 @@ use std::{
     io::{self, Write},
 };
 
+use base64::{Engine, engine::general_purpose::STANDARD_NO_PAD};
 use db::{SqlTranslator, Value};
 use idp_model::{
     contract::{
         ApplicationRegistration, ClientProfile, ClientRegistration, ClientType, EntityType,
-        GrantType, IdpSignerRecord, JwkPublic, ReplicaMembership, TokenEndpointAuthMethod,
+        GrantType, IdpSignerRecord, JwkPublic, JwkPublicParameters, JwsAlgorithm, KeyUse,
+        ReplicaMembership, TokenEndpointAuthMethod,
     },
     model::Id,
 };
@@ -17,9 +19,25 @@ use idp_service::{
     repo::{ClientRepo, KeyRepo, KeyService, PrivateKeyRepo, RepoError},
 };
 use iroh::EndpointId;
+use key::{DerivationPath, DerivedKey, MasterKey};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, json};
 
 use crate::OwnerProvisioner;
+
+#[derive(Deserialize, Serialize)]
+#[serde(tag = "state", rename_all = "kebab-case", deny_unknown_fields)]
+enum NodePreparation {
+    NeverStarted,
+    Attempted {
+        binding: NodeSignerBinding,
+        public_signer: Option<JwkPublic>,
+    },
+    Prepared {
+        binding: NodeSignerBinding,
+        public_signer: JwkPublic,
+    },
+}
 
 impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
     /// Nonblocking, cross-handle/process exclusion on stable owner-controlled ancestry.
@@ -310,7 +328,7 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         {
             return Err(invalid("existing User key material is not fresh"));
         }
-        self.write_inventory(&json!({"version":1,"issuer":self.oauth2.oauth_config.issuer,"key_namespace":self.key_namespace,"owner":owner,"clients":clients,"phase":"preparing"}))
+        self.write_inventory(&json!({"version":2,"issuer":self.oauth2.oauth_config.issuer,"key_namespace":self.key_namespace,"owner":owner,"clients":clients,"phase":"preparing","node":NodePreparation::NeverStarted}))
     }
 
     fn read_inventory(&self) -> io::Result<JsonValue> {
@@ -324,8 +342,8 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         let mut unique = clients.clone();
         unique.sort();
         unique.dedup();
-        if record.as_object().map(|fields| fields.len()) != Some(6)
-            || record["version"] != 1
+        if record.as_object().map(|fields| fields.len()) != Some(7)
+            || record["version"] != 2
             || record["issuer"] != self.oauth2.oauth_config.issuer
             || record["key_namespace"] != self.key_namespace
             || owner.is_nil()
@@ -340,6 +358,13 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             return Err(invalid(
                 "unknown or conflicting secret inventory; explicit recovery required",
             ));
+        }
+        let node: NodePreparation = serde_json::from_value(record["node"].clone())?;
+        validate_node_preparation(&node)?;
+        if json!(node) != record["node"]
+            || (record["phase"] == "preparing" && !matches!(node, NodePreparation::NeverStarted))
+        {
+            return Err(invalid("invalid or conflicting Node preparation inventory"));
         }
         Ok(record)
     }
@@ -642,32 +667,101 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
     }
 
     fn prepare_node_signer_locked(&self, binding: &NodeSignerBinding) -> io::Result<JwkPublic> {
-        self.ready_inventory()?;
+        let mut inventory = self.ready_inventory()?;
         validate_binding(binding)?;
+        let node: NodePreparation = serde_json::from_value(inventory["node"].clone())?;
+        if !matches!(node, NodePreparation::NeverStarted) {
+            return self.verify_prepared_node_signer_locked(binding);
+        }
         let keys = &self.oauth2.key_service;
         let namespace = format!(
             "{}:node:{}:{}",
             self.key_namespace, binding.member_id, binding.key_id
         );
-        let private = keys
+        if keys
             .private_key_repo()
-            .ensure_master_key(&namespace)
-            .map_err(io::Error::other)?;
-        let retained = keys
-            .private_key_repo()
-            .load(&namespace, &key::DerivationPath::default())
+            .load(&namespace, &DerivationPath::default())
             .map_err(io::Error::other)?
-            .ok_or_else(|| {
-                io::Error::other(
-                    "secure-store private signer readback is missing; setup remains incomplete",
-                )
-            })?;
-        if private.to_xprv_string() != retained.to_xprv_string() {
-            return Err(io::Error::other(
-                "secure-store private signer readback changed; setup remains incomplete",
+            .is_some()
+        {
+            inventory["node"] = json!(NodePreparation::Attempted {
+                binding: binding.clone(),
+                public_signer: None
+            });
+            self.write_inventory(&inventory)?;
+            return Err(invalid(
+                "unexpected existing Node private material contradicts fresh preparation; explicit recovery required",
             ));
         }
-        keys.prepare_node_signer(binding).map_err(io::Error::other)
+        let entropy = MasterKey::entropy().map_err(io::Error::other)?;
+        let private: DerivedKey = MasterKey::from_entropy(entropy)
+            .map_err(io::Error::other)?
+            .into();
+        let public = node_signer_public(binding, &private)?;
+        inventory["node"] = json!(NodePreparation::Attempted {
+            binding: binding.clone(),
+            public_signer: Some(public)
+        });
+        self.write_inventory(&inventory)?;
+        keys.private_key_repo()
+            .store(&namespace, &private)
+            .map_err(io::Error::other)?;
+        self.verify_prepared_node_signer_locked(binding)
+    }
+
+    /// Existing-only local preparation verification; never authorizes trust or issuance.
+    pub fn verify_prepared_node_signer(
+        &self,
+        binding: &NodeSignerBinding,
+    ) -> io::Result<JwkPublic> {
+        let _operation = self.setup_operation()?;
+        self.verify_prepared_node_signer_locked(binding)
+    }
+
+    fn verify_prepared_node_signer_locked(
+        &self,
+        binding: &NodeSignerBinding,
+    ) -> io::Result<JwkPublic> {
+        let mut inventory = self.ready_inventory()?;
+        validate_binding(binding)?;
+        let node: NodePreparation = serde_json::from_value(inventory["node"].clone())?;
+        let (retained, expected) = match node {
+            NodePreparation::Attempted {
+                binding,
+                public_signer: Some(public),
+            }
+            | NodePreparation::Prepared {
+                binding,
+                public_signer: public,
+            } => (binding, public),
+            _ => {
+                return Err(invalid(
+                    "no exact attempted Node preparation is retained; no private material was created",
+                ));
+            }
+        };
+        if json!(retained) != json!(binding) {
+            return Err(invalid(
+                "Node binding conflicts with retained preparation; no private material was created",
+            ));
+        }
+        let namespace = format!(
+            "{}:node:{}:{}",
+            self.key_namespace, binding.member_id, binding.key_id
+        );
+        let private = self.oauth2.key_service.private_key_repo().load(&namespace, &DerivationPath::default()).map_err(io::Error::other)?.ok_or_else(|| invalid("attempted Node private signer is missing; explicit recovery required, no signer was recreated"))?;
+        let public = node_signer_public(binding, &private)?;
+        if public != expected {
+            return Err(invalid(
+                "Node private signer conflicts with captured public material; no signer was changed",
+            ));
+        }
+        inventory["node"] = json!(NodePreparation::Prepared {
+            binding: binding.clone(),
+            public_signer: public.clone()
+        });
+        self.write_inventory(&inventory)?;
+        Ok(public)
     }
 
     pub async fn verify_node_signer(&self, binding: &NodeSignerBinding) -> io::Result<JwkPublic> {
@@ -697,6 +791,18 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         let inventory = self.read_inventory()?;
         if inventory["owner"] != json!(owner) || inventory["clients"] != json!(clients) {
             return Err(invalid("reset identities conflict with secret inventory"));
+        }
+        let node: NodePreparation = serde_json::from_value(inventory["node"].clone())?;
+        match node {
+            NodePreparation::Attempted { binding, .. }
+            | NodePreparation::Prepared { binding, .. }
+                if binding.member_id != member_id || binding.key_id != key_id =>
+            {
+                return Err(invalid(
+                    "reset Node identities conflict with retained preparation",
+                ));
+            }
+            _ => (),
         }
         self.prepare_setup_client_slots_locked(clients).await?;
         let keys = &self.oauth2.key_service;
@@ -790,7 +896,9 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         name: &str,
     ) -> io::Result<()> {
         let _operation = self.setup_operation()?;
-        self.ready_inventory()?;
+        if self.ready_inventory()?["owner"] != json!(owner) {
+            return Err(invalid("initial Node owner conflicts with setup inventory"));
+        }
         validate_binding(binding)?;
         if owner.is_nil() || name.trim().is_empty() {
             return Err(invalid("initial Node owner and name are required"));
@@ -813,7 +921,14 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         let public = if enrolled[0].rows.is_empty() {
             self.prepare_node_signer_locked(binding)?
         } else {
-            self.verify_node_signer(binding).await?
+            let prepared = self.verify_prepared_node_signer_locked(binding)?;
+            let approved = self.verify_node_signer(binding).await?;
+            if prepared != approved {
+                return Err(invalid(
+                    "prepared Node signer conflicts with approved trust",
+                ));
+            }
+            approved
         };
         let devices = self
             .engine
@@ -867,6 +982,44 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         self.verify_node_signer(binding).await?;
         Ok(())
     }
+}
+
+fn validate_node_preparation(node: &NodePreparation) -> io::Result<()> {
+    let (binding, public) = match node {
+        NodePreparation::NeverStarted => return Ok(()),
+        NodePreparation::Attempted {
+            binding,
+            public_signer,
+        } => (binding, public_signer.as_ref()),
+        NodePreparation::Prepared {
+            binding,
+            public_signer,
+        } => (binding, Some(public_signer)),
+    };
+    validate_binding(binding)?;
+    if let Some(public) = public
+        && (public.kid != binding.key_id.to_string()
+            || public.r#use != KeyUse::Signature
+            || public.alg != JwsAlgorithm::ES256K
+            || !matches!(&public.params, JwkPublicParameters::Ec { crv, .. } if crv == "secp256k1"))
+    {
+        return Err(invalid("invalid captured Node public material"));
+    }
+    Ok(())
+}
+
+fn node_signer_public(binding: &NodeSignerBinding, private: &DerivedKey) -> io::Result<JwkPublic> {
+    let (x, y) = private.to_xy().map_err(io::Error::other)?;
+    Ok(JwkPublic {
+        kid: binding.key_id.to_string(),
+        r#use: KeyUse::Signature,
+        alg: JwsAlgorithm::ES256K,
+        params: JwkPublicParameters::Ec {
+            crv: "secp256k1".into(),
+            x: STANDARD_NO_PAD.encode(x),
+            y: STANDARD_NO_PAD.encode(y),
+        },
+    })
 }
 
 fn write_durable_json(path: &std::path::Path, record: &JsonValue) -> io::Result<()> {

@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::{self, Receiver, SyncSender},
     },
 };
@@ -30,6 +30,8 @@ pub(crate) struct Secrets {
     fail_delete: Arc<AtomicBool>,
     retain_on_delete: Arc<AtomicBool>,
     discard_write: Arc<AtomicBool>,
+    store_calls: Arc<AtomicUsize>,
+    interrupt_after_store: Arc<AtomicBool>,
     pause_store: Arc<Mutex<Option<StorePause>>>,
 }
 
@@ -49,6 +51,7 @@ impl PrivateKeyRepo for Secrets {
             .transpose()?)
     }
     fn store(&self, namespace: &str, key: &DerivedKey) -> RepoResult<()> {
+        self.store_calls.fetch_add(1, Ordering::SeqCst);
         if self.fail.load(Ordering::SeqCst) {
             return Err(RepoError::InvalidInput(
                 "injected secure-store failure".into(),
@@ -69,6 +72,11 @@ impl PrivateKeyRepo for Secrets {
             (namespace.into(), key.derivation_path().to_string()),
             key.to_xprv_string().to_string(),
         );
+        if self.interrupt_after_store.load(Ordering::SeqCst) {
+            return Err(RepoError::InvalidInput(
+                "injected secure-store post-write interruption".into(),
+            ));
+        }
         Ok(())
     }
     fn delete(&self, namespace: &str, path: &DerivationPath) -> RepoResult<()> {
@@ -86,6 +94,380 @@ impl PrivateKeyRepo for Secrets {
             .remove(&(namespace.into(), path.to_string()));
         Ok(())
     }
+}
+
+#[tokio::test]
+async fn node_preparation_missing_attempted_secret_never_writes_replacement() {
+    let root = std::env::temp_dir().join(format!("node-preparation-missing-{}", Id::now_v7()));
+    let config = AppConfig {
+        data_dir: root.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let secrets = Secrets::default();
+    let user = Id::now_v7();
+    let binding = NodeSignerBinding {
+        member_id: Id::now_v7(),
+        key_id: Id::now_v7(),
+        endpoint_id: iroh::SecretKey::generate().public().to_string(),
+    };
+    let owner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
+        .await
+        .expect("owner");
+    owner
+        .prepare_fresh_setup_secret_inventory(user, &[])
+        .await
+        .expect("positive fresh inventory");
+    owner
+        .prepare_setup_client_slots(&[])
+        .await
+        .expect("complete inventory");
+    owner
+        .ensure_initial_user(user, Id::now_v7(), "preparation-user", "valid-password")
+        .await
+        .expect("initial User");
+    let public = owner
+        .prepare_node_signer(&binding)
+        .expect("first preparation");
+    assert!(
+        owner.verify_node_signer(&binding).await.is_err(),
+        "preparation is not enrolled trust"
+    );
+    println!(
+        "node-preparation-before {}",
+        serde_json::json!({"binding":binding,"public_signer":public})
+    );
+    drop(owner);
+    let namespace = format!(
+        "{}:node:{}:{}",
+        config.key_namespace, binding.member_id, binding.key_id
+    );
+    secrets
+        .delete(&namespace, &DerivationPath::default())
+        .expect("inject credential loss before enrollment");
+    let writes = secrets.store_calls.load(Ordering::SeqCst);
+    let owner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
+        .await
+        .expect("offline reopen");
+    owner
+        .prepare_setup_client_slots(&[])
+        .await
+        .expect("continuation, not fresh declaration");
+    let preparation = owner.prepare_node_signer(&binding);
+    let enrollment = owner
+        .ensure_initial_node(&binding, user, "Prepared Node")
+        .await;
+    println!(
+        "node-preparation-after {}",
+        serde_json::json!({"binding":binding,"public_signer":preparation.as_ref().ok(),"enrollment_succeeded":enrollment.is_ok(),"private_store_calls_before":writes,"private_store_calls_after":secrets.store_calls.load(Ordering::SeqCst)})
+    );
+    let writes_after = secrets.store_calls.load(Ordering::SeqCst);
+    let missing = secrets
+        .load(&namespace, &DerivationPath::default())
+        .expect("credential absence")
+        .is_none();
+    owner
+        .delete_local_secrets(binding.member_id, binding.key_id, user, &[])
+        .await
+        .expect("explicit exact cleanup");
+    drop(owner);
+    std::fs::remove_dir_all(root).expect("owned fixture");
+    assert!(
+        preparation.is_err(),
+        "missing attempted preparation cannot generate a replacement"
+    );
+    assert!(enrollment.is_err(), "unenrolled is not fresh authorization");
+    assert_eq!(
+        writes_after, writes,
+        "both public APIs must be existing-only after an attempt"
+    );
+    assert!(missing, "lost private material must remain absent");
+}
+
+#[tokio::test]
+async fn node_preparation_stored_interruption_reopens_exactly_without_enrolled_trust() {
+    let root = std::env::temp_dir().join(format!("node-preparation-retained-{}", Id::now_v7()));
+    let config = AppConfig {
+        data_dir: root.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let secrets = Secrets::default();
+    let user = Id::now_v7();
+    let binding = NodeSignerBinding {
+        member_id: Id::now_v7(),
+        key_id: Id::now_v7(),
+        endpoint_id: iroh::SecretKey::generate().public().to_string(),
+    };
+    let owner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
+        .await
+        .expect("owner");
+    owner
+        .prepare_fresh_setup_secret_inventory(user, &[])
+        .await
+        .expect("positive fresh inventory");
+    owner
+        .prepare_setup_client_slots(&[])
+        .await
+        .expect("complete inventory");
+    owner
+        .ensure_initial_user(user, Id::now_v7(), "retained-user", "valid-password")
+        .await
+        .expect("User");
+    owner
+        .verify_prepared_node_signer(&binding)
+        .expect_err("existing-only verification cannot start a fresh signer");
+    assert_eq!(secrets.store_calls.load(Ordering::SeqCst), 0);
+    secrets.interrupt_after_store.store(true, Ordering::SeqCst);
+    owner
+        .prepare_node_signer(&binding)
+        .expect_err("stored credential, lost acknowledgment");
+    let inventory: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(root.join("setup-secret-inventory.json")).expect("durable attempt"),
+    )
+    .expect("inventory");
+    assert_eq!(inventory["node"]["state"], "attempted");
+    assert_eq!(inventory["node"]["binding"], serde_json::json!(binding));
+    let expected: idp_model::contract::JwkPublic =
+        serde_json::from_value(inventory["node"]["public_signer"].clone())
+            .expect("public identity captured before store");
+    println!(
+        "node-retained-before {}",
+        serde_json::json!({"binding":binding,"public_signer":expected,"state":"attempted","private_store_calls":secrets.store_calls.load(Ordering::SeqCst)})
+    );
+    assert_eq!(secrets.store_calls.load(Ordering::SeqCst), 1);
+    drop(owner);
+    secrets.interrupt_after_store.store(false, Ordering::SeqCst);
+    let owner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
+        .await
+        .expect("offline reopen after interruption");
+    owner
+        .prepare_setup_client_slots(&[])
+        .await
+        .expect("same inventory, no fresh redeclaration");
+    assert!(
+        owner.verify_node_signer(&binding).await.is_err(),
+        "retained private preparation is not approved trust"
+    );
+    let retained = owner
+        .verify_prepared_node_signer(&binding)
+        .expect("existing-only pre-enrollment verification");
+    assert_eq!(retained, expected);
+    assert_eq!(
+        owner
+            .prepare_node_signer(&binding)
+            .expect("exact prepared retry"),
+        expected
+    );
+    let altered = NodeSignerBinding {
+        endpoint_id: iroh::SecretKey::generate().public().to_string(),
+        ..binding.clone()
+    };
+    owner
+        .verify_prepared_node_signer(&altered)
+        .expect_err("endpoint substitution denied");
+    owner
+        .prepare_node_signer(&altered)
+        .expect_err("attempted binding cannot change");
+    owner
+        .prepare_fresh_setup_secret_inventory(user, &[])
+        .await
+        .expect_err("attempt cannot become fresh again");
+    assert_eq!(
+        secrets.store_calls.load(Ordering::SeqCst),
+        1,
+        "retained retry never stores private material"
+    );
+    let namespace = format!(
+        "{}:node:{}:{}",
+        config.key_namespace, binding.member_id, binding.key_id
+    );
+    let root_slot = (namespace, DerivationPath::default().to_string());
+    let original = secrets.values.lock().expect("fixture secrets")[&root_slot].clone();
+    let replacement: DerivedKey =
+        key::MasterKey::from_entropy(key::MasterKey::entropy().expect("fixture entropy"))
+            .expect("fixture replacement")
+            .into();
+    secrets
+        .values
+        .lock()
+        .expect("fixture secrets")
+        .insert(root_slot.clone(), replacement.to_xprv_string().to_string());
+    owner
+        .verify_prepared_node_signer(&binding)
+        .expect_err("substituted private material cannot satisfy captured public identity");
+    owner
+        .prepare_node_signer(&binding)
+        .expect_err("substitution cannot trigger replacement writes");
+    owner
+        .ensure_initial_node(&binding, user, "Retained Node")
+        .await
+        .expect_err("substitution cannot enroll");
+    assert_eq!(secrets.store_calls.load(Ordering::SeqCst), 1);
+    secrets
+        .values
+        .lock()
+        .expect("fixture secrets")
+        .insert(root_slot, original);
+    owner
+        .ensure_initial_node(&binding, user, "Retained Node")
+        .await
+        .expect("complete exact Device/member enrollment");
+    let approved = owner
+        .verify_node_signer(&binding)
+        .await
+        .expect("approved trust now exists");
+    assert_eq!(approved, expected);
+    println!(
+        "node-retained-after {}",
+        serde_json::json!({"binding":binding,"public_signer":approved,"state":"prepared","private_store_calls":secrets.store_calls.load(Ordering::SeqCst)})
+    );
+    owner
+        .delete_local_secrets(Id::now_v7(), binding.key_id, user, &[])
+        .await
+        .expect_err("reset cannot omit the captured member identity");
+    owner
+        .delete_local_secrets(binding.member_id, binding.key_id, user, &[])
+        .await
+        .expect("exact cleanup");
+    drop(owner);
+    std::fs::remove_dir_all(root).expect("owned fixture");
+}
+
+#[tokio::test]
+async fn node_preparation_failed_first_write_consumes_fresh_authority() {
+    for discard in [false, true] {
+        let root = std::env::temp_dir().join(format!("node-preparation-unknown-{}", Id::now_v7()));
+        let config = AppConfig {
+            data_dir: root.to_string_lossy().into_owned(),
+            ..AppConfig::default()
+        };
+        let secrets = Secrets::default();
+        let user = Id::now_v7();
+        let binding = NodeSignerBinding {
+            member_id: Id::now_v7(),
+            key_id: Id::now_v7(),
+            endpoint_id: iroh::SecretKey::generate().public().to_string(),
+        };
+        let owner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
+            .await
+            .expect("owner");
+        owner
+            .prepare_fresh_setup_secret_inventory(user, &[])
+            .await
+            .expect("positive fresh inventory");
+        owner
+            .prepare_setup_client_slots(&[])
+            .await
+            .expect("complete inventory");
+        secrets.fail.store(!discard, Ordering::SeqCst);
+        secrets.discard_write.store(discard, Ordering::SeqCst);
+        owner
+            .prepare_node_signer(&binding)
+            .expect_err("failed or lost initial write");
+        assert_eq!(secrets.store_calls.load(Ordering::SeqCst), 1);
+        drop(owner);
+        secrets.fail.store(false, Ordering::SeqCst);
+        secrets.discard_write.store(false, Ordering::SeqCst);
+        let owner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
+            .await
+            .expect("offline reopen unknown write history");
+        owner
+            .verify_prepared_node_signer(&binding)
+            .expect_err("unknown missing preparation remains missing");
+        owner
+            .prepare_node_signer(&binding)
+            .expect_err("initial creation was consumed exactly once");
+        owner
+            .prepare_fresh_setup_secret_inventory(user, &[])
+            .await
+            .expect_err("cannot reconstruct fresh authority");
+        assert_eq!(secrets.store_calls.load(Ordering::SeqCst), 1);
+        owner
+            .delete_local_secrets(binding.member_id, binding.key_id, user, &[])
+            .await
+            .expect("retained exact namespace allows explicit cleanup");
+        drop(owner);
+        std::fs::remove_dir_all(root).expect("owned fixture");
+    }
+}
+
+#[tokio::test]
+async fn node_preparation_unknown_inventory_never_grants_creation() {
+    let root = std::env::temp_dir().join(format!("node-preparation-history-{}", Id::now_v7()));
+    let config = AppConfig {
+        data_dir: root.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let secrets = Secrets::default();
+    let user = Id::now_v7();
+    let binding = NodeSignerBinding {
+        member_id: Id::now_v7(),
+        key_id: Id::now_v7(),
+        endpoint_id: iroh::SecretKey::generate().public().to_string(),
+    };
+    let owner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
+        .await
+        .expect("owner");
+    owner
+        .prepare_fresh_setup_secret_inventory(user, &[])
+        .await
+        .expect("fresh");
+    owner.prepare_setup_client_slots(&[]).await.expect("slots");
+    let path = root.join("setup-secret-inventory.json");
+    let inventory = std::fs::read(&path).expect("fresh proof");
+    let mut legacy: serde_json::Value = serde_json::from_slice(&inventory).expect("inventory");
+    legacy["version"] = serde_json::json!(1);
+    legacy.as_object_mut().expect("object").remove("node");
+    std::fs::write(&path, serde_json::to_vec(&legacy).expect("legacy fixture"))
+        .expect("inject legacy proof");
+    owner
+        .prepare_node_signer(&binding)
+        .expect_err("legacy readiness is not never-started Node proof");
+    owner
+        .verify_prepared_node_signer(&binding)
+        .expect_err("legacy preparation is unknown");
+    std::fs::remove_file(&path).expect("lose proof");
+    owner
+        .prepare_node_signer(&binding)
+        .expect_err("missing proof is unknown");
+    owner
+        .prepare_fresh_setup_secret_inventory(user, &[])
+        .await
+        .expect_err("retained slots bar fresh redeclaration");
+    assert_eq!(secrets.store_calls.load(Ordering::SeqCst), 0);
+    std::fs::write(&path, inventory).expect("restore exact fixture proof");
+    let namespace = format!(
+        "{}:node:{}:{}",
+        config.key_namespace, binding.member_id, binding.key_id
+    );
+    let unexpected: DerivedKey =
+        key::MasterKey::from_entropy(key::MasterKey::entropy().expect("entropy"))
+            .expect("fixture root")
+            .into();
+    secrets.values.lock().expect("fixture secrets").insert(
+        (namespace.clone(), DerivationPath::default().to_string()),
+        unexpected.to_xprv_string().to_string(),
+    );
+    owner
+        .prepare_node_signer(&binding)
+        .expect_err("unexpected root cannot be adopted as fresh");
+    secrets
+        .delete(&namespace, &DerivationPath::default())
+        .expect("lose unexpected root");
+    owner
+        .prepare_node_signer(&binding)
+        .expect_err("unknown history stays blocked after root loss");
+    let blocked: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).expect("blocked proof")).expect("inventory");
+    assert_eq!(blocked["node"]["state"], "attempted");
+    assert_eq!(blocked["node"]["binding"], serde_json::json!(binding));
+    assert!(blocked["node"]["public_signer"].is_null());
+    assert_eq!(secrets.store_calls.load(Ordering::SeqCst), 0);
+    owner
+        .delete_local_secrets(binding.member_id, binding.key_id, user, &[])
+        .await
+        .expect("exact cleanup");
+    drop(owner);
+    std::fs::remove_dir_all(root).expect("owned fixture");
 }
 
 #[cfg(unix)]
@@ -176,8 +558,8 @@ async fn inventory_cleanup_retry_requires_durable_resetting_fence() {
         record["phase"], "resetting",
         "the injected failure must be after rename"
     );
-    assert_eq!(
-        after_first, before,
+    assert!(
+        after_first == before,
         "failed fence must not delete any credential"
     );
     assert_eq!(
@@ -186,8 +568,8 @@ async fn inventory_cleanup_retry_requires_durable_resetting_fence() {
             .kind(),
         std::io::ErrorKind::PermissionDenied
     );
-    assert_eq!(
-        after_retry, before,
+    assert!(
+        after_retry == before,
         "retry must not delete before successful fence sync"
     );
     assert_eq!(
@@ -292,6 +674,7 @@ async fn inventory_concurrent_public_operations_preserve_capture() {
         endpoint_id: iroh::SecretKey::generate().public().to_string(),
     };
     let node = owner.prepare_node_signer(&binding);
+    let prepared = owner.verify_prepared_node_signer(&binding);
     let initial_node = owner
         .ensure_initial_node(&binding, user, "Concurrent Node")
         .await;
@@ -363,11 +746,12 @@ async fn inventory_concurrent_public_operations_preserve_capture() {
     );
     assert_eq!(captured, retained);
     assert_eq!(inventory, contended_inventory);
-    for operation in
-        competing
-            .into_iter()
-            .chain([initial_node, node.map(|_| ()), service.map(|_| ())])
-    {
+    for operation in competing.into_iter().chain([
+        initial_node,
+        node.map(|_| ()),
+        prepared.map(|_| ()),
+        service.map(|_| ()),
+    ]) {
         assert!(operation.is_err_and(|error| error.kind() == std::io::ErrorKind::WouldBlock));
     }
     assert!(
@@ -1001,7 +1385,7 @@ async fn reset_retains_deleted_client_namespace_across_native_reopen_and_secret_
 }
 
 #[tokio::test]
-async fn secure_store_failure_keeps_initial_setup_incomplete_and_retryable() {
+async fn secure_store_interruption_reuses_retained_signer_and_reset_remains_fail_closed() {
     let root = std::env::temp_dir().join(format!("node-interrupted-{}", Id::now_v7()));
     let config = AppConfig {
         data_dir: root.to_string_lossy().into_owned(),
@@ -1029,7 +1413,7 @@ async fn secure_store_failure_keeps_initial_setup_incomplete_and_retryable() {
         .ensure_initial_user(owner, Id::now_v7(), "admin", "valid-password")
         .await
         .expect("initial User stage");
-    secrets.fail.store(true, Ordering::SeqCst);
+    secrets.interrupt_after_store.store(true, Ordering::SeqCst);
     assert!(
         provisioner
             .ensure_initial_node(&binding, owner, "Local Node")
@@ -1039,12 +1423,13 @@ async fn secure_store_failure_keeps_initial_setup_incomplete_and_retryable() {
             .contains("secure-store")
     );
     assert!(provisioner.verify_node_signer(&binding).await.is_err());
-    secrets.fail.store(false, Ordering::SeqCst);
+    secrets.interrupt_after_store.store(false, Ordering::SeqCst);
+    let writes = secrets.store_calls.load(Ordering::SeqCst);
     secrets.discard_write.store(true, Ordering::SeqCst);
-    assert!(
-        provisioner.prepare_node_signer(&binding).is_err(),
-        "acknowledged but lost private signer must not be published"
-    );
+    provisioner
+        .prepare_node_signer(&binding)
+        .expect("retained signer is load-only after an ambiguous store acknowledgment");
+    assert_eq!(secrets.store_calls.load(Ordering::SeqCst), writes);
     secrets.discard_write.store(false, Ordering::SeqCst);
     provisioner
         .ensure_initial_node(&binding, owner, "Local Node")
