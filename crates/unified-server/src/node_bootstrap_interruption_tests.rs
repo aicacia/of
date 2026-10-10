@@ -231,6 +231,14 @@ async fn interruption_boundary(complete: bool) {
     let provisioner = OwnerProvisioner::open(&config)
         .await
         .expect("fresh native joining owner with injected keyring");
+    provisioner
+        .prepare_fresh_setup_secret_inventory(fixture.administrator, &[])
+        .await
+        .expect("fresh joining User inventory with no local setup Clients");
+    provisioner
+        .prepare_setup_client_slots(&[])
+        .await
+        .expect("complete inventory before independent Node private preparation");
     let request = provisioner
         .prepare_node_join(&binding, "Joining Node", source.endpoint().id())
         .expect("durable independent private signer");
