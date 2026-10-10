@@ -240,6 +240,30 @@ fn read_provisioning(data: &Path, intent: &Value) -> io::Result<Option<Value>> {
         }
         expected["endpoint_id"] = endpoint.clone();
     }
+    if let Some(relationships) = record.get("relationship_credentials") {
+        let mut checked = relationship_inventory(&record["ids"]);
+        if record["phase"] != "attempted" {
+            return Err(io::Error::other(
+                "relationship history precedes setup attempt",
+            ));
+        }
+        for (name, entry) in checked
+            .as_object_mut()
+            .expect("relationship inventory object")
+        {
+            let phase = &relationships[name]["phase"];
+            if !matches!(phase.as_str(), Some("never-produced" | "attempted")) {
+                return Err(io::Error::other("invalid relationship credential history"));
+            }
+            entry["phase"] = phase.clone();
+        }
+        if *relationships != checked {
+            return Err(io::Error::other(
+                "relationship credential identities conflict",
+            ));
+        }
+        expected["relationship_credentials"] = checked;
+    }
     if record != expected {
         return Err(io::Error::other(
             "provisioning references conflict; explicit recovery required",
@@ -315,9 +339,53 @@ pub(super) fn start_provisioning(data: &Path) -> io::Result<bool> {
             "attempted provisioning has missing owner metadata; explicit recovery required",
         ));
     }
+    if fresh {
+        record["relationship_credentials"] = relationship_inventory(&record["ids"]);
+    }
     record["phase"] = json!("attempted");
     publish_record(data, PROVISIONING, &record)?;
     Ok(fresh)
+}
+
+fn relationship_inventory(ids: &Value) -> Value {
+    let clients = &ids["service_client_ids"];
+    json!({
+        "management-to-idp": {"client_id": clients["management_to_idp"], "phase": "never-produced"},
+        "storage-to-idp": {"client_id": clients["storage_to_idp"], "phase": "never-produced"},
+        "storage-to-management": {"client_id": clients["storage_to_management"], "phase": "never-produced"},
+        "idp-to-management": {"client_id": clients["idp_to_management"], "phase": "never-produced"},
+    })
+}
+
+pub(super) fn start_relationship_provisioning(
+    data: &Path,
+    installation_id: idp_model::model::Id,
+    relationship: crate::service_secrets::ServiceRelationship,
+    client_id: idp_model::model::Id,
+) -> io::Result<bool> {
+    if exists(&data.join(JOURNAL))? {
+        return Err(io::Error::other("local reset is pending"));
+    }
+    let mut record = read_provisioning(data, &read_setup_intent(data)?)?
+        .ok_or_else(|| io::Error::other("missing original setup attempt"))?;
+    let ids = parse_setup_ids(&record["ids"])?;
+    let expected = relationship_inventory(&record["ids"]);
+    let name = relationship.key_name();
+    if record["phase"] != "attempted"
+        || ids.installation_id != installation_id
+        || expected[name]["client_id"] != client_id.to_string()
+    {
+        return Err(io::Error::other(
+            "relationship conflicts with original setup attempt",
+        ));
+    }
+    let never_produced = record["relationship_credentials"][name]["phase"] == "never-produced";
+    if never_produced {
+        record["relationship_credentials"][name]["phase"] = json!("attempted");
+        publish_record(data, PROVISIONING, &record)?;
+        read_provisioning(data, &read_setup_intent(data)?)?;
+    }
+    Ok(never_produced)
 }
 
 pub(super) fn retain_endpoint(data: &Path, endpoint_id: &str) -> io::Result<()> {
@@ -632,6 +700,96 @@ mod tests {
     use serde_json::json;
 
     use super::{DATA_PATHS, JOURNAL, run, run_with};
+
+    #[test]
+    fn relationship_creation_requires_exact_durable_never_produced_history() {
+        use crate::service_secrets::ServiceRelationship;
+
+        let root = std::env::temp_dir().join(format!("relationship-history-{}", Id::now_v7()));
+        let ids = super::super::load_or_create_setup_ids(&root).expect("original identities");
+        let intent = json!({"purpose":"create", "issuer":"https://reset.test/idp"});
+        super::super::persist_setup_intent(&root, &intent).expect("durable fresh intent");
+        assert!(
+            super::start_relationship_provisioning(
+                &root,
+                ids.installation_id,
+                ServiceRelationship::ManagementToIdp,
+                ids.management_to_idp_client_id,
+            )
+            .is_err(),
+            "not-started intent does not authorize a provider write"
+        );
+        assert!(super::start_provisioning(&root).expect("positive fresh attempt"));
+        let before =
+            fs::read(root.join(super::PROVISIONING)).expect("durable relationship inventory");
+        assert!(
+            super::start_relationship_provisioning(
+                &root,
+                ids.installation_id,
+                ServiceRelationship::ManagementToIdp,
+                Id::now_v7(),
+            )
+            .is_err(),
+            "wrong Client cannot consume creation authority"
+        );
+        assert_eq!(
+            fs::read(root.join(super::PROVISIONING)).expect("unchanged history"),
+            before
+        );
+        assert!(
+            super::start_relationship_provisioning(
+                &root,
+                ids.installation_id,
+                ServiceRelationship::ManagementToIdp,
+                ids.management_to_idp_client_id,
+            )
+            .expect("first relationship has verified never-produced history")
+        );
+        assert!(
+            !super::start_relationship_provisioning(
+                &root,
+                ids.installation_id,
+                ServiceRelationship::ManagementToIdp,
+                ids.management_to_idp_client_id,
+            )
+            .expect("attempted relationship is load-only even without a credential")
+        );
+        assert!(
+            super::start_relationship_provisioning(
+                &root,
+                ids.installation_id,
+                ServiceRelationship::StorageToIdp,
+                ids.storage_to_idp_client_id,
+            )
+            .expect("native reopen preserves untouched never-produced relationship")
+        );
+        let mut record = super::optional_json(&root.join(super::PROVISIONING))
+            .expect("read record")
+            .expect("present original attempt");
+        record
+            .as_object_mut()
+            .expect("record object")
+            .remove("relationship_credentials");
+        super::publish_record(&root, super::PROVISIONING, &record)
+            .expect("historical unknown relationship fixture");
+        assert!(
+            !super::start_relationship_provisioning(
+                &root,
+                ids.installation_id,
+                ServiceRelationship::StorageToManagement,
+                ids.storage_to_management_client_id,
+            )
+            .expect("missing history cannot authorize creation")
+        );
+        assert!(
+            super::optional_json(&root.join(super::PROVISIONING))
+                .expect("preserved record")
+                .expect("present record")
+                .get("relationship_credentials")
+                .is_none()
+        );
+        fs::remove_dir_all(root).expect("owned no-provider-write fixture cleanup");
+    }
 
     #[test]
     fn lost_fresh_disposition_is_not_reconstructed_from_absent_owner_state() {

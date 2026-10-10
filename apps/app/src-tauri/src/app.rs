@@ -229,6 +229,7 @@ pub async fn provision_initial_administrator(
     .await
     .map_err(|error| error.to_string())?;
     provision_service_clients(
+        &app_data_dir,
         &idp,
         &ids,
         &base_url,
@@ -335,6 +336,7 @@ pub async fn join_installation(
             .join_from_trusted_peer(&owner, &name, &peer)
             .await?;
         provision_service_clients(
+            &data_dir,
             &owner,
             &ids,
             &base_url,
@@ -543,6 +545,7 @@ fn setup_client_ids(ids: &SetupIds) -> [Id; 5] {
 }
 
 async fn provision_service_clients(
+    data: &Path,
     idp: &OwnerProvisioner,
     ids: &SetupIds,
     base_url: &str,
@@ -551,6 +554,7 @@ async fn provision_service_clients(
 ) -> io::Result<()> {
     idp.ensure_desktop_client(ids.installation_id).await?;
     provision_service_client(
+        data,
         idp,
         ids,
         ServiceRelationship::ManagementToIdp,
@@ -563,6 +567,7 @@ async fn provision_service_clients(
     )
     .await?;
     provision_service_client(
+        data,
         idp,
         ids,
         ServiceRelationship::StorageToIdp,
@@ -579,6 +584,7 @@ async fn provision_service_clients(
     )
     .await?;
     provision_service_client(
+        data,
         idp,
         ids,
         ServiceRelationship::StorageToManagement,
@@ -594,6 +600,7 @@ async fn provision_service_clients(
     )
     .await?;
     provision_service_client(
+        data,
         idp,
         ids,
         ServiceRelationship::IdpToManagement,
@@ -608,6 +615,7 @@ async fn provision_service_clients(
 }
 
 async fn provision_service_client(
+    data: &Path,
     idp: &OwnerProvisioner,
     ids: &SetupIds,
     relationship: ServiceRelationship,
@@ -618,14 +626,19 @@ async fn provision_service_client(
     audience: &str,
     scopes: &[&str],
 ) -> io::Result<()> {
-    let client_secret =
-        service_secrets::ensure_secret(ids.installation_id, relationship, client_id).map_err(
-            |error| {
-                io::Error::other(format!(
-                    "could not persist {client_name} credential: {error}"
-                ))
-            },
-        )?;
+    let never_produced =
+        reset::start_relationship_provisioning(data, ids.installation_id, relationship, client_id)?;
+    let client_secret = service_secrets::ensure_secret(
+        ids.installation_id,
+        relationship,
+        client_id,
+        never_produced,
+    )
+    .map_err(|error| {
+        io::Error::other(format!(
+            "could not persist {client_name} credential: {error}"
+        ))
+    })?;
     idp.ensure_setup_infrastructure_client(service_client_registration(
         client_id,
         client_secret,
@@ -1825,6 +1838,7 @@ mod tests {
             .await
             .expect("independent signer");
         super::provision_service_clients(
+            &data,
             &owner,
             &ids,
             &base,
@@ -1857,6 +1871,7 @@ mod tests {
             .await
             .expect("same User key");
         super::provision_service_clients(
+            &data,
             &owner,
             &ids,
             &base,
@@ -1881,6 +1896,51 @@ mod tests {
             .expect("same relationship"),
             relationship
         );
+        super::service_secrets::delete_secret(
+            ids.installation_id,
+            super::ServiceRelationship::ManagementToIdp,
+            ids.management_to_idp_client_id,
+        )
+        .expect("simulate loss after resolved Client provisioning");
+        let missing_retry = super::provision_service_clients(
+            &data,
+            &owner,
+            &ids,
+            &base,
+            &format!("{base}/idp"),
+            &format!("{base}/storage"),
+        )
+        .await;
+        let replacement = super::service_secrets::load_secret(
+            ids.installation_id,
+            super::ServiceRelationship::ManagementToIdp,
+            ids.management_to_idp_client_id,
+        );
+        idp_service::repo::RawKeyringRepo::new("local.unified-service-credentials")
+            .expect("isolated fixture provider")
+            .store(
+                &ids.installation_id.to_string(),
+                &ids.management_to_idp_client_id.to_string(),
+                "management-to-idp",
+                relationship.as_bytes(),
+            )
+            .expect("restore exact original fixture credential, not a replacement");
+        let error = missing_retry.expect_err("historical missing relationship refuses app retry");
+        assert!(error.to_string().contains("replacement is not authorized"));
+        assert!(
+            replacement.is_err(),
+            "app retry must not write a replacement"
+        );
+        super::provision_service_clients(
+            &data,
+            &owner,
+            &ids,
+            &base,
+            &format!("{base}/idp"),
+            &format!("{base}/storage"),
+        )
+        .await
+        .expect("restored original credential permits exact retry");
         drop(owner);
         let runtime_config = super::unified_runtime_config(&data, address, &base, &ids)
             .expect("real desktop host configuration");

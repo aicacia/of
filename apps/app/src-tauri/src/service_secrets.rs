@@ -14,7 +14,7 @@ pub enum ServiceRelationship {
 }
 
 impl ServiceRelationship {
-    const fn key_name(self) -> &'static str {
+    pub(crate) const fn key_name(self) -> &'static str {
         match self {
             Self::ManagementToIdp => "management-to-idp",
             Self::StorageToIdp => "storage-to-idp",
@@ -24,10 +24,12 @@ impl ServiceRelationship {
     }
 }
 
+/// Creation requires verified never-produced history consumed durably before this call.
 pub fn ensure_secret(
     installation_id: Id,
     relationship: ServiceRelationship,
     client_id: Id,
+    never_produced: bool,
 ) -> io::Result<String> {
     let keyring = RawKeyringRepo::new(KEYRING_SERVICE).map_err(io::Error::other)?;
     let user = installation_id.to_string();
@@ -35,6 +37,7 @@ pub fn ensure_secret(
     let key_name = relationship.key_name();
 
     ensure_secret_with(
+        never_produced,
         || {
             keyring
                 .load(&user, &client, key_name)
@@ -96,11 +99,19 @@ pub fn delete_secret(
 }
 
 fn ensure_secret_with(
+    never_produced: bool,
     mut load: impl FnMut() -> io::Result<Option<Vec<u8>>>,
     store: impl FnOnce(&[u8]) -> io::Result<()>,
 ) -> io::Result<String> {
     if let Some(secret) = load()? {
         return decode_secret(secret);
+    }
+
+    if !never_produced {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "retained service credential is missing; replacement is not authorized",
+        ));
     }
 
     let mut bytes = [0_u8; 32];
@@ -159,6 +170,7 @@ mod tests {
     fn service_secret_is_persisted_before_return_and_reused() {
         let stored = RefCell::new(None);
         let secret = ensure_secret_with(
+            true,
             || Ok(stored.borrow().clone()),
             |secret| {
                 *stored.borrow_mut() = Some(secret.to_vec());
@@ -170,6 +182,7 @@ mod tests {
         assert_eq!(stored.borrow().as_deref(), Some(secret.as_bytes()));
 
         let reused = ensure_secret_with(
+            false,
             || Ok(stored.borrow().clone()),
             |_| panic!("must not replace a persisted service secret"),
         )
@@ -178,8 +191,20 @@ mod tests {
     }
 
     #[test]
+    fn missing_attempted_secret_is_refused_before_the_store_is_called() {
+        let error = ensure_secret_with(
+            false,
+            || Ok(None),
+            |_| panic!("historical retry must not write to the provider"),
+        )
+        .expect_err("missing retained credential requires recovery");
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
     fn keyring_write_failure_does_not_return_a_secret() {
         let error = ensure_secret_with(
+            true,
             || Ok(None),
             |_| Err(std::io::Error::other("keyring unavailable")),
         )
@@ -189,7 +214,7 @@ mod tests {
 
     #[test]
     fn successful_write_without_durable_readback_fails_closed() {
-        assert!(ensure_secret_with(|| Ok(None), |_| Ok(())).is_err());
+        assert!(ensure_secret_with(true, || Ok(None), |_| Ok(())).is_err());
     }
 
     #[test]
@@ -197,6 +222,7 @@ mod tests {
         let stored = RefCell::new(None);
         assert!(
             ensure_secret_with(
+                true,
                 || Ok(stored.borrow().clone()),
                 |secret| {
                     *stored.borrow_mut() = Some(secret.to_vec());
@@ -210,6 +236,7 @@ mod tests {
             .clone()
             .expect("write persisted before error");
         let reused = ensure_secret_with(
+            false,
             || Ok(stored.borrow().clone()),
             |_| panic!("retry must not replace retained credentials"),
         )
@@ -228,7 +255,7 @@ mod tests {
             ServiceRelationship::IdpToManagement,
         ] {
             let client = idp_model::model::Id::now_v7();
-            let secret = super::ensure_secret(installation, relationship, client)
+            let secret = super::ensure_secret(installation, relationship, client, true)
                 .expect("real OS write and exact readback");
             assert_eq!(
                 super::load_secret(installation, relationship, client)
@@ -236,7 +263,7 @@ mod tests {
                 secret
             );
             assert_eq!(
-                super::ensure_secret(installation, relationship, client)
+                super::ensure_secret(installation, relationship, client, false)
                     .expect("real OS exact retry"),
                 secret
             );
@@ -246,6 +273,28 @@ mod tests {
                 .expect("real OS idempotent deletion retry");
             assert!(super::load_secret(installation, relationship, client).is_err());
         }
+    }
+
+    #[test]
+    #[ignore = "writes isolated credentials to the real OS secure store"]
+    fn missing_existing_relationship_retry_never_writes_a_replacement() {
+        let installation = idp_model::model::Id::now_v7();
+        let client = idp_model::model::Id::now_v7();
+        let relationship = ServiceRelationship::ManagementToIdp;
+        super::ensure_secret(installation, relationship, client, true)
+            .expect("positively fresh relationship credential");
+        super::delete_secret(installation, relationship, client).expect("simulate credential loss");
+        let retry = super::ensure_secret(installation, relationship, client, false);
+        let replacement = super::load_secret(installation, relationship, client);
+        super::delete_secret(installation, relationship, client).expect("isolated fixture cleanup");
+        assert!(
+            retry.is_err(),
+            "historical missing credential must deny retry"
+        );
+        assert!(
+            replacement.is_err(),
+            "denial must precede every replacement write"
+        );
     }
 
     #[test]
