@@ -69,6 +69,100 @@ where
         }
     }
 
+    pub async fn create_client_with_capture(
+        &self,
+        registration: ClientRegistration,
+        capture: impl FnOnce(&idp_model::model::Key, &[key::DerivationPath]) -> RepoResult<()> + Send,
+    ) -> RepoResult<Client> {
+        let client_id = registration
+            .client_id
+            .clone()
+            .ok_or_else(|| RepoError::InvalidInput("client_id is required".into()))?;
+        let client_secret = match registration.client_type {
+            ClientType::Confidential => registration
+                .client_secret
+                .clone()
+                .filter(|secret| !secret.trim().is_empty())
+                .ok_or_else(|| {
+                    RepoError::InvalidInput(
+                        "client_secret is required for confidential client key material".into(),
+                    )
+                })?,
+            ClientType::Public => String::new(),
+        };
+        let client_secret_hash = if registration.client_type == ClientType::Confidential {
+            encrypt_password(&PasswordConfig::default(), &client_secret)
+                .map_err(|error| RepoError::Other(error.into()))?
+        } else {
+            String::new()
+        };
+        let application_id = self.application_id(&registration).await?;
+        let now = Utc::now()
+            .with_nanosecond(0)
+            .expect("zero nanoseconds is valid");
+        let client = Client {
+            id: Id::now_v7(),
+            application_id,
+            client_id,
+            client_secret_hash,
+            client_id_issued_at: registration
+                .client_id_issued_at
+                .map(timestamp)
+                .transpose()?,
+            client_secret_expires_at: registration
+                .client_secret_expires_at
+                .map(timestamp)
+                .transpose()?,
+            client_name: registration.client_name,
+            client_uri: registration
+                .client_uri
+                .unwrap_or_else(|| registration.application.uri.clone()),
+            redirect_uris: registration.redirect_uris,
+            client_type: registration.client_type,
+            profile: registration.profile,
+            token_endpoint_auth_method: registration.token_endpoint_auth_method,
+            allowed_grant_types: registration.allowed_grant_types,
+            response_types: registration.response_types,
+            allowed_scopes: registration.allowed_scopes,
+            allowed_audiences: registration.allowed_audiences,
+            logo_uri: registration.logo_uri,
+            contacts: registration.contacts,
+            terms_of_service_uri: registration.terms_of_service_uri,
+            policy_uri: registration.policy_uri,
+            software_statement: registration.software_statement,
+            software_id: registration.software_id,
+            software_version: registration.software_version,
+            created_at: now,
+            updated_at: now,
+        };
+        let revision = Id::now_v7();
+        let mut metadata = ClientRow::from(&client);
+        metadata.credential_id = Some(revision);
+        let mut transaction = self.engine.client().transaction().await.map_err(db_error)?;
+        transaction
+            .execute(vec![
+                Statement::Query(Query::Insert(QueryInsert {
+                    table: TABLE.into(),
+                    row: metadata.into(),
+                    returning: None,
+                })),
+                Statement::Query(local_credential_insert(&client, revision)),
+            ])
+            .await
+            .map_err(db_error)?;
+        transaction.commit().await.map_err(db_error)?;
+
+        self.key_service
+            .create_initial_key_with_capture(
+                EntityType::Client,
+                client.id,
+                client.client_name.clone(),
+                capture,
+            )
+            .await?;
+        Ok(client)
+    }
+
     async fn clients(&self, predicate: Option<QueryExpr>) -> RepoResult<Vec<Client>> {
         let revoked_at = QueryExpr::Value(QueryExprValue::Column(column("revoked_at")));
         let active = QueryExpr::Or(
@@ -252,98 +346,11 @@ where
         Ok(clients)
     }
 
-    async fn create_client(&self, registration: ClientRegistration) -> RepoResult<Client> {
-        let client_id = registration
-            .client_id
-            .clone()
-            .ok_or_else(|| RepoError::InvalidInput("client_id is required".into()))?;
-        let client_secret = match registration.client_type {
-            ClientType::Confidential => registration
-                .client_secret
-                .clone()
-                .filter(|secret| !secret.trim().is_empty())
-                .ok_or_else(|| {
-                    RepoError::InvalidInput(
-                        "client_secret is required for confidential client key material".into(),
-                    )
-                })?,
-            ClientType::Public => String::new(),
-        };
-        let client_secret_hash = if registration.client_type == ClientType::Confidential {
-            encrypt_password(&PasswordConfig::default(), &client_secret)
-                .map_err(|error| RepoError::Other(error.into()))?
-        } else {
-            String::new()
-        };
-        let application_id = self.application_id(&registration).await?;
-        let now = Utc::now()
-            .with_nanosecond(0)
-            .expect("zero nanoseconds is valid");
-        let client = Client {
-            id: Id::now_v7(),
-            application_id,
-            client_id,
-            client_secret_hash,
-            client_id_issued_at: registration
-                .client_id_issued_at
-                .map(timestamp)
-                .transpose()?,
-            client_secret_expires_at: registration
-                .client_secret_expires_at
-                .map(timestamp)
-                .transpose()?,
-            client_name: registration.client_name,
-            client_uri: registration
-                .client_uri
-                .unwrap_or_else(|| registration.application.uri.clone()),
-            redirect_uris: registration.redirect_uris,
-            client_type: registration.client_type,
-            profile: registration.profile,
-            token_endpoint_auth_method: registration.token_endpoint_auth_method,
-            allowed_grant_types: registration.allowed_grant_types,
-            response_types: registration.response_types,
-            allowed_scopes: registration.allowed_scopes,
-            allowed_audiences: registration.allowed_audiences,
-            logo_uri: registration.logo_uri,
-            contacts: registration.contacts,
-            terms_of_service_uri: registration.terms_of_service_uri,
-            policy_uri: registration.policy_uri,
-            software_statement: registration.software_statement,
-            software_id: registration.software_id,
-            software_version: registration.software_version,
-            created_at: now,
-            updated_at: now,
-        };
-        let revision = Id::now_v7();
-        let mut metadata = ClientRow::from(&client);
-        metadata.credential_id = Some(revision);
-        let mut transaction = self.engine.client().transaction().await.map_err(db_error)?;
-        transaction
-            .execute(vec![
-                Statement::Query(Query::Insert(QueryInsert {
-                    table: TABLE.into(),
-                    row: metadata.into(),
-                    returning: None,
-                })),
-                Statement::Query(local_credential_insert(&client, revision)),
-            ])
-            .await
-            .map_err(db_error)?;
-        transaction.commit().await.map_err(db_error)?;
-
-        self.key_service
-            .ensure_entity_master_key(EntityType::Client, client.id, "")?;
-        self.key_service
-            .create_key(
-                None,
-                EntityType::Client,
-                client.id,
-                true,
-                client.client_name.clone(),
-                None,
-            )
-            .await?;
-        Ok(client)
+    fn create_client(
+        &self,
+        registration: ClientRegistration,
+    ) -> impl Future<Output = RepoResult<Client>> {
+        self.create_client_with_capture(registration, |_, _| Ok(()))
     }
 
     async fn update_client(&self, client: Client) -> RepoResult<Client> {
@@ -1162,6 +1169,60 @@ mod tests {
             !row.values
                 .contains(&Value::Text(stored.client_secret_hash.clone()))
         }));
+    }
+
+    #[tokio::test]
+    async fn initial_capture_denial_prevents_all_private_writes() {
+        let engine = Arc::new(Database::in_memory());
+        up(&engine).await.expect("fresh schema");
+        let keys = Arc::new(KeyService::new(
+            DbKeyRepo::new(Arc::clone(&engine)),
+            TestPrivateKeyRepo::default(),
+            "capture-test",
+        ));
+        let repo = DbClientRepo::new(engine, Arc::clone(&keys));
+        for (client_type, secret) in [
+            (ClientType::Public, None),
+            (ClientType::Confidential, Some("secret")),
+        ] {
+            let mut captured = None;
+            repo.create_client_with_capture(registration(client_type, secret), |key, paths| {
+                assert!(
+                    keys.private_key_repo()
+                        .0
+                        .lock()
+                        .expect("secret map")
+                        .is_empty()
+                );
+                assert_eq!(
+                    paths.first(),
+                    Some(&key.derivation_path().expect("actual key path"))
+                );
+                assert_eq!(paths.last(), Some(&key::DerivationPath::default()));
+                assert!(
+                    paths
+                        .windows(2)
+                        .all(|pair| pair[0].parent().as_ref() == Some(&pair[1]))
+                );
+                captured = Some(key.entity_id);
+                Err(RepoError::InvalidInput("durable capture denied".into()))
+            })
+            .await
+            .expect_err("owner cannot bypass capture failure");
+            let client = repo
+                .find_client_by_client_id(&format!("{client_type}-client"))
+                .await
+                .expect("owner row")
+                .expect("committed actual Client");
+            assert_eq!(captured, Some(client.id));
+            assert!(
+                keys.private_key_repo()
+                    .0
+                    .lock()
+                    .expect("secret map")
+                    .is_empty()
+            );
+        }
     }
 
     #[tokio::test]
