@@ -22,7 +22,38 @@ use serde_json::{Value as JsonValue, json};
 use crate::OwnerProvisioner;
 
 impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
+    /// Nonblocking, cross-handle/process exclusion on stable owner-controlled ancestry.
+    /// The lock inode must remain in place until exclusive owner-data removal.
+    fn setup_operation(&self) -> io::Result<fs::File> {
+        let path = self.data_dir.join("setup-secret-operation.lock");
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) if !metadata.file_type().is_file() => {
+                return Err(invalid("setup operation lock must be a regular local file"));
+            }
+            Ok(_) => (),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => (),
+            Err(error) => return Err(error),
+        }
+        let mut options = fs::OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let file = options.open(path)?;
+        file.try_lock().map_err(|error| match error {
+            fs::TryLockError::WouldBlock => io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "another setup secret operation owns this directory; retry after it finishes",
+            ),
+            fs::TryLockError::Error(error) => error,
+        })?;
+        Ok(file)
+    }
+
     pub async fn ensure_initial_user_signing_key(&self, user: Id) -> io::Result<()> {
+        let _operation = self.setup_operation()?;
         if user.is_nil() {
             return Err(invalid("initial User identity is required"));
         }
@@ -49,6 +80,11 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
     }
 
     pub async fn ensure_client_signing_key(&self, client_id: &str) -> io::Result<()> {
+        let _operation = self.setup_operation()?;
+        self.ensure_client_signing_key_locked(client_id).await
+    }
+
+    async fn ensure_client_signing_key_locked(&self, client_id: &str) -> io::Result<()> {
         let client = self
             .oauth2
             .client_repo
@@ -155,11 +191,12 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
     }
 
     pub async fn ensure_desktop_client(&self, client_id: Id) -> io::Result<ClientRegistration> {
+        let _operation = self.setup_operation()?;
         if client_id.is_nil() {
             return Err(invalid("stable desktop client ID is required"));
         }
         let client_id = client_id.to_string();
-        self.begin_client_provisioning(&client_id).await?;
+        self.begin_client_provisioning_locked(&client_id).await?;
         let request = ClientRegistration {
             application: ApplicationRegistration {
                 name: Some("Local Desktop".into()),
@@ -221,7 +258,7 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             }
             Err(error) => Err(io::Error::other(format!("{error:?}"))),
         }?;
-        self.ensure_client_signing_key(&client_id).await?;
+        self.ensure_client_signing_key_locked(&client_id).await?;
         Ok(registration)
     }
 
@@ -232,6 +269,7 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         owner: Id,
         clients: &[Id],
     ) -> io::Result<()> {
+        let _operation = self.setup_operation()?;
         if owner.is_nil() || clients.iter().any(Id::is_nil) || clients.contains(&owner) {
             return Err(invalid("non-nil distinct setup identities required"));
         }
@@ -294,7 +332,10 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             || clients.iter().any(Id::is_nil)
             || clients.contains(&owner)
             || unique.len() != clients.len()
-            || !matches!(record["phase"].as_str(), Some("preparing" | "ready"))
+            || !matches!(
+                record["phase"].as_str(),
+                Some("preparing" | "ready" | "resetting")
+            )
         {
             return Err(invalid(
                 "unknown or conflicting secret inventory; explicit recovery required",
@@ -314,12 +355,24 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
     fn ready_inventory(&self) -> io::Result<JsonValue> {
         let record = self.read_inventory()?;
         if record["phase"] != "ready" {
-            return Err(invalid("secret production barred during slot preparation"));
+            return Err(invalid(
+                "initial secret production requires a ready inventory; preparation or reset is pending",
+            ));
         }
         Ok(record)
     }
 
     pub async fn prepare_setup_client_slots(&self, clients: &[Id]) -> io::Result<()> {
+        let _operation = self.setup_operation()?;
+        if self.read_inventory()?["phase"] == "resetting" {
+            return Err(invalid(
+                "reset secret cleanup has begun; ordinary preparation is barred",
+            ));
+        }
+        self.prepare_setup_client_slots_locked(clients).await
+    }
+
+    async fn prepare_setup_client_slots_locked(&self, clients: &[Id]) -> io::Result<()> {
         let mut inventory = self.read_inventory()?;
         if inventory["clients"] != json!(clients) {
             return Err(invalid("setup Client slots conflict with inventory"));
@@ -392,6 +445,11 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
     }
 
     pub async fn begin_client_provisioning(&self, external: &str) -> io::Result<()> {
+        let _operation = self.setup_operation()?;
+        self.begin_client_provisioning_locked(external).await
+    }
+
+    async fn begin_client_provisioning_locked(&self, external: &str) -> io::Result<()> {
         let inventory = self.ready_inventory()?;
         if !inventory["clients"]
             .as_array()
@@ -445,6 +503,7 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         &self,
         request: ClientRegistration,
     ) -> io::Result<ClientRegistration> {
+        let _operation = self.setup_operation()?;
         if request.client_type != ClientType::Confidential
             || request.allowed_grant_types != [GrantType::ClientCredentials]
             || request
@@ -461,7 +520,7 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             .as_deref()
             .ok_or_else(|| invalid("stable Client ID required"))?
             .to_owned();
-        self.begin_client_provisioning(&external).await?;
+        self.begin_client_provisioning_locked(&external).await?;
         if self.current_client_entity(&external).await?.is_none() {
             self.create_setup_client(request.clone()).await?;
         }
@@ -470,7 +529,7 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             .ensure_infrastructure_client(request)
             .await
             .map_err(|error| io::Error::other(format!("{error:?}")))?;
-        self.ensure_client_signing_key(&external).await?;
+        self.ensure_client_signing_key_locked(&external).await?;
         Ok(registration)
     }
 
@@ -578,6 +637,11 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
     }
 
     pub fn prepare_node_signer(&self, binding: &NodeSignerBinding) -> io::Result<JwkPublic> {
+        let _operation = self.setup_operation()?;
+        self.prepare_node_signer_locked(binding)
+    }
+
+    fn prepare_node_signer_locked(&self, binding: &NodeSignerBinding) -> io::Result<JwkPublic> {
         self.ready_inventory()?;
         validate_binding(binding)?;
         let keys = &self.oauth2.key_service;
@@ -623,6 +687,7 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         owner: Id,
         clients: &[Id],
     ) -> io::Result<()> {
+        let _operation = self.setup_operation()?;
         if member_id.is_nil() || key_id.is_nil() || owner.is_nil() || clients.iter().any(Id::is_nil)
         {
             return Err(invalid(
@@ -633,7 +698,7 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         if inventory["owner"] != json!(owner) || inventory["clients"] != json!(clients) {
             return Err(invalid("reset identities conflict with secret inventory"));
         }
-        self.prepare_setup_client_slots(clients).await?;
+        self.prepare_setup_client_slots_locked(clients).await?;
         let keys = &self.oauth2.key_service;
         let mut entities = Vec::with_capacity(clients.len() + 1);
         let mut slots: Vec<(String, EntityType)> = clients
@@ -677,6 +742,9 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             }
             entities.push((entity_type, entity, reference));
         }
+        let mut inventory = self.read_inventory()?;
+        inventory["phase"] = json!("resetting");
+        self.write_inventory(&inventory)?;
         for (entity_type, entity_id, reference) in entities {
             let namespace = keys.scoped_namespace(entity_type, entity_id);
             let paths: Vec<String> = serde_json::from_value(reference["paths"].clone())?;
@@ -721,6 +789,8 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
         owner: Id,
         name: &str,
     ) -> io::Result<()> {
+        let _operation = self.setup_operation()?;
+        self.ready_inventory()?;
         validate_binding(binding)?;
         if owner.is_nil() || name.trim().is_empty() {
             return Err(invalid("initial Node owner and name are required"));
@@ -741,7 +811,7 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             .await
             .map_err(io::Error::other)?;
         let public = if enrolled[0].rows.is_empty() {
-            self.prepare_node_signer(binding)?
+            self.prepare_node_signer_locked(binding)?
         } else {
             self.verify_node_signer(binding).await?
         };
