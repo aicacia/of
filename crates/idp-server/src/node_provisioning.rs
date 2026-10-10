@@ -743,10 +743,8 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             entities.push((entity_type, entity, reference));
         }
         let mut inventory = self.read_inventory()?;
-        if inventory["phase"] != "resetting" {
-            inventory["phase"] = json!("resetting");
-            self.write_inventory(&inventory)?;
-        }
+        inventory["phase"] = json!("resetting");
+        self.write_inventory(&inventory)?;
         for (entity_type, entity_id, reference) in entities {
             let namespace = keys.scoped_namespace(entity_type, entity_id);
             let paths: Vec<String> = serde_json::from_value(reference["paths"].clone())?;

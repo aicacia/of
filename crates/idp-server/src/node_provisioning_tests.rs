@@ -88,6 +88,133 @@ impl PrivateKeyRepo for Secrets {
     }
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn inventory_cleanup_retry_requires_durable_resetting_fence() {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    let root = std::env::temp_dir().join(format!("inventory-fence-sync-{}", Id::now_v7()));
+    let config = AppConfig {
+        data_dir: root.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let secrets = Secrets::default();
+    let owner = OwnerProvisioner::open_with_private_keys(&config, secrets.clone())
+        .await
+        .expect("owner");
+    let user = Id::now_v7();
+    let binding = NodeSignerBinding {
+        member_id: Id::now_v7(),
+        key_id: Id::now_v7(),
+        endpoint_id: iroh::SecretKey::generate().public().to_string(),
+    };
+    owner
+        .prepare_fresh_setup_secret_inventory(user, &[])
+        .await
+        .expect("fresh inventory");
+    owner
+        .prepare_setup_client_slots(&[])
+        .await
+        .expect("complete slots");
+    owner
+        .prepare_node_signer(&binding)
+        .expect("actual private Node root");
+    let before = secrets.values.lock().expect("secrets").clone();
+    assert_eq!(
+        before.len(),
+        1,
+        "the fixture must contain a deletable credential"
+    );
+    let manifest = root.join("setup-secret-inventory.json");
+    let reference = root
+        .join("local-client-key-references")
+        .join(format!("user-{user}.json"));
+    let retained_reference = std::fs::read(&reference).expect("retained User reference");
+    let lock = root.join("setup-secret-operation.lock");
+    let lock_inode = std::fs::metadata(&lock).expect("operation lock").ino();
+    let permissions = std::fs::metadata(&root)
+        .expect("owner directory")
+        .permissions();
+
+    // Renaming remains allowed, but opening the directory for sync must fail.
+    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o300))
+        .expect("deny directory read");
+    let first = owner
+        .delete_local_secrets(binding.member_id, binding.key_id, user, &[])
+        .await;
+    let visible_fence = std::fs::read(&manifest);
+    let after_first = secrets.values.lock().expect("secrets").clone();
+    let retry = owner
+        .delete_local_secrets(binding.member_id, binding.key_id, user, &[])
+        .await;
+    let after_retry = secrets.values.lock().expect("secrets").clone();
+    let failed_reference = std::fs::read(&reference);
+    let retained_lock = std::fs::metadata(&lock);
+    let lock_probe = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&lock)
+        .map(|file| file.try_lock());
+    std::fs::set_permissions(&root, permissions).expect("restore directory access");
+
+    let completed = owner
+        .delete_local_secrets(binding.member_id, binding.key_id, user, &[])
+        .await;
+    let final_fence = std::fs::read(&manifest);
+    let final_reference = std::fs::read(&reference);
+    let remaining = secrets.values.lock().expect("secrets").clone();
+    drop(owner);
+    std::fs::remove_dir_all(root).expect("remove owned fixture");
+
+    assert_eq!(
+        first.expect_err("post-rename sync must fail").kind(),
+        std::io::ErrorKind::PermissionDenied
+    );
+    let visible_fence = visible_fence.expect("canonical fence remains readable after failed sync");
+    let record: serde_json::Value = serde_json::from_slice(&visible_fence).expect("visible fence");
+    assert_eq!(
+        record["phase"], "resetting",
+        "the injected failure must be after rename"
+    );
+    assert_eq!(
+        after_first, before,
+        "failed fence must not delete any credential"
+    );
+    assert_eq!(
+        retry
+            .expect_err("existing resetting must repeat the durability boundary")
+            .kind(),
+        std::io::ErrorKind::PermissionDenied
+    );
+    assert_eq!(
+        after_retry, before,
+        "retry must not delete before successful fence sync"
+    );
+    assert_eq!(
+        failed_reference.expect("failed cleanup retains references"),
+        retained_reference
+    );
+    assert_eq!(
+        retained_lock
+            .expect("failed cleanup retains lock inode")
+            .ino(),
+        lock_inode
+    );
+    lock_probe
+        .expect("lock file remains accessible")
+        .expect("failed operation releases exclusion");
+    completed.expect("successful fence sync permits exact cleanup retry");
+    assert_eq!(final_fence.expect("durable fence retained"), visible_fence);
+    assert_eq!(
+        final_reference.expect("cleanup retains references"),
+        retained_reference
+    );
+    assert!(
+        remaining.is_empty(),
+        "successful cleanup deletes the actual credential"
+    );
+}
+
 #[tokio::test]
 async fn inventory_concurrent_public_operations_preserve_capture() {
     let root = std::env::temp_dir().join(format!("inventory-concurrent-{}", Id::now_v7()));
