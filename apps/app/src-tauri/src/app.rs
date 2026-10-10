@@ -1218,7 +1218,11 @@ pub async fn recover_reset_references(app_handle: AppHandle<Wry>) -> Result<(), 
         .path()
         .app_data_dir()
         .map_err(|error| error.to_string())?;
-    reset::recover(&data).map_err(|error| error.to_string())
+    let config = app_handle
+        .path()
+        .app_config_dir()
+        .map_err(|error| error.to_string())?;
+    reset::recover(&data, &config).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

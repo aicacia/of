@@ -175,9 +175,7 @@ fn begin_with(
         }
     };
     let never_started = if issuer.is_some() {
-        read_provisioning(data, &read_setup_intent(data)?)?
-            .is_some_and(|record| record["phase"] == "not-started")
-            && !owner_state_exists(data, config)?
+        provisioning_never_started(data, config)?
     } else {
         true
     };
@@ -188,6 +186,12 @@ fn begin_with(
     }
     write(&record, data, checkpoint)?;
     Ok(record)
+}
+
+fn provisioning_never_started(data: &Path, config: &Path) -> io::Result<bool> {
+    Ok(read_provisioning(data, &read_setup_intent(data)?)?
+        .is_some_and(|record| record["phase"] == "not-started")
+        && !owner_state_exists(data, config)?)
 }
 
 fn owner_state_exists(data: &Path, config: &Path) -> io::Result<bool> {
@@ -439,8 +443,8 @@ pub(super) fn recovery_references(data: &Path) -> io::Result<Value> {
     Ok(record)
 }
 
-pub(super) fn recover(data: &Path) -> io::Result<()> {
-    let record = recovery_references(data)?;
+pub(super) fn recover(data: &Path, config: &Path) -> io::Result<()> {
+    let mut record = recovery_references(data)?;
     if let Ok(Some(ids)) = optional_json(&data.join("setup-ids.json"))
         && parse_setup_ids(&ids).is_ok()
         && ids != record["ids"]
@@ -465,6 +469,13 @@ pub(super) fn recover(data: &Path) -> io::Result<()> {
             ));
         }
         return sync_directory(data);
+    }
+    if optional_json(&data.join("setup-ids.json"))
+        .is_ok_and(|ids| ids.as_ref() == Some(&record["ids"]))
+        && read_setup_intent(data).is_ok_and(|intent| intent["issuer"] == record["issuer"])
+        && provisioning_never_started(data, config).unwrap_or(false)
+    {
+        record["phase"] = json!("data-pending");
     }
     let archive = data.join("reset-recovery");
     fs::create_dir_all(&archive)?;
@@ -636,7 +647,7 @@ mod tests {
                 .expect("intent before owner opening");
             let references = super::recovery_references(&data).expect("durable backup");
             super::begin(&data, &config).expect("explicit reset publication");
-            super::recover(&data).expect("reopen exact reset references");
+            super::recover(&data, &config).expect("reopen exact reset references");
             assert_eq!(
                 super::recovery_references(&data).expect("same identities"),
                 references
@@ -654,6 +665,196 @@ mod tests {
             super::super::persist_setup_intent(&data, &intent)
                 .expect("normal provisioning seam accepts new setup");
             fs::remove_dir_all(root).expect("owned intent-only fixture cleanup");
+        }
+    }
+
+    #[tokio::test]
+    async fn intent_only_reset_recovers_absent_and_corrupt_journals_without_secret_deletion() {
+        for corrupt in [false, true] {
+            for intent in [
+                json!({"purpose":"create", "issuer":"https://reset.test/idp"}),
+                json!({"purpose":"join", "issuer":"https://reset.test/idp", "peer":"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a", "name":"Local Node"}),
+            ] {
+                let root =
+                    std::env::temp_dir().join(format!("reset-journal-recovery-{}", Id::now_v7()));
+                let data = root.join("data");
+                let config = root.join("config");
+                let ids = super::super::load_or_create_setup_ids(&data).expect("stable identities");
+                super::super::persist_setup_intent(&data, &intent)
+                    .expect("intent before owner work");
+                let references = super::recovery_references(&data).expect("exact durable backup");
+                super::begin(&data, &config).expect("explicit data-only reset");
+                if corrupt {
+                    fs::write(data.join(JOURNAL), b"corrupt reset journal")
+                        .expect("corrupt journal");
+                } else {
+                    fs::remove_file(data.join(JOURNAL)).expect("lost journal");
+                }
+                super::recover(&data, &config).expect("explicit journal recovery");
+                let recovered = super::optional_json(&data.join(JOURNAL))
+                    .expect("read recovered journal")
+                    .expect("durable journal");
+                assert_eq!(
+                    recovered["phase"], "data-pending",
+                    "intact never-started proof must retain data-only disposition"
+                );
+                assert_eq!(recovered["ids"], references["ids"]);
+                assert_eq!(recovered["issuer"], references["issuer"]);
+                assert_eq!(
+                    super::recovery_references(&data).expect("backup unchanged"),
+                    references
+                );
+                assert_eq!(
+                    super::super::load_or_create_setup_ids(&data)
+                        .expect("same identities")
+                        .installation_id,
+                    ids.installation_id
+                );
+                assert!(super::start_provisioning(&data).is_err());
+                let archives: Vec<_> = fs::read_dir(data.join("reset-recovery"))
+                    .expect("recovery archive")
+                    .map(|entry| entry.expect("archive entry").path())
+                    .collect();
+                assert_eq!(archives.len(), 1);
+                if corrupt {
+                    assert_eq!(
+                        fs::read(archives[0].join(JOURNAL)).expect("corruption preserved"),
+                        b"corrupt reset journal"
+                    );
+                } else {
+                    assert!(!archives[0].join(JOURNAL).exists());
+                }
+                super::recover(&data, &config).expect("idempotent recovered journal reopen");
+                run(&data, &config, |_| async {
+                    panic!("verified never-started recovery must not open owners or delete secrets")
+                })
+                .await
+                .expect("recovered explicit reset completes");
+                assert!(!data.join(JOURNAL).exists());
+                assert!(!data.join("services").exists());
+                assert!(!data.join(super::REFERENCES).exists());
+                super::super::load_or_create_setup_ids(&data)
+                    .expect("fresh setup after explicit reset");
+                super::super::persist_setup_intent(&data, &intent)
+                    .expect("setup seam available again");
+                fs::remove_dir_all(root).expect("owned journal-recovery fixture cleanup");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn journal_recovery_never_downgrades_attempted_unknown_or_contradictory_state() {
+        for corrupt in [false, true] {
+            for case in [
+                "attempted",
+                "missing-stage",
+                "corrupt-stage",
+                "conflicting-stage",
+                "missing-ids",
+                "corrupt-ids",
+                "missing-intent",
+                "corrupt-intent",
+                "changed-purpose",
+                "data-artifacts",
+                "config-artifacts",
+            ] {
+                let root =
+                    std::env::temp_dir().join(format!("reset-journal-unknown-{}", Id::now_v7()));
+                let data = root.join("data");
+                let config = root.join("config");
+                super::super::load_or_create_setup_ids(&data).expect("stable identities");
+                super::super::persist_setup_intent(
+                    &data,
+                    &json!({"purpose":"create", "issuer":"https://reset.test/idp"}),
+                )
+                .expect("retained intent");
+                if case == "attempted" {
+                    super::start_provisioning(&data).expect("durable attempt before reset");
+                }
+                super::begin(&data, &config).expect("explicit reset");
+                match case {
+                    "attempted" => (),
+                    "missing-stage" => fs::remove_file(data.join(super::PROVISIONING)).expect("lost stage"),
+                    "corrupt-stage" => fs::write(data.join(super::PROVISIONING), b"corrupt stage").expect("corrupt stage"),
+                    "conflicting-stage" => {
+                        let mut stage = super::optional_json(&data.join(super::PROVISIONING)).expect("stage JSON").expect("stage present");
+                        stage["ids"]["member_id"] = json!(Id::now_v7().to_string());
+                        fs::write(data.join(super::PROVISIONING), serde_json::to_vec(&stage).expect("conflict JSON")).expect("conflicting stage");
+                    }
+                    "missing-ids" => fs::remove_file(data.join("setup-ids.json")).expect("lost IDs"),
+                    "corrupt-ids" => fs::write(data.join("setup-ids.json"), b"corrupt IDs").expect("corrupt IDs"),
+                    "missing-intent" => fs::remove_file(data.join("node-setup.json")).expect("lost intent"),
+                    "corrupt-intent" => fs::write(data.join("node-setup.json"), b"corrupt intent").expect("corrupt intent"),
+                    "changed-purpose" => fs::write(data.join("node-setup.json"), serde_json::to_vec(&json!({"purpose":"join", "issuer":"https://reset.test/idp", "peer":"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a", "name":"Other intent"})).expect("changed intent JSON")).expect("changed intent"),
+                    "data-artifacts" => fs::create_dir_all(data.join("services/idp")).expect("contradictory owner artifacts"),
+                    "config-artifacts" => {
+                        fs::create_dir_all(&config).expect("config directory");
+                        fs::write(config.join("lidp.redb"), b"unknown owner metadata").expect("contradictory config artifacts");
+                    }
+                    _ => unreachable!(),
+                }
+                if corrupt {
+                    fs::write(data.join(JOURNAL), b"corrupt reset journal")
+                        .expect("corrupt journal");
+                } else {
+                    fs::remove_file(data.join(JOURNAL)).expect("lost journal");
+                }
+                let backup = fs::read(data.join(super::REFERENCES)).expect("backup bytes");
+                super::recover(&data, &config)
+                    .expect("reset-only reference recovery must remain conservative");
+                let recovered = super::optional_json(&data.join(JOURNAL))
+                    .expect("recovered JSON")
+                    .expect("recovered journal");
+                assert_eq!(
+                    recovered["phase"], "secrets-pending",
+                    "uncertain state must not become data-only: {case}, corrupt={corrupt}"
+                );
+                assert_eq!(
+                    fs::read(data.join(super::REFERENCES)).expect("preserved backup"),
+                    backup
+                );
+                assert!(super::start_provisioning(&data).is_err());
+                run(&data, &config, |_| async {
+                    panic!("lost owner metadata must not be recreated or guessed")
+                })
+                .await
+                .expect_err("unknown secret cleanup still requires verified owner metadata");
+                assert!(!data.join("services/idp/idp.redb").exists());
+                assert!(data.join(JOURNAL).is_file());
+                if case == "config-artifacts" {
+                    assert_eq!(
+                        fs::read(config.join("lidp.redb")).expect("config preserved"),
+                        b"unknown owner metadata"
+                    );
+                }
+                fs::remove_dir_all(root).expect("owned uncertain-journal fixture cleanup");
+            }
+        }
+    }
+
+    #[test]
+    fn recovery_preserves_valid_reset_phases_even_with_never_started_proof() {
+        for phase in ["secrets-pending", "data-pending", "complete"] {
+            let root = std::env::temp_dir().join(format!("reset-journal-valid-{}", Id::now_v7()));
+            let data = root.join("data");
+            let config = root.join("config");
+            super::super::load_or_create_setup_ids(&data).expect("stable identities");
+            super::super::persist_setup_intent(
+                &data,
+                &json!({"purpose":"create", "issuer":"https://reset.test/idp"}),
+            )
+            .expect("retained intent");
+            let mut record = super::recovery_references(&data).expect("same references");
+            record["phase"] = json!(phase);
+            let bytes = serde_json::to_vec(&record).expect("valid journal JSON");
+            fs::write(data.join(JOURNAL), &bytes).expect("existing durable journal fixture");
+            super::recover(&data, &config).expect("valid journal is authoritative");
+            assert_eq!(
+                fs::read(data.join(JOURNAL)).expect("journal unchanged"),
+                bytes
+            );
+            assert!(!data.join("reset-recovery").exists());
+            fs::remove_dir_all(root).expect("owned valid-journal fixture cleanup");
         }
     }
 
@@ -837,7 +1038,7 @@ mod tests {
             serde_json::to_vec(&wrong).expect("conflicting identities"),
         )
         .expect("conflicting valid references");
-        assert!(super::recover(&data).is_err());
+        assert!(super::recover(&data, &config).is_err());
         fs::write(
             data.join("setup-ids.json"),
             serde_json::to_vec(&ids).expect("exact backup"),
@@ -847,7 +1048,7 @@ mod tests {
         fs::remove_file(data.join("node-setup.json")).expect("lose issuer reference");
         fs::write(data.join(JOURNAL), b"corrupt journal").expect("corrupt journal");
         assert!(super::begin(&data, &config).is_err());
-        super::recover(&data).expect("explicit reset-only recovery");
+        super::recover(&data, &config).expect("explicit reset-only recovery");
         assert_eq!(
             fs::read(data.join("setup-ids.json")).expect("original preserved"),
             b"corrupt ids"
@@ -887,7 +1088,7 @@ mod tests {
         assert!(data.join("reset-recovery").is_dir());
         fs::write(data.join(JOURNAL), b"unknown journal without backup")
             .expect("lost backup boundary");
-        assert!(super::recover(&data).is_err());
+        assert!(super::recover(&data, &config).is_err());
         assert_eq!(
             fs::read(data.join(JOURNAL)).expect("unknown journal preserved"),
             b"unknown journal without backup"
