@@ -167,6 +167,7 @@ pub async fn provision_initial_administrator(
     idp_config.oauth2.issuer = format!("{base_url}/idp");
     idp_config.api_public_uri = format!("{base_url}/idp");
     idp_config.ui_public_uri = base_url.clone();
+    reset::start_provisioning(&app_data_dir).map_err(|error| error.to_string())?;
     let endpoint =
         UnifiedEndpoint::open(&app_data_dir.join("services/unified-endpoint"), &idp_config)
             .await
@@ -314,6 +315,7 @@ pub async fn join_installation(
     config.oauth2.issuer = issuer;
     config.api_public_uri = format!("{base_url}/idp");
     config.ui_public_uri = base_url.clone();
+    reset::start_provisioning(&data_dir).map_err(|error| error.to_string())?;
     let endpoint = UnifiedEndpoint::open(&data_dir.join("services/unified-endpoint"), &config)
         .await
         .map_err(|error| error.to_string())?;
@@ -439,6 +441,7 @@ fn persist_setup_intent(directory: &Path, value: &Value) -> io::Result<()> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => (),
         Err(error) => return Err(error),
     }
+    reset::prepare_provisioning(directory, value)?;
     let temporary = directory.join(format!(".node-setup-{}.tmp", Id::now_v7()));
     let result = (|| {
         let mut file = OpenOptions::new()
@@ -1215,7 +1218,11 @@ pub async fn recover_reset_references(app_handle: AppHandle<Wry>) -> Result<(), 
         .path()
         .app_data_dir()
         .map_err(|error| error.to_string())?;
-    reset::recover(&data).map_err(|error| error.to_string())
+    let config = app_handle
+        .path()
+        .app_config_dir()
+        .map_err(|error| error.to_string())?;
+    reset::recover(&data, &config).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
