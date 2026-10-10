@@ -230,6 +230,16 @@ fn read_provisioning(data: &Path, intent: &Value) -> io::Result<Option<Value>> {
         ));
     }
     expected["phase"] = record["phase"].clone();
+    if let Some(endpoint) = record.get("endpoint_id") {
+        if record["phase"] != "attempted"
+            || !endpoint
+                .as_str()
+                .is_some_and(|id| id.len() == 64 && id.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        {
+            return Err(io::Error::other("invalid retained endpoint identity"));
+        }
+        expected["endpoint_id"] = endpoint.clone();
+    }
     if record != expected {
         return Err(io::Error::other(
             "provisioning references conflict; explicit recovery required",
@@ -239,21 +249,18 @@ fn read_provisioning(data: &Path, intent: &Value) -> io::Result<Option<Value>> {
     Ok(Some(record))
 }
 
-fn publish_provisioning(data: &Path, record: &Value) -> io::Result<()> {
-    let temporary = data.join(format!(
-        ".setup-provisioning-{}.tmp",
-        idp_model::model::Id::now_v7()
-    ));
+fn publish_record(data: &Path, name: &str, record: &Value) -> io::Result<()> {
+    let temporary = data.join(format!(".{name}-{}.tmp", idp_model::model::Id::now_v7()));
     let mut file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&temporary)?;
     file.write_all(&serde_json::to_vec(record)?)?;
     file.sync_all()?;
-    fs::rename(temporary, data.join(PROVISIONING))?;
+    fs::rename(temporary, data.join(name))?;
     sync_directory(data)?;
-    if optional_json(&data.join(PROVISIONING))?.as_ref() != Some(record) {
-        return Err(io::Error::other("provisioning stage readback failed"));
+    if optional_json(&data.join(name))?.as_ref() != Some(record) {
+        return Err(io::Error::other("setup record readback failed"));
     }
     Ok(())
 }
@@ -262,34 +269,39 @@ pub(super) fn prepare_provisioning(data: &Path, intent: &Value) -> io::Result<()
     if read_provisioning(data, intent)?.is_some() {
         return Ok(());
     }
-    if exists(&data.join(REFERENCES))? || owner_state_exists(data, data)? {
+    if exists(&data.join("node-setup.json"))?
+        || exists(&data.join(REFERENCES))?
+        || owner_state_exists(data, data)?
+    {
         return Err(io::Error::other(
             "owner state without provisioning evidence; explicit recovery required",
         ));
     }
-    publish_provisioning(data, &provisioning_record(data, intent)?)
+    let mut ids = optional_json(&data.join("setup-ids.json"))?
+        .ok_or_else(|| io::Error::other("missing original setup identities"))?;
+    parse_setup_ids(&ids)?;
+    if ids["intent_disposition"] != "unclaimed" {
+        return Err(io::Error::other(
+            "fresh intent authorization is consumed or unknown; explicit recovery required",
+        ));
+    }
+    ids["intent_disposition"] = json!("claimed");
+    publish_record(data, "setup-ids.json", &ids)?;
+    publish_record(data, PROVISIONING, &provisioning_record(data, intent)?)
 }
 
-pub(super) fn start_provisioning(data: &Path) -> io::Result<()> {
+pub(super) fn start_provisioning(data: &Path) -> io::Result<bool> {
     if exists(&data.join(JOURNAL))? {
         return Err(io::Error::other(
             "local reset is pending; retry reset before provisioning",
         ));
     }
     let intent = read_setup_intent(data)?;
-    let Some(mut record) = read_provisioning(data, &intent)? else {
-        // Existing intents have no proof that owner work never started.
-        if !fs::symlink_metadata(data.join("services/idp/idp.redb"))
-            .map(|metadata| metadata.file_type().is_file())
-            .unwrap_or(false)
-        {
-            return Err(io::Error::other(
-                "unknown provisioning progress and missing owner metadata; restore independently verified metadata before reset",
-            ));
-        }
-        return Ok(());
-    };
-    if record["phase"] == "not-started" && owner_state_exists(data, data)? {
+    let mut record = read_provisioning(data, &intent)?.ok_or_else(|| {
+        io::Error::other("unknown provisioning progress; explicit recovery required")
+    })?;
+    let fresh = record["phase"] == "not-started";
+    if fresh && owner_state_exists(data, data)? {
         return Err(io::Error::other(
             "owner state conflicts with never-started provisioning; explicit recovery required",
         ));
@@ -304,7 +316,31 @@ pub(super) fn start_provisioning(data: &Path) -> io::Result<()> {
         ));
     }
     record["phase"] = json!("attempted");
-    publish_provisioning(data, &record)
+    publish_record(data, PROVISIONING, &record)?;
+    Ok(fresh)
+}
+
+pub(super) fn retain_endpoint(data: &Path, endpoint_id: &str) -> io::Result<()> {
+    let intent = read_setup_intent(data)?;
+    let mut record = read_provisioning(data, &intent)?
+        .ok_or_else(|| io::Error::other("missing endpoint attempt evidence"))?;
+    if record["phase"] != "attempted" || record.get("endpoint_id").is_some() {
+        return Err(io::Error::other(
+            "endpoint attempt already retained or not started",
+        ));
+    }
+    record["endpoint_id"] = json!(endpoint_id);
+    publish_record(data, PROVISIONING, &record)?;
+    read_provisioning(data, &intent)?;
+    Ok(())
+}
+
+pub(super) fn retained_endpoint(data: &Path) -> io::Result<String> {
+    read_provisioning(data, &read_setup_intent(data)?)?
+        .and_then(|record| record["endpoint_id"].as_str().map(str::to_owned))
+        .ok_or_else(|| {
+            io::Error::other("missing exact endpoint attempt identity; explicit recovery required")
+        })
 }
 
 pub(super) fn retain(data: &Path) -> io::Result<()> {
@@ -597,6 +633,22 @@ mod tests {
 
     use super::{DATA_PATHS, JOURNAL, run, run_with};
 
+    #[test]
+    fn lost_fresh_disposition_is_not_reconstructed_from_absent_owner_state() {
+        let root = std::env::temp_dir().join(format!("setup-lost-disposition-{}", Id::now_v7()));
+        super::super::load_or_create_setup_ids(&root).expect("original identities");
+        let intent = json!({"purpose":"create", "issuer":"https://reset.test/idp"});
+        super::super::persist_setup_intent(&root, &intent).expect("durable fresh intent");
+        fs::remove_file(root.join(super::PROVISIONING)).expect("lose disposition");
+        fs::remove_file(root.join(super::REFERENCES)).expect("lose backup");
+        assert!(super::prepare_provisioning(&root, &intent).is_err());
+        assert!(!root.join(super::PROVISIONING).exists());
+        fs::remove_file(root.join("node-setup.json")).expect("lose intent too");
+        assert!(super::prepare_provisioning(&root, &intent).is_err());
+        assert!(!root.join(super::PROVISIONING).exists());
+        fs::remove_dir_all(root).expect("owned fixture cleanup");
+    }
+
     fn fixture(root: &std::path::Path) -> super::Value {
         let data = root.join("data");
         let config = root.join("config");
@@ -877,7 +929,9 @@ mod tests {
             )
             .expect("intent before owners");
             match case {
-                "attempted" => super::start_provisioning(&data).expect("attempt before owner open"),
+                "attempted" => {
+                    super::start_provisioning(&data).expect("attempt before owner open");
+                }
                 "missing-stage" => {
                     fs::remove_file(data.join(super::PROVISIONING)).expect("lost stage")
                 }
@@ -935,7 +989,7 @@ mod tests {
             &json!({"purpose":"create", "issuer":"https://reset.test/idp"}),
         )
         .expect("retained intent");
-        super::start_provisioning(&data).expect("durable owner attempt");
+        let fresh = super::start_provisioning(&data).expect("durable owner attempt");
         let mut owner_config = idp_server::AppConfig {
             data_dir: data.join("services/idp").to_string_lossy().into_owned(),
             ..idp_server::AppConfig::default()
@@ -944,10 +998,9 @@ mod tests {
         let owner = idp_server::OwnerProvisioner::open(&owner_config)
             .await
             .expect("native owner metadata");
-        owner
-            .prepare_setup_client_slots(&super::super::setup_client_ids(&ids))
+        super::super::prepare_setup_inventory(&owner, &ids, fresh)
             .await
-            .expect("durable Client slots");
+            .expect("durable fresh inventory and Client slots");
         owner
             .begin_client_provisioning(&ids.installation_id.to_string())
             .await
@@ -970,7 +1023,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("pending Client has lost internal key references")
+                .contains("pending initial secret inventory is unknown")
         );
         assert!(super::start_provisioning(&data).is_err());
         assert!(data.join(JOURNAL).is_file());
