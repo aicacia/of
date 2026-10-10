@@ -1,7 +1,7 @@
 use std::{
     fs::{self, OpenOptions},
-    io::{self, Write},
-    path::{Path, PathBuf},
+    io::{self, Read, Write},
+    path::{Component, Path, PathBuf},
 };
 
 use idp_server::{DeviceIdentity, IdpRuntime, device_identity_from_server};
@@ -19,11 +19,15 @@ pub struct UnifiedEndpoint {
 
 impl UnifiedEndpoint {
     /// Reopens only the canonical identity; missing identity requires exact recovery.
+    /// Requires stable, owner-controlled directory ancestry, with no symlinks or `..` components.
+    /// On Unix, the key must not grant group or other access. These pathname checks
+    /// are not protection against hostile concurrent ancestor mutation.
     pub async fn open(data_dir: &Path, idp_config: &idp_server::AppConfig) -> io::Result<Self> {
+        let data_dir = managed_directory(data_dir)?;
         let key_path = data_dir.join(ENDPOINT_KEY_FILE);
-        let secret_key = load_secret_key(&key_path)?;
-        fs::File::open(&key_path)?.sync_all()?;
-        sync_directory_ancestry(data_dir)?;
+        let (secret_key, file) = load_secret_key(&key_path)?;
+        file.sync_all()?;
+        sync_directory_ancestry(&data_dir)?;
         let allowed_peers = EndpointIdStore::default();
         allowed_peers.replace([secret_key.public()]);
         let server = idp_server::bind_node_join_endpoint(
@@ -44,23 +48,32 @@ impl UnifiedEndpoint {
 
     /// Creates an identity only for a positively fresh Node in a new endpoint directory.
     /// Once attempted, callers must use `open`, including after a bind failure.
+    /// The managed-path preconditions of `open` also apply here.
     pub async fn open_fresh(
         data_dir: &Path,
         idp_config: &idp_server::AppConfig,
     ) -> io::Result<Self> {
+        reject_symlink_ancestry(data_dir)?;
         let parent = data_dir
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
-        fs::create_dir_all(parent)?;
-        fs::create_dir(data_dir)?;
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.recursive(true).create(parent)?;
+        builder.recursive(false).create(data_dir)?;
         #[cfg(test)]
         publication_checkpoint("directory-created");
-        sync_directory_ancestry(data_dir)?;
+        let data_dir = managed_directory(data_dir)?;
+        sync_directory_ancestry(&data_dir)?;
         #[cfg(test)]
         publication_checkpoint("ancestry-synced");
-        publish_secret_key(data_dir)?;
-        Self::open(data_dir, idp_config).await
+        publish_secret_key(&data_dir)?;
+        Self::open(&data_dir, idp_config).await
     }
 
     pub fn server(&self) -> &Server {
@@ -87,8 +100,12 @@ impl UnifiedEndpoint {
         Ok(())
     }
 
+    /// Reads canonical identity under the managed-path and key policy of `open`.
     pub fn persisted_endpoint_id(data_dir: &Path) -> io::Result<EndpointId> {
-        Ok(load_secret_key(&data_dir.join(ENDPOINT_KEY_FILE))?.public())
+        let data_dir = managed_directory(data_dir)?;
+        Ok(load_secret_key(&data_dir.join(ENDPOINT_KEY_FILE))?
+            .0
+            .public())
     }
 
     pub fn key_path(&self) -> &Path {
@@ -100,18 +117,48 @@ impl UnifiedEndpoint {
     }
 }
 
-fn load_secret_key(path: &Path) -> io::Result<SecretKey> {
-    let metadata = fs::symlink_metadata(path)?;
-    if !metadata.is_file() || metadata.file_type().is_symlink() {
+fn load_secret_key(path: &Path) -> io::Result<(SecretKey, fs::File)> {
+    let entry = fs::symlink_metadata(path)?;
+    if !entry.is_file() || entry.file_type().is_symlink() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "unified endpoint key must be a regular file",
         ));
     }
-    let bytes: [u8; 32] = fs::read(path)?
+    let mut file = fs::File::open(path)?;
+    let metadata = file.metadata()?;
+    let current_entry = fs::symlink_metadata(path)?;
+    if !metadata.is_file() || !current_entry.is_file() || current_entry.file_type().is_symlink() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "unified endpoint key must remain a regular file",
+        ));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+
+        if (entry.dev(), entry.ino()) != (metadata.dev(), metadata.ino())
+            || (current_entry.dev(), current_entry.ino()) != (metadata.dev(), metadata.ino())
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "unified endpoint key changed while opening",
+            ));
+        }
+        if metadata.mode() & 0o077 != 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "unified endpoint key must not grant group or other access",
+            ));
+        }
+    }
+    let mut bytes = Vec::new();
+    (&mut file).take(33).read_to_end(&mut bytes)?;
+    let bytes: [u8; 32] = bytes
         .try_into()
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid unified endpoint key"))?;
-    Ok(SecretKey::from_bytes(&bytes))
+    Ok((SecretKey::from_bytes(&bytes), file))
 }
 
 fn publish_secret_key(directory: &Path) -> io::Result<()> {
@@ -160,9 +207,40 @@ fn publication_checkpoint(checkpoint: &str) {
     }
 }
 
-fn sync_directory_ancestry(directory: &Path) -> io::Result<()> {
+fn reject_symlink_ancestry(directory: &Path) -> io::Result<()> {
     let absolute = std::env::current_dir()?.join(directory);
-    for ancestor in absolute.ancestors() {
+    let mut prefix = PathBuf::new();
+    for component in absolute.components() {
+        if component == Component::ParentDir {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "unified endpoint path must not contain parent traversal",
+            ));
+        }
+        prefix.push(component);
+        match fs::symlink_metadata(&prefix) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "unified endpoint ancestry must contain only nonsymlink directories",
+                ));
+            }
+            Ok(_) => (),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => (),
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
+}
+
+fn managed_directory(directory: &Path) -> io::Result<PathBuf> {
+    reject_symlink_ancestry(directory)?;
+    fs::canonicalize(directory)
+}
+
+fn sync_directory_ancestry(directory: &Path) -> io::Result<()> {
+    let physical = managed_directory(directory)?;
+    for ancestor in physical.ancestors() {
         fs::File::open(ancestor)?.sync_all()?;
     }
     Ok(())
@@ -221,6 +299,137 @@ mod tests {
         fs::remove_dir_all(root).expect("remove historical fixture");
     }
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn rejects_insecure_existing_key_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let data_dir = test_dir();
+        let config = idp_server::AppConfig::default();
+        let endpoint = UnifiedEndpoint::open_fresh(&data_dir, &config)
+            .await
+            .expect("fresh secure identity");
+        let identity = endpoint.endpoint_id();
+        endpoint.close().await;
+        let key_path = data_dir.join("endpoint.key");
+        for mode in [0o644, 0o620, 0o606, 0o666] {
+            fs::set_permissions(&key_path, fs::Permissions::from_mode(mode))
+                .expect("insecure historical key fixture");
+            assert!(
+                matches!(UnifiedEndpoint::open(&data_dir, &config).await, Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied)
+            );
+            assert_eq!(
+                UnifiedEndpoint::persisted_endpoint_id(&data_dir)
+                    .expect_err("insecure identity lookup")
+                    .kind(),
+                std::io::ErrorKind::PermissionDenied
+            );
+            assert_eq!(
+                fs::metadata(&key_path)
+                    .expect("unchanged permissions")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                mode
+            );
+        }
+        fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600))
+            .expect("restore secure fixture permissions");
+        let endpoint = UnifiedEndpoint::open(&data_dir, &config)
+            .await
+            .expect("secure exact reopen");
+        assert_eq!(endpoint.endpoint_id(), identity);
+        endpoint.close().await;
+        fs::remove_dir_all(data_dir).expect("remove permissions fixture");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn rejects_symlink_directory_ancestry_before_read_or_creation() {
+        use std::os::unix::fs::symlink;
+
+        let root = test_dir();
+        let physical = root.join("physical");
+        let directory = physical.join("endpoint");
+        let config = idp_server::AppConfig::default();
+        let endpoint = UnifiedEndpoint::open_fresh(&directory, &config)
+            .await
+            .expect("physical endpoint");
+        endpoint.close().await;
+        let alias = root.join("alias");
+        symlink(&physical, &alias).expect("symlink parent fixture");
+        let leaf_alias = root.join("endpoint-alias");
+        symlink(&directory, &leaf_alias).expect("symlink endpoint directory fixture");
+        for path in [
+            alias.join("endpoint"),
+            leaf_alias,
+            alias.join("../physical/endpoint"),
+        ] {
+            assert!(
+                matches!(UnifiedEndpoint::open(&path, &config).await, Err(error) if error.kind() == std::io::ErrorKind::InvalidData)
+            );
+            assert_eq!(
+                UnifiedEndpoint::persisted_endpoint_id(&path)
+                    .expect_err("symlink identity lookup")
+                    .kind(),
+                std::io::ErrorKind::InvalidData
+            );
+        }
+        for path in [
+            alias.join("new/endpoint"),
+            root.join("missing/../alias/new/endpoint"),
+        ] {
+            assert!(
+                matches!(UnifiedEndpoint::open_fresh(&path, &config).await, Err(error) if error.kind() == std::io::ErrorKind::InvalidData)
+            );
+        }
+        assert!(
+            !physical.join("new").exists(),
+            "refuse before creating through a symlink"
+        );
+        fs::remove_dir_all(root).expect("remove ancestry fixture");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn rejects_existing_symlink_key_without_changing_its_target() {
+        use std::os::unix::fs::symlink;
+
+        let directory = test_dir();
+        let config = idp_server::AppConfig::default();
+        let endpoint = UnifiedEndpoint::open_fresh(&directory, &config)
+            .await
+            .expect("secure key fixture");
+        let identity = endpoint.endpoint_id();
+        endpoint.close().await;
+        let key = directory.join("endpoint.key");
+        let target = directory.join("retained.key");
+        fs::rename(&key, &target).expect("retain original inode");
+        symlink(&target, &key).expect("symlink key fixture");
+        assert!(
+            matches!(UnifiedEndpoint::open(&directory, &config).await, Err(error) if error.kind() == std::io::ErrorKind::InvalidData)
+        );
+        assert_eq!(
+            UnifiedEndpoint::persisted_endpoint_id(&directory)
+                .expect_err("symlink key lookup")
+                .kind(),
+            std::io::ErrorKind::InvalidData
+        );
+        assert!(
+            fs::symlink_metadata(&key)
+                .expect("unchanged symlink")
+                .file_type()
+                .is_symlink()
+        );
+        fs::remove_file(&key).expect("remove symlink fixture");
+        fs::rename(&target, &key).expect("restore canonical fixture");
+        assert_eq!(
+            UnifiedEndpoint::persisted_endpoint_id(&directory).expect("target remains exact"),
+            identity
+        );
+        fs::remove_dir_all(directory).expect("remove symlink key fixture");
+    }
+
     #[tokio::test]
     async fn fresh_creation_publishes_identity_and_retry_is_exact() {
         let root = test_dir();
@@ -237,6 +446,16 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
+            for directory in [&data_dir, &root.join("new-parent"), &root] {
+                assert_eq!(
+                    fs::metadata(directory)
+                        .expect("managed directory metadata")
+                        .permissions()
+                        .mode()
+                        & 0o777,
+                    0o700
+                );
+            }
             assert_eq!(
                 fs::metadata(endpoint.key_path())
                     .expect("key metadata")
@@ -426,6 +645,12 @@ mod tests {
         let path = data_dir.join("endpoint.key");
         fs::write(&path, SecretKey::generate().to_bytes()[..16].to_vec())
             .expect("write invalid endpoint key");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+                .expect("secure malformed key fixture");
+        }
         assert_eq!(
             match UnifiedEndpoint::open(&data_dir, &idp_server::AppConfig::default()).await {
                 Err(error) => error.kind(),
