@@ -160,6 +160,12 @@ impl UnifiedRuntime {
         Self::build_on_listener(config, listener, loopback_base(listener_addr)).await
     }
 
+    /// Opens an already provisioned host; this is not a fresh setup boundary.
+    /// The host must durably authorize fresh intent, retain its exact endpoint/User/Client
+    /// identities, call `UnifiedEndpoint::open_fresh` once, and complete the owner's exact
+    /// secret inventory before initial private production. Retries use existing opening;
+    /// missing endpoint keys or preparation evidence require recovery, not fresh fallback.
+    /// The unified CLI/config currently provides no such fresh provisioning operation.
     pub async fn build_on_listener(
         config: UnifiedConfig,
         listener: TcpListener,
@@ -889,6 +895,12 @@ mod tests {
         let peer = idp_server::OwnerProvisioner::open(&peer_config)
             .await
             .expect("independent peer signer owner with fixture secret store");
+        peer.prepare_fresh_setup_secret_inventory(idp_model::model::Id::now_v7(), &[])
+            .await
+            .expect("fresh independent signer inventory");
+        peer.prepare_setup_client_slots(&[])
+            .await
+            .expect("complete peer inventory before private signing");
         let public = peer
             .prepare_node_signer(&binding)
             .expect("independent peer private preparation");
@@ -929,7 +941,7 @@ mod tests {
         };
         config.oauth2.issuer = format!("https://{}.test/idp", idp_model::model::Id::now_v7());
         let endpoint_dir = root.join("endpoint");
-        let initial = crate::UnifiedEndpoint::open(&endpoint_dir, &config)
+        let initial = crate::UnifiedEndpoint::open_fresh(&endpoint_dir, &config)
             .await
             .expect("persist Node endpoint");
         let local = initial.endpoint_id();
@@ -1141,7 +1153,7 @@ mod tests {
         config.management_idp_client.client_secret = "management-idp-secret".to_owned();
         config.storage_idp_client.client_secret = "storage-idp-secret".to_owned();
         config.storage_management_client.client_secret = "storage-management-secret".to_owned();
-        let endpoint = crate::UnifiedEndpoint::open(&config.endpoint_data_dir, &config.idp)
+        let endpoint = crate::UnifiedEndpoint::open_fresh(&config.endpoint_data_dir, &config.idp)
             .await
             .expect("open endpoint for initial test provisioning");
         let endpoint_id = endpoint.endpoint_id();
@@ -1416,6 +1428,14 @@ mod tests {
         let joining_owner = idp_server::OwnerProvisioner::open(&joining_config)
             .await
             .expect("joining owner");
+        joining_owner
+            .prepare_fresh_setup_secret_inventory(fixture.administrator, &[])
+            .await
+            .expect("fresh pending joining owner inventory");
+        joining_owner
+            .prepare_setup_client_slots(&[])
+            .await
+            .expect("complete pending join inventory before private signing");
         let request = joining_owner
             .prepare_node_join(
                 &idp_service::oauth2::NodeSignerBinding {
