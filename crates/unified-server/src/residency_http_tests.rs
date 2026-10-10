@@ -212,6 +212,122 @@ async fn public_residency_read_reports_durable_mode_after_native_reopen() {
 }
 
 #[tokio::test]
+async fn overlapping_residency_puts_serialize_only_the_exact_copy_and_reopen_consistently() {
+    let gate = Gate::default();
+    let (mut fixture, copies) = ready_fixture_with_gate(Some(gate.clone())).await;
+    let token = fixture
+        .token(
+            "storage:filesystems",
+            vec![
+                StorageAuthorizationAction::Read,
+                StorageAuthorizationAction::Write,
+            ],
+        )
+        .await;
+    let unrelated = fixture
+        .files
+        .create_resource(&fixture.scope, None)
+        .await
+        .expect("unrelated local copy");
+    fixture
+        .files
+        .open_resource(&fixture.scope, unrelated.id)
+        .await
+        .expect("open unrelated copy");
+    let first = fixture
+        .http
+        .put(url(&fixture))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"mode":"passthrough"}));
+    let first = tokio::spawn(async move { first.send().await.expect("first public PUT") });
+    tokio::time::timeout(std::time::Duration::from_secs(30), gate.reached())
+        .await
+        .expect("first execution recheck paused");
+    let second = fixture
+        .http
+        .put(url(&fixture))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"mode":"full"}));
+    let mut second =
+        tokio::spawn(async move { second.send().await.expect("overlapping public PUT") });
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_secs(1), &mut second)
+            .await
+            .is_err(),
+        "same-copy PUT must wait while the earlier execution recheck is paused"
+    );
+    fixture
+        .files
+        .set_resource_residency(
+            &fixture.scope,
+            unrelated.id,
+            file_system::Residency::Passthrough,
+        )
+        .await
+        .expect("unrelated copy is not locked by paused PUT");
+    gate.release();
+    assert_eq!(
+        first.await.expect("first task").status(),
+        reqwest::StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        second.await.expect("second task").status(),
+        reqwest::StatusCode::NO_CONTENT
+    );
+    let independent = fixture
+        .http
+        .put(format!(
+            "{}/storage/filesystems/{}/residency",
+            fixture.storage_listener.base,
+            unrelated.id.as_uuid()
+        ))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"mode":"passthrough"}))
+        .send()
+        .await
+        .expect("unrelated public PUT");
+    assert_eq!(independent.status(), reqwest::StatusCode::NO_CONTENT);
+    let live = fixture
+        .http
+        .get(url(&fixture))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .expect("live owner GET");
+    assert_eq!(live.status(), reqwest::StatusCode::OK);
+    assert_eq!(
+        live.json::<serde_json::Value>().await.expect("live mode"),
+        serde_json::json!({"mode":"full"})
+    );
+    fixture.storage_listener.stop().await;
+    drop(copies);
+    fixture.files = Arc::new(
+        ScopedFileSystemRuntime::new(
+            fixture._directory.0.join("files"),
+            fixture.identity.endpoint().id(),
+        )
+        .expect("reopen native copies"),
+    );
+    let _copies = start_storage(&mut fixture).await;
+    let reopened = fixture
+        .http
+        .get(url(&fixture))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .expect("reopened owner GET");
+    assert_eq!(reopened.status(), reqwest::StatusCode::OK);
+    assert_eq!(
+        reopened
+            .json::<serde_json::Value>()
+            .await
+            .expect("durable mode"),
+        serde_json::json!({"mode":"full"})
+    );
+    fixture.stop().await;
+}
+
+#[tokio::test]
 async fn residency_denials_preserve_mode_and_cleanup_fences() {
     let (fixture, _copies) = ready_fixture().await;
     let read = fixture
