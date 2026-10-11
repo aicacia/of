@@ -1,4 +1,0 @@
-idp_ui_public_uri: "https://lidp.localhost:1355"
-data_dir: "data"
-bootstrap:
-  web: true

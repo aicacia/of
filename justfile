@@ -76,9 +76,3 @@ storage config:
 
 unified config:
     cargo run -p unified-server --features cli --bin unified-server -- --config {{config}}
-
-api:
-    pnpx portless api cargo run -- -c ./config/primary/config.yaml
-
-api-secondary:
-    pnpx portless api-secondary cargo run -- -c ./config/secondary/config.yaml
