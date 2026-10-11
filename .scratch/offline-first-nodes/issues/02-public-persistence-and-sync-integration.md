@@ -13,6 +13,8 @@ Integrate identity/policy/catalog persistence and synchronization using owner pu
 
 ## Scope and acceptance criteria
 
+Qualification follows the [machine-local policy](../spec.md#machine-local-qualification-policy): focused Ubuntu consumer/owner evidence and real isolated same-host protocol exchanges; no whole-workspace feature/CRAP sweeps or physical multi-device gate. Public facade/extraction and integrity requirements, prior resolved scope and evidence remain unchanged.
+
 - [x] Record usable public contracts and qualification evidence from the seven concrete prerequisite tickets linked above: ofdb 01–05 and offs 01–02. Those trackers/ticket IDs have been reviewed and exist; their existence does not establish implementation completion. Do not wait for ofdb 06: it consumes this ticket's migration evidence and of 03 authorization evidence.
 - [x] `of` consumes only public `ofdb-sql` and `ofdb-kv` for SQL/KV persistence/sync. Audit direct/transitive source imports and Cargo edges under `of`; remove backend/internal crate usage and tests that require it.
 - [x] SQL/KV stage formats, temporary-file lifecycle, CRDT mechanics, batching and cleanup are owned by `ofdb`. Delete obsolete `of` implementations after owner APIs replace them, with no compatibility wrappers or second framing/recovery layer.

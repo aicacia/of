@@ -2,7 +2,13 @@
 
 ## Notes
 
-### Current checkpoint — 2026-10-11, desktop cleanup and stopped-store recovery integrated
+### Current checkpoint — 2026-10-11, user-approved machine-local qualification
+
+- All eight `of` tickets and linked15 `ofdb`/3 `offs` tickets use bounded Ubuntu Linux x86_64 qualification. [Policy and follow-ups](spec.md#machine-local-qualification-policy) supersede historical broad completion-gate lists, not historical evidence. No ticket status, prior checkbox or dependency is automatically changed;04/07 need revised-scope audits and08 still requires actual same-host full-Node integration.
+- Foreign-platform, unattended/container deployment, physical WAN/multi-device and exhaustive fault/feature qualification are follow-ups. Retained-provider stopped filesystem recovery is the supported recovery gate; lost-provider/populated/crash recovery is not claimed. No full Cargo Hack/CRAP sweep. Production auth/integrity, independent stores/signers, real authenticated join, learned denial and representative cleanup failures remain required locally.
+  -07 owns local lifecycle/rotation/recovery;08 composes multi-Node partition/reconnect/propagation without repeating the deferred GUI loop. The detached owner mesh-task limitation stays explicit; no universal task-join claim. Changes are documentation only, not new test evidence or implementation acceptance.
+
+### Historical checkpoint — 2026-10-11, desktop cleanup and stopped-store recovery integrated
 
 - Integration `cdf7afee` contains independently reviewed desktop `418dba2`/`cb33e7a` and recovery `257e6ee`; no main merge or push. Five desktop focused regressions and recovery/existing-host controls pass; sensitivity failures are recorded separately from restored-source final passes. [Desktop evidence](evidence/evidence07-desktop.md), [recovery evidence](evidence/07-recovery.md).
 - Ordinary startup cleanup no longer skips owners or masks initiating errors; managed setup/restored-listener errors clean owners and returned window-close errors request exit. Actual stopped filesystem restore preserves same-Node endpoint/signer/trust with retained mock protected provider; no lost-provider/populated-content recovery claim.
@@ -225,6 +231,10 @@ Earlier unresolved/blocker/not-integrated statements below describe their named 
 ## Fog
 
 ### Current gaps — 2026-10-11
+
+Current closure scope is the [machine-local policy](spec.md#machine-local-qualification-policy), not the historical platform/exhaustive lists below. Audit remaining04/07 local criteria without rerunning deferred GUI approval;08 still needs real isolated same-host full-Node partition/reconnect integration. Foreign-platform/deployment/provider-loss/exhaustive qualification does not block these tickets. Known local bugs and unqualified actual authorization/completion remain blockers.
+
+### Historical gaps — before machine-local narrowing
 
 - **04 criteria6–9 remain qualification work**, not the former missing security/inventory/endpoint/Residency/caller deliveries. [Current audit](evidence/current-frontier.md) records bounded fail-closed recovery limits, actual peer propagation, composed cleanup/Residency interactions, and the native GUI CA-consent gate. No blanket checkbox completion or unsupported-platform claim.
 - Explicit local CLI provisioning is reviewed/integrated, but06 contract/artifact audit and07 deployment/rotation/backup/platform/lifecycle acceptance remain unresolved despite prerequisite slices. Evaluator timing risk remains: two independent timeout failures and unchanged later independent three-test pass, no proven fix. [Partial-bootstrap branch](evidence/04-partial-bootstrap/README.md) has two uncommitted/unqualified test/helper files, no integrated completion: stack overflow/timeouts, final run before observer, no strict partial-import/reopen/retry observation.08 still owns full-Node partition/reconnect and final validation. Supplementary same-issued-token expiry and the unexplained historical503 remain unqualified, not reopened03 or reverse08 blockers.

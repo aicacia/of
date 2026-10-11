@@ -11,6 +11,8 @@ Update current contracts and safely regenerate clients for equal offline-first N
 
 ## Scope and acceptance criteria
 
+Qualification follows the [machine-local policy](../spec.md#machine-local-qualification-policy): current local endpoint generation, source-preservation controls and focused client/UI/build checks available on Ubuntu. No cross-platform deployment or full feature/CRAP sweep is required. Prior resolved scope and evidence remain unchanged.
+
 - [x] Obtain complete current specifications from verified endpoints and use existing temporary-output generators. Missing URL, unreachable endpoint, incomplete operations or failed generation leave generated sources unchanged. No hand-editing generated code.
 - [x] Include current identity/Device, permission, restriction, selection, transfer, trusted-peer setup and readiness contracts. Preserve IdP identity administration ownership and exact actor/action/target semantics; do not invent undocumented routes.
 - [x] Service prefixes are joined exactly once; keep built-in Management Application URI `idp-management` distinct from transport prefixes. Update desktop probes/callers to distinguish setup from persistent local readiness.

@@ -11,6 +11,8 @@ Complete locally checked Device mutation permissions, owner-bound selections, ad
 
 ## Scope and acceptance criteria
 
+Qualification follows the [machine-local policy](../spec.md#machine-local-qualification-policy): focused Ubuntu owner/API/cleanup tests and isolated same-host authenticated peers. Representative deterministic transfer/cleanup/retry gates suffice; exhaustive platform/power-loss matrices and full feature/CRAP sweeps are not closure gates. Prior resolved scope and evidence remain unchanged.
+
 - [x] Device enrollment/rename/approval/revocation enforce locally verified actor, exact action/target, and owner binding through IdP/Management owner boundaries. A generic User bearer or Storage read scope is insufficient; service principals cannot impersonate Users or gain pairing/admin capability accidentally.
 - [x] Selection/deselection binds to trusted local IdP Device ownership, Installation, endpoint, and locally verified Storage kind/ID/namespace. A stale selection-policy owner cannot override IdP ownership. Unknown local resources deny; trusted local resources remain selectable offline. Keep resource-specific deselection and explicit permission checks.
 - [x] Expose typed administrator restriction read/update APIs with exact scope/target permissions. Denied/malformed/wrong-target updates preserve prior policy; learned restrictions affect subsequent operations through 03.

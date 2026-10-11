@@ -12,6 +12,8 @@ Wire locally checked domain permissions before each actual apply operation using
 
 ## Scope and acceptance criteria
 
+Qualification follows the [machine-local policy](../spec.md#machine-local-qualification-policy): real local owners and authenticated isolated same-host Iroh peers, with deterministic apply/write/revocation gates and focused Ubuntu checks. No remote physical machines, platform matrix or full feature/CRAP sweep is required. Prior resolved scope and evidence remain unchanged.
+
 - [x] Identify actual SQL/KV apply operations, filesystem metadata/content mutations, API mutations, resource reads, and outbound/queued socket writes. Receiving, admission, and enqueueing do not authorize later execution.
 - [x] Both peers independently check local trusted Device identity/owner, actor/action/target where applicable, subject/Application, resource kind/ID, both selections, and restrictions. Local identity comes from the injected endpoint; remote identity comes from authenticated Iroh, never handshake/header claims.
 - [x] Supply authorization through generic owner execution hooks. No new trait is prescribed, and no IdP/Management policy enters `ofdb` or `offs`. Record the actual APIs and focused evidence from the linked ofdb 03/04 and offs 01 hook tickets. Native staging/composition and content-integrity prerequisites are already inherited through of 02. Do not block on ofdb 06 or offs 03 final status: supply this ticket's real authorization evidence to their handoff/acceptance work.

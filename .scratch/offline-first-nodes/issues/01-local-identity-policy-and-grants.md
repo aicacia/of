@@ -11,6 +11,8 @@ Replace authority/replica identity and policy semantics with equal Node operatio
 
 ## Scope and acceptance criteria
 
+Qualification follows the [machine-local policy](../spec.md#machine-local-qualification-policy): focused Ubuntu evidence, isolated same-host Nodes where relevant, no full feature/CRAP sweeps or foreign-platform completion gate. Prior resolved scope and evidence are unchanged.
+
 **Completion scope:** checks below certify the ticket 01-owned local identity/policy/signer/grant foundation and public security contracts, as split explicitly in the Answer below. Native persisted binding/database reopen is local acceptance. Production setup/join is 04; OS secure-store/completed-host restart is 04/07/08; safe history exchange and authenticated import/apply are 02/03. Those are downstream consumers, not prerequisites of 01. These checks do not certify the complete offline-first spec or resolve any other ticket.
 
 - [x] Audit/remove designated-writer/authority/replica mutation guards, promotion concepts, 30-second freshness readiness, restart-unready leases, and mandatory remote authorization. Keep context repositories separate and owner APIs authenticated.
