@@ -845,49 +845,55 @@ async fn start_composed_unified_runtime(
     )?;
     let config = unified_runtime_config(&app_data_dir, listener.local_addr()?, &base_url, &ids)?;
     let mut runtime = UnifiedRuntime::build_on_listener(config, listener, base_url.clone()).await?;
-    let ready = current_public_ready(&runtime, &app_data_dir).await;
-    if !matches!(ready, Ok(true)) {
-        runtime.shutdown().await?;
-        return Err(io::Error::other(
-            "current local trust, both public contexts and independent signer are required before starting a Node",
-        ));
-    }
-    let router = runtime.router();
-    let listener = runtime.take_listener()?;
-    let server = match start_unified_localhost_server(router, listener, &app_data_dir) {
-        Ok(server) => server,
-        Err(error) => {
-            runtime.shutdown().await?;
-            return Err(io::Error::other(error));
+    let startup = async {
+        if !current_public_ready(&runtime, &app_data_dir).await? {
+            return Err(io::Error::other(
+                "current local trust, both public contexts and independent signer are required before starting a Node",
+            ));
         }
-    };
-    set_localhost_server(app_handle, server).await;
-    set_localhost_server_state(app_handle, base_url.clone(), true).await;
-
-    if let Err(error) = verify_unified_localhost_server(&base_url).await {
-        set_localhost_server_state(app_handle, String::new(), false).await;
-        close(app_handle).await?;
-        runtime.shutdown().await?;
-        return Err(error);
+        let router = runtime.router();
+        let listener = runtime.take_listener()?;
+        let server = start_unified_localhost_server(router, listener, &app_data_dir)
+            .map_err(io::Error::other)?;
+        set_localhost_server(app_handle, server).await;
+        set_localhost_server_state(app_handle, base_url.clone(), true).await;
+        verify_unified_localhost_server(&base_url).await?;
+        runtime.start_background_tasks().await?;
+        if persist_ready {
+            crate::setup_completion::write(
+                &app_data_dir,
+                SETUP_READY_FILE,
+                &ids.installation_id.to_string(),
+            )?;
+        }
+        Ok(())
     }
-    if let Err(error) = runtime.start_background_tasks().await {
-        close(app_handle).await?;
-        runtime.shutdown().await?;
-        return Err(error);
-    }
+    .await;
+    let runtime = finish_runtime_startup(runtime, startup, close(app_handle)).await?;
     store_unified_runtime(app_handle, runtime).await;
-    if persist_ready {
-        if let Err(error) = crate::setup_completion::write(
-            &app_data_dir,
-            SETUP_READY_FILE,
-            &ids.installation_id.to_string(),
-        ) {
-            close(app_handle).await?;
-            return Err(error);
-        }
-    }
     Ok(())
 }
+
+async fn finish_runtime_startup(
+    runtime: UnifiedRuntime,
+    startup: io::Result<()>,
+    close_listener: impl core::future::Future<Output = io::Result<()>>,
+) -> io::Result<UnifiedRuntime> {
+    if let Err(error) = startup {
+        if let Err(cleanup_error) = close_listener.await {
+            log::error!("desktop listener cleanup after startup failure: {cleanup_error}");
+        }
+        if let Err(cleanup_error) = runtime.shutdown().await {
+            log::error!("desktop runtime cleanup after startup failure: {cleanup_error}");
+        }
+        return Err(error);
+    }
+    Ok(runtime)
+}
+
+#[cfg(all(test, unix))]
+#[path = "desktop_lifecycle_tests.rs"]
+mod desktop_lifecycle_tests;
 
 async fn set_localhost_server(app_handle: &AppHandle<Wry>, server: LocalhostServer) {
     if let Some(state) = app_handle.try_state::<Mutex<Option<LocalhostServer>>>() {
