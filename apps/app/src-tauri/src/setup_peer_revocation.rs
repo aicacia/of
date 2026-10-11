@@ -93,10 +93,18 @@ pub(super) async fn revoke(
         format!("replica-signers/{member_id}"),
         format!("devices/{member_id}"),
     ] {
-        client.delete(format!("{peer_api}/{path}")).bearer_auth(access_token).send().await
-            .map_err(|error| error.to_string())?.error_for_status().map_err(|error| {
-                format!("peer revocation incomplete; public target retained for later authorized retry: {error}")
-            })?;
+        let response = client
+            .delete(format!("{peer_api}/{path}"))
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .map_err(|error| error.to_string())?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(format!(
+                "peer revocation incomplete; public target retained for later authorized retry: {path} returned {status}"
+            ));
+        }
     }
     reset::acknowledge_revocation(data, &target).map_err(|error| error.to_string())
 }

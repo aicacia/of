@@ -8,6 +8,7 @@ use std::{
     },
 };
 
+use axum::response::IntoResponse;
 use idp_model::{
     contract::{
         ApplicationRegistration, ClientProfile, ClientRegistration, ClientType, GrantType,
@@ -372,6 +373,8 @@ impl Peer {
 #[derive(Default)]
 struct Faults {
     hold_device_ack: Mutex<bool>,
+    redirect_delete: Mutex<Option<(String, axum::http::StatusCode)>>,
+    redirect_followed: AtomicUsize,
     committed: Notify,
     release: Notify,
     tokens: AtomicUsize,
@@ -390,6 +393,31 @@ async fn observe_response(
     }
     if request.method() == axum::http::Method::DELETE {
         faults.deletes.fetch_add(1, Ordering::SeqCst);
+    }
+    if request.uri().path() == "/idp/redirect-destination" {
+        faults.redirect_followed.fetch_add(1, Ordering::SeqCst);
+    }
+    let redirect = {
+        let mut redirect = faults
+            .redirect_delete
+            .lock()
+            .expect("DELETE redirect fault");
+        if request.method() == axum::http::Method::DELETE
+            && redirect
+                .as_ref()
+                .is_some_and(|(path, _)| request.uri().path() == path)
+        {
+            redirect.take()
+        } else {
+            None
+        }
+    };
+    if let Some((_, status)) = redirect {
+        return (
+            status,
+            [(axum::http::header::LOCATION, "/idp/redirect-destination")],
+        )
+            .into_response();
     }
     let response = next.run(request).await;
     let hold = device
@@ -748,6 +776,78 @@ async fn queued_peer_revocation_unknown_device_404_is_not_acknowledgement() {
     );
     peer.assert_remote(true, true).await;
     assert_eq!(peer.status(), "pending");
+    peer.close().await;
+}
+
+#[tokio::test]
+async fn queued_peer_revocation_device_redirect_after_signer_success_stays_pending() {
+    let mut peer = Peer::open(&[
+        IdentityAction::ReplicaSignersRevoke,
+        IdentityAction::DevicesRevoke,
+    ])
+    .await;
+    *peer
+        .faults
+        .redirect_delete
+        .lock()
+        .expect("arm Device redirect") = Some((
+        format!("/idp/devices/{}", peer.target),
+        axum::http::StatusCode::FOUND,
+    ));
+    let result = peer.revoke().await;
+    peer.assert_remote(false, true).await;
+    assert_eq!(peer.faults.deletes.load(Ordering::SeqCst), 2);
+    assert_eq!(peer.faults.redirect_followed.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        peer.status(),
+        "pending",
+        "302 Device response must not durably acknowledge an unrevoked Device"
+    );
+    let error = result.expect_err("non-2xx Device response is not successful revocation");
+    assert!(error.contains("302"), "actual redirect status: {error}");
+    peer.reopen().await;
+    assert_eq!(peer.status(), "pending");
+    peer.assert_remote(false, true).await;
+    peer.revoke()
+        .await
+        .expect("real authorized retry without redirect");
+    peer.assert_remote(false, false).await;
+    assert_eq!(peer.status(), "acknowledged");
+    peer.close().await;
+}
+
+#[tokio::test]
+async fn queued_peer_revocation_signer_redirect_stops_before_device_and_stays_pending() {
+    let mut peer = Peer::open(&[
+        IdentityAction::ReplicaSignersRevoke,
+        IdentityAction::DevicesRevoke,
+    ])
+    .await;
+    *peer
+        .faults
+        .redirect_delete
+        .lock()
+        .expect("arm signer redirect") = Some((
+        format!("/idp/replica-signers/{}", peer.target),
+        axum::http::StatusCode::TEMPORARY_REDIRECT,
+    ));
+    let error = peer
+        .revoke()
+        .await
+        .expect_err("non-2xx signer response must stop before Device DELETE");
+    assert!(error.contains("307"), "actual redirect status: {error}");
+    assert_eq!(peer.faults.deletes.load(Ordering::SeqCst), 1);
+    assert_eq!(peer.faults.redirect_followed.load(Ordering::SeqCst), 0);
+    peer.assert_remote(true, true).await;
+    assert_eq!(peer.status(), "pending");
+    peer.reopen().await;
+    assert_eq!(peer.status(), "pending");
+    peer.assert_remote(true, true).await;
+    peer.revoke()
+        .await
+        .expect("real authorized retry without redirect");
+    peer.assert_remote(false, false).await;
+    assert_eq!(peer.status(), "acknowledged");
     peer.close().await;
 }
 
