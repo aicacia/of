@@ -10,6 +10,8 @@ IdP administration uses validated bearer identity with exact audience, action an
 
 `/replica-signers` is the current authorized public Node-signer API. Its historical name, `DbReplicaSignerRepo`, persisted membership table names, `replica` persistence features and CRDT source/receiver roles do not create a designated authority/privileged replica topology. Public signer approval is not private signing capability or blanket synchronization permission.
 
+Storage transport bases are not token audiences. The password-manager caller delivery exchanges the current User token for `resource=storage:filesystems`, with exact typed Storage actions: read for listing, write for creation, read/write for the editable filesystem socket. Explicit IdP/Storage service bases replace the audience/origin fallback; no actor override or wider permission is introduced. [Current owner evidence](../.scratch/offline-first-nodes/evidence/06-audit.md#current-clientcaller-handoff--2026-10-11) qualifies these caller/package checks, not server authorization, GUI approval or deployment acceptance.
+
 ## Local trust and learned denial
 
 Each Node checks persistent locally trusted IdP/Management owner state. Unified service relationships use the local contexts; unavailable or invalid local evidence denies. Loss of a remote peer alone is not authorization loss, and there is no 30-second trust freshness gate. Normal token expiry/renewal margins, purpose-specific pairing controls and bounded test waits are not trust leases.

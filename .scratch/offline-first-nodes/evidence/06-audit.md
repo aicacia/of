@@ -154,3 +154,28 @@ GIT_EDITOR=true git -c core.hooksPath=/dev/null -c maintenance.auto=false merge 
 Original root had only pre-existing storage-client generated output/shim changes and retained worktrees/native target; no owned-document dirt. No reset/stash/clean, source override, profile/keyring or shared-target cleanup. Evidence is force-added from this worktree, not an edit of historical root evidence.
 
 Ticket06 stays claimed until generation/caller owners provide remaining evidence; ticket04 dependency/qualification is not waived by completion of this audit slice.
+
+## Current client/caller handoff — 2026-10-11
+
+This append supersedes only the original audit-base pending generation/caller findings above. Historical commands, findings and limitations remain unchanged. These owner deliveries are **not asserted merged into integration**.
+
+- `dcdf8e9:.scratch/offline-first-nodes/evidence/06-clients.md` records actual generation from all three isolated live public routers: IdP50, Management24, Storage14; 88 operations/nine groups. Stale bootstrap API/model/exports are removed through generation. The owner also records actual unreachable-endpoint source preservation and focused generated-client checks; none were rerun by this documentation task.
+- `86178f5` updates the active password-manager/handwritten Storage caller to explicit IdP/Storage service bases, filesystem token-exchange resource and flat socket requests. `PUBLIC_STORAGE_BASE_URL` is required alongside `PUBLIC_LIDP_BASE_URL`; `PUBLIC_STORAGE_AUDIENCE`/origin fallback is removed. Existing deployments must supply the complete Storage service base; transport addresses do not become token audiences or permission grants.
+- `2bbc849:.scratch/offline-first-nodes/evidence/06-callers.md` records an isolated normal Storage package build and **five unaliased password-manager consumer checks passing**. Public exports use `esm`/`types`; explicit normal build-before-publication is required because no automatic `prepack` hook exists. Publish complete output including compiled generated dependency trees, not only five tracked output files. Those build products were not staged by the caller owner; root user-dirty output/shim artifacts remain unchanged. This is scoped package qualification, not a whole password-manager production build or deployment acceptance.
+- Per current caller handoff, password-manager production `kit.alias` is being implemented to consume the same owned source without stale root outputs. It is pending, not qualified by this documentation update. Workspace source consumption and normal distribution builds remain distinct.
+
+Updated only stable API/security/operations guidance and appended this handoff. No code, build, install, generation, GUI or root-artifact write. Ticket04 GUI approval/completion/two-profile restart remains incomplete; 07/08 remain unaccepted.
+
+Read-only evidence/source verification used:
+
+```sh
+# cwd of/.worktrees/ticket06-docs
+git --no-pager show dcdf8e9:.scratch/offline-first-nodes/evidence/06-clients.md
+git --no-pager show 2bbc849:.scratch/offline-first-nodes/evidence/06-callers.md
+git --no-pager show 86178f5 -- apps/password-manager/.env.example apps/password-manager/src/lib/common/storageSocket.ts packages/storage-client/src/index.ts
+git --no-pager show 2bbc849:packages/storage-client/package.json
+git --no-pager show 2bbc849:packages/storage-client/tsconfig.json
+git --no-pager show 2bbc849:packages/storage-client/.gitignore
+```
+
+Validation: the targeted standard-library document/link check recorded above passed **15 documents, 111 links, zero failures**; `git --no-pager diff --check` passed. No owner test/build is counted as a docs-task rerun. Integration-tip consumption used `GIT_EDITOR=true git -c core.hooksPath=/dev/null -c maintenance.auto=false merge --ff-only offline-first-nodes-integration`: already up to date at `2e67ed5`. Only these three stable documents and the appended audit evidence are staged.

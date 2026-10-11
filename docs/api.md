@@ -1,6 +1,6 @@
 # Node API contracts
 
-Source-audited on 2026-10-11 at ticket-06 base `2e67ed5`. This documents current owner boundaries, not live endpoint regeneration or full offline-first acceptance. [System design](design.md) defines requirements; [audit evidence](../.scratch/offline-first-nodes/evidence/06-audit.md) records scope, findings and limitations.
+Source-audited on 2026-10-11 at ticket-06 base `2e67ed5`, with subsequent client/caller owner evidence linked below. These are scoped contracts and qualification, not a claim that owner deliveries are merged or full offline-first acceptance is complete. [System design](design.md) defines requirements; [audit evidence](../.scratch/offline-first-nodes/evidence/06-audit.md) records scope, findings and limitations.
 
 ## Owner contracts
 
@@ -40,7 +40,13 @@ Production provisioning and purpose-bound bootstrap exist, with scoped backend e
 
 Generate from complete specifications obtained from verified current owner endpoints using the existing temporary-output workflow in `scripts/generate-openapi-client.mjs`. At this audit base its inventory contains 88 operations across nine groups (IdP 50, Management 24, Storage 14), including current permission, Device, restriction, selection, transfer and Residency operations. Purpose-bound native join/readiness must not be invented as HTTP operations to fill an inventory.
 
-Missing URLs, unreachable endpoints, incomplete operations/supporting files, generator failure or staged formatting failure must leave checked-in generated sources unchanged. Never hand-edit generated models/routes or use stale generated setup APIs as evidence that a removed route is supported. The base still has generated `SuperRoutesSetupApi`/`SetupBootstrapRequest`; regeneration belongs to the client owner, not this documentation audit. [Generator safety](../.scratch/offline-first-nodes/evidence/06-generator-safety.md) and [source removal](../.scratch/offline-first-nodes/evidence/06-obsolete-contracts.md) retain prior exact results. No live generation or client/UI check was run here.
+Missing URLs, unreachable endpoints, incomplete operations/supporting files, generator failure or staged formatting failure must leave checked-in generated sources unchanged. Never hand-edit generated models/routes or use stale generated setup APIs as evidence that a removed route is supported. The original audit-base stale bootstrap finding is historical: client-owner evidence at `dcdf8e9` records actual generation from all three isolated live public routers (50/24/14 operations, 88 total across nine groups) and removal of `SuperRoutesSetupApi`/`SetupBootstrapRequest`. [The current handoff](../.scratch/offline-first-nodes/evidence/06-audit.md#current-clientcaller-handoff--2026-10-11) links owner evidence without asserting integration. [Generator safety](../.scratch/offline-first-nodes/evidence/06-generator-safety.md) and [source removal](../.scratch/offline-first-nodes/evidence/06-obsolete-contracts.md) retain prior exact results. This documentation task reran no generation or client/UI tests.
+
+## Storage client consumption
+
+The caller delivery uses explicit `idpBaseUrl` and `storageBaseUrl`, not legacy `baseUrl`/`audience` options or an origin-derived audience fallback. Password-manager requires both `PUBLIC_LIDP_BASE_URL` and **`PUBLIC_STORAGE_BASE_URL`** as complete service bases, including `/idp` and `/storage`; `PUBLIC_STORAGE_AUDIENCE` is no longer consumed. Token exchange selects `resource=storage:filesystems`; catalog calls append `/filesystems` to the Storage base and the socket uses that base with flat Storage requests, preserving each prefix once.
+
+Public Storage package exports resolve through `esm`/`types`. Explicitly run the package's normal build before publication; there is no automatic `prepack` hook. Distribute the complete output, including compiled generated dependencies, not only the five tracked output files. Workspace source consumption and distribution builds are separate; see [operations](operations.md#client-configuration-and-distribution).
 
 ## Source anchors
 
