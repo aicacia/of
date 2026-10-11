@@ -26,7 +26,7 @@ _Avoid_: Vault ID
 The stable identity of one Application database, separate from IdP/Management state and every Filesystem ID.
 
 **Residency**:
-A Device-local choice per filesystem path: Full stores metadata and content locally, while Passthrough stores metadata and reads content from an available Full peer but cannot write. Residency is not synchronized.
+A Device-local choice for a filesystem resource or path: Full stores metadata and content locally, while Passthrough stores metadata and reads content from an authorized available Full peer but cannot write. Residency is not synchronized.
 
 **File System**:
 A local-first replicated storage engine for paths, metadata, and file content, separate from Application databases and IdP/Management records. It has no file permission bits, groups, or cross-user grants.

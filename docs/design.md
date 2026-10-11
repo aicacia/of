@@ -2,6 +2,8 @@
 
 This is the confirmed target architecture, not a claim that the implementation already satisfies it. [The glossary map](../GLOSSARY-MAP.md) links definitions and context contracts; [offline-first node work](../.scratch/offline-first-nodes/map.md) tracks implementation and acceptance gaps.
 
+Current source contracts and acceptance limits are summarized in [API boundaries](api.md) and [security boundaries](security.md). Production owner-local provisioning and purpose-bound join/bootstrap are delivered seams, not a claim of full ticket-04 GUI/completion/restart acceptance. The [ticket-06 artifact audit](../.scratch/offline-first-nodes/evidence/06-audit.md) records retained legitimate replication terminology separately from obsolete topology contracts.
+
 ## Equal offline-first nodes
 
 Every Node runs IdP, Management, and Storage. Nodes are equal peers: none is a designated writer, central authority, privileged replica, or promotion candidate. Any Node may mutate identity, policy, and resources when the actor's permissions checked against that Node's trusted local state permit it. An Installation shares a Canonical Issuer and approved public identities, not one live authorization server.

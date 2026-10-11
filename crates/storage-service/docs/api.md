@@ -1,6 +1,6 @@
 # Storage API
 
-Route tables below preserve the API description audited on 2026-10-06, not runtime acceptance or verification of the new architecture. The target is a full offline-first Node: authenticated operations use persistent locally trusted IdP/Management state, not mandatory remote introspection. See [security](security.md), the [offline-first Nodes spec](../../../.scratch/offline-first-nodes/spec.md), and [active tickets](../../../.scratch/offline-first-nodes/map.md).
+These contracts were source-audited for ticket 06 on 2026-10-11; this is not a new runtime test or full-Node acceptance. Unified composition uses locally hosted IdP/Management owner boundaries and persistent trusted state. HTTP introspection of the local IdP is not a required remote authority. See [security](security.md), the [offline-first Nodes spec](../../../.scratch/offline-first-nodes/spec.md), and [active tickets](../../../.scratch/offline-first-nodes/map.md).
 
 ## Identity and ownership
 
@@ -47,7 +47,7 @@ The desktop uses generated `ResourcesResidencyApi` against the verified local `/
 
 IdP owns Device enrollment, approval, and revocation. Management owns resource selections, restrictions, and replication admission. Services use authenticated owner APIs and separate repositories, including in unified hosting.
 
-Routes below show the unified `/management` prefix. The historical implementation uses IdP introspection, requires a User principal with the Management audience, and checks Application-scoped `devices.select`. The target validates against the Node's local trusted IdP state and local Management permissions; no reachable remote IdP is required.
+Routes below show the unified `/management` prefix. Management validates the User principal through its configured IdP owner relationship and checks Application-scoped `devices.select` in its own persistent store. Unified composition points that relationship at the local IdP listener. Failure of the local identity/policy context denies; a remote peer need not be reachable. Standalone configuration must not be mistaken for completed equal-Node composition. See [system API boundaries](../../../docs/api.md).
 
 | Operation         | Route                                                                                    | Current behavior                                                                 |
 | ----------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
@@ -57,7 +57,7 @@ Routes below show the unified `/management` prefix. The historical implementatio
 
 Selection JSON contains `applicationId`, `kind` (`database` or `filesystem`), `id`, and `storageAccessToken`. The token is not supplied through an `X-Storage-Authorization` header. The Management token's Application must match `applicationId`. Resource-token audience is kind-specific (`storage:databases` or `storage:filesystems`), distinct from Management's configured Storage service-client audience.
 
-Validate the supplied Storage token's signature, configured issuer, audience/resource, use, lifetime, subject, User principal, and typed Storage `read` action. The obsolete legacy `storage` scope is not required. Bind Device ownership to locally trusted IdP records and check the kind-specific resource through the Node's Storage owner API. Unknown locally unverifiable resources and identity mismatch deny selection; offline locally verified resources remain usable. Deselect does not need content availability. Historical remote lookup/introspection behavior is a cutover gap, not a target remote dependency.
+Validate the supplied Storage token's signature, configured issuer, audience/resource, use, lifetime, subject, User principal, and typed Storage `read` action. The obsolete legacy `storage` scope is not required. Bind Device ownership to locally trusted IdP records and check the kind-specific resource through the Node's Storage owner API. Unknown locally unverifiable resources and identity mismatch deny selection; offline locally verified resources remain usable. Deselect does not need content availability. Local owner HTTP lookup/introspection remains an authenticated service boundary, not a central authorization lease.
 
 Selection starts empty and covers whole resources. Both selection and resource-specific deselection resolve current Device identity through locally hosted IdP `GET /devices/identities/{device_id}` with the service-only `idp.device.lookup` permission. IdP checks conflict-clear approved Device, canonical endpoint, signer-backed Installation membership and active owner. A stored policy owner is not identity evidence; deselection does not need content availability or a Storage read token.
 
