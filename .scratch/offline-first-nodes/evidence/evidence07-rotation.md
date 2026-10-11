@@ -187,3 +187,45 @@ images/TLS/desktop/GUI, same-Node backup/recovery, or all ticket-07 acceptance.
 The fixture provider is a narrow mock, not real OS keyring success. This is not
 a full feature-powerset or CRAP run. No reset, migration, central dependency,
 privilege widening or automatic missing-state recovery is supplied.
+
+## Independent review follow-up: assertion disclosure and limits
+
+The independent review identified a test-only disclosure in the added provider
+snapshot `assert_eq!`: a mismatch would print raw private material and Client
+secrets. Replaced only that assertion with boolean equality and a descriptive
+non-secret message, matching the baseline pattern. Inspected all assertions
+added by `8f50fd3`: the remaining operand-dumping comparisons contain HTTP
+statuses, scope/audience metadata, public endpoint identity, journal public
+intent/one-way verifiers, owner preparation inventory, or timestamps, not raw
+secrets/private keys/tokens. No other added raw-secret/token operand dump was
+found. Production code, permissions and relationship scopes remain unchanged.
+
+Acceptance is **serial Storage-to-IdP rotation/restart only**, not a concurrent
+rollout or qualification of every relationship. Owner metadata comparison and
+OAuth issuance are separate operations, **not an atomic snapshot guarantee**
+against concurrent owner changes. The verification seam is read-only in the
+sense of **no credential provisioning or repair**, not a guarantee of zero host
+DB writes during startup/runtime. Journal/provider/inventory assertions establish
+the named retained-state observations, not universal database immutability.
+
+This follow-up stays on `offline-first-node07-rotation` for the merger. Do not
+update root integration again; the earlier delivery instructions above describe
+the original slice, not authorization to merge this follow-up.
+
+### Follow-up validation
+
+Only the current-source authorized rotation regression was built and executed:
+
+```sh
+systemd-run --user --wait --pipe --unit=of-node07-rotation-review-assertion --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/node07-rotation -p MemoryMax=4G -p MemorySwapMax=0 -p RuntimeMaxSec=900 env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --jobs 1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --lib local_provisioning_tests::local_provisioning_authorized_rotation_reopens_completed_host -- --exact --test-threads=1
+```
+
+Tool timeout: 910000 ms. Invocation:
+`e67399a453be44cbbd82f3b1daa0f3f0`. Exit 0; compilation 1m51s;
+**1 passed / 0 failed / 70 filtered**, test 128.03s; service runtime 3m59.577s.
+No timeout/OOM reported. `rustfmt --edition 2024 --check
+crates/unified-server/src/local_provisioning_tests.rs` and
+`git --no-pager diff --check` also passed. No all-seven rerun, Clippy, full hack,
+CRAP, root integration update or root worktree edit was performed for this
+assertion-only follow-up. The original artifact hash/results above describe the
+original slice, not this rebuilt assertion-follow-up artifact.

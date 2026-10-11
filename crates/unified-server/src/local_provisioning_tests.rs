@@ -530,10 +530,9 @@ async fn local_provisioning_authorized_rotation_reopens_completed_host() {
             fs::read(&owner_inventory_path).expect("unchanged owner inventory"),
             owner_inventory
         );
-        assert_eq!(
-            fixture.secrets(),
-            secrets,
-            "no private material reproduced at startup"
+        assert!(
+            fixture.secrets() == secrets,
+            "host startup/reopen must not produce replacement private material"
         );
     }
     assert!(
