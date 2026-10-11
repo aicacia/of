@@ -427,18 +427,22 @@ impl LocalProvisioner {
         )?;
         require_file(&self.config.endpoint_data_dir.join("endpoint.key"), true)?;
         require_storage(&self.config)?;
-        let owner = OwnerProvisioner::open(&self.config.idp).await?;
         let binding = binding(&journal)?;
-        if Some(owner.verify_prepared_node_signer(&binding)?) != journal.public_signer
-            || Some(owner.verify_node_signer(&binding).await?) != journal.public_signer
+        if UnifiedEndpoint::persisted_endpoint_id(&self.config.endpoint_data_dir)?.to_string()
+            != binding.endpoint_id
         {
+            return Err(invalid(
+                "endpoint identity changed; exact recovery required",
+            ));
+        }
+        let mut config = self.config.clone();
+        config.idp.oauth2.local_signer = Some(binding.clone());
+        let owner = OwnerProvisioner::open(&config.idp).await?;
+        if Some(owner.verify_node_signer(&binding).await?) != journal.public_signer {
             return Err(invalid(
                 "current Node signing capability does not match completed intent",
             ));
         }
-        owner
-            .prepare_setup_client_slots(&client_ids(&journal)?)
-            .await?;
         for (mut request, credential) in journal
             .intent
             .clients
@@ -447,11 +451,9 @@ impl LocalProvisioner {
             .zip(credentials(&self.config)?)
         {
             request.client_secret = Some(credential.client_secret.clone());
-            owner.ensure_setup_infrastructure_client(request).await?;
+            owner.verify_infrastructure_client(request).await?;
         }
         drop(owner);
-        let mut config = self.config.clone();
-        config.idp.oauth2.local_signer = Some(binding);
         let runtime = UnifiedRuntime::build(config).await?;
         if journal.endpoint.as_deref() != Some(&runtime.endpoint_id().to_string()) {
             runtime.shutdown().await?;
@@ -512,11 +514,13 @@ impl LocalProvisioner {
                 "local intent identities must be distinct and non-nil",
             ));
         }
-        for (credential, verifier) in credentials(&self.config)?
-            .iter()
-            .zip(&journal.secret_verifiers)
-        {
-            verify(&credential.client_secret, verifier)?;
+        if !journal.complete {
+            for (credential, verifier) in credentials(&self.config)?
+                .iter()
+                .zip(&journal.secret_verifiers)
+            {
+                verify(&credential.client_secret, verifier)?;
+            }
         }
         if let Some(configured) = &self.config.idp.oauth2.local_signer
             && !same_binding(configured, &binding(&journal)?)

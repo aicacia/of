@@ -6,7 +6,10 @@ use std::{
 
 use db::Database;
 use idp_model::{
-    contract::{ClientRegistration, ErrorResponse},
+    contract::{
+        ClientCredentialsGrantRequest, ClientRegistration, ErrorResponse, OAuth2ClientAuth,
+        TokenRequest,
+    },
     model::Id,
 };
 use idp_service::{
@@ -15,7 +18,7 @@ use idp_service::{
         DbApplicationRepo, DbClientRepo, DbKeyRepo, DbOAuth2AuthorizationCodeRepo,
         DbOAuth2RefreshTokenRepo, DbOAuth2UserConsentRepo, DbUserRepo,
     },
-    repo::{KeyService, PrivateKeyKeyringRepo, PrivateKeyRepo},
+    repo::{ApplicationRepo, ClientRepo, KeyService, PrivateKeyKeyringRepo, PrivateKeyRepo},
 };
 
 use crate::AppConfig;
@@ -111,6 +114,91 @@ impl<P: PrivateKeyRepo + Send + Sync> OwnerProvisioner<P> {
             .await
             .map_err(to_io_error)?;
         Ok(user_id)
+    }
+
+    /// Verifies an existing active relationship without provisioning or repairing local state.
+    pub async fn verify_infrastructure_client(
+        &self,
+        mut expected: ClientRegistration,
+    ) -> io::Result<()> {
+        let id = expected.client_id.as_deref().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "existing Client ID is required",
+            )
+        })?;
+        let client = self
+            .oauth2
+            .client_repo
+            .find_client_by_client_id(id)
+            .await
+            .map_err(io::Error::other)?
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "existing Client is missing or inactive",
+                )
+            })?;
+        let secret = expected
+            .client_secret
+            .take()
+            .filter(|secret| !secret.trim().is_empty())
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "current Client secret is required",
+                )
+            })?;
+
+        let application = self
+            .oauth2
+            .application_repo
+            .find_by_id(client.application_id)
+            .await
+            .map_err(io::Error::other)?
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "existing Client Application is missing",
+                )
+            })?;
+        if expected.application.name.is_none() {
+            expected.application.name = Some(expected.client_name.clone());
+        }
+        if expected.client_uri.is_none() {
+            expected.client_uri = Some(expected.application.uri.clone());
+        }
+        let mut current: ClientRegistration = client.into();
+        current.application = idp_model::contract::ApplicationRegistration {
+            name: Some(application.name),
+            uri: application.uri,
+            description: application.description,
+        };
+        if current != expected {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "current Client relationship conflicts with retained intent",
+            ));
+        }
+        let id = expected.client_id.expect("validated existing Client ID");
+        self.oauth2
+            .token(
+                TokenRequest::ClientCredentials(ClientCredentialsGrantRequest {
+                    client_id: id.clone(),
+                    client_secret: secret.clone(),
+                    scope: Some(expected.allowed_scopes.join(" ")),
+                    audience: expected.allowed_audiences.first().cloned(),
+                    resource: None,
+                }),
+                Some(OAuth2ClientAuth {
+                    client_id: id,
+                    client_secret: Some(secret),
+                    method: expected.token_endpoint_auth_method,
+                }),
+            )
+            .await
+            .map_err(to_io_error)?;
+        Ok(())
     }
 
     pub async fn ensure_infrastructure_client(

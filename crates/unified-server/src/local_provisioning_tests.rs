@@ -176,6 +176,402 @@ fn secret_files_absent(root: &Path) {
     );
 }
 
+async fn rotation_login_client(fixture: &Fixture) -> idp_model::contract::ClientRegistration {
+    use idp_model::contract::{ClientRegistration, ClientType, GrantType, TokenEndpointAuthMethod};
+    use idp_service::{
+        oauth2::OAuth2Service,
+        replica::{
+            DbApplicationRepo, DbClientRepo, DbKeyRepo, DbOAuth2AuthorizationCodeRepo,
+            DbOAuth2RefreshTokenRepo, DbOAuth2UserConsentRepo, DbUserRepo,
+        },
+        repo::KeyService,
+    };
+    let engine =
+        Arc::new(db::Database::open(fixture.root.join("idp/idp.redb")).expect("retained IdP"));
+    let keys = Arc::new(KeyService::new(
+        DbKeyRepo::new(engine.clone()),
+        PrivateKeyKeyringRepo::new(&fixture.config.idp.oauth2.issuer)
+            .expect("fixture secure provider"),
+        fixture.config.idp.key_namespace.clone(),
+    ));
+    let service = OAuth2Service::new(
+        DbApplicationRepo::new(engine.clone()),
+        DbClientRepo::new(engine.clone(), keys.clone()),
+        DbOAuth2AuthorizationCodeRepo::new(engine.clone()),
+        DbOAuth2RefreshTokenRepo::new(engine.clone()),
+        DbUserRepo::new(engine.clone(), fixture.config.idp.password.clone()),
+        DbOAuth2UserConsentRepo::new(engine),
+        keys,
+        fixture.config.idp.oauth2.clone(),
+    );
+    let mut request: ClientRegistration =
+        serde_json::from_value(fixture.journal()["intent"]["clients"][1].clone())
+            .expect("public registration template");
+    request.client_id = None;
+    request.client_type = ClientType::Public;
+    request.token_endpoint_auth_method = TokenEndpointAuthMethod::None;
+    request.allowed_grant_types = vec![GrantType::Password, GrantType::TokenExchange];
+    request.allowed_scopes = vec!["openid".into()];
+    request.allowed_audiences = vec![fixture.config.storage_idp_client.audience.clone()];
+    service
+        .register_client(request)
+        .await
+        .expect("public IdP login Client fixture API")
+}
+
+async fn rotation_service_token(
+    http: &reqwest::Client,
+    base: &str,
+    credential: &ServiceClientCredentials,
+) -> reqwest::Response {
+    http.post(format!("{base}/idp/oauth2/token"))
+        .form(&[
+            ("grant_type", "client_credentials"),
+            ("client_id", credential.client_id.as_str()),
+            ("client_secret", credential.client_secret.as_str()),
+            ("audience", credential.audience.as_str()),
+            (
+                "scope",
+                "idp.token.validate idp.device.lookup idp.device.list",
+            ),
+        ])
+        .send()
+        .await
+        .expect("authenticated relationship token request")
+}
+
+#[tokio::test]
+async fn local_provisioning_authorized_rotation_reopens_completed_host() {
+    let fixture = Fixture::new();
+    let mut host = LocalProvisioner::create(
+        fixture.config.clone(),
+        "operator",
+        "Local Node",
+        &fixture.password,
+    )
+    .expect("explicit fresh host");
+    host.provision(&fixture.password)
+        .await
+        .expect("provision real isolated host");
+    let login = rotation_login_client(&fixture).await;
+    let delivery = keyring_core::api::CredentialStoreApi::build(
+        &*fixture.store,
+        "rotation-fixture",
+        "storage-idp-current",
+        None,
+    )
+    .expect("narrow secure provider test delivery");
+    delivery
+        .set_secret(b"fixture-securely-delivered-rotation-secret")
+        .expect("protected test secret delivery");
+    let mut rotated = fixture.config.clone();
+    rotated.storage_idp_client.client_secret = String::from_utf8(
+        delivery
+            .get_secret()
+            .expect("secure provider supplied current test secret"),
+    )
+    .expect("UTF-8 relationship credential");
+    let journal_path = fixture
+        .config
+        .local_provisioning_directory()
+        .join("intent.json");
+    let journal = fs::read(&journal_path).expect("completed historical intent");
+    let secrets = fixture.secrets();
+    let runtime = host
+        .build_runtime()
+        .await
+        .expect("existing completed runtime");
+    drop(host);
+    let endpoint = runtime.endpoint_id().to_string();
+    let base = format!("http://{}", runtime.local_addr());
+    let cancellation = runtime.cancellation_token();
+    let task = tokio::spawn(runtime.serve());
+    let http = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .expect("HTTP client");
+    let login_id = login.client_id.as_deref().expect("login Client ID");
+    let response = http
+        .post(format!("{base}/idp/oauth2/token"))
+        .form(&[
+            ("grant_type", "password"),
+            ("client_id", login_id),
+            ("username", "operator"),
+            ("password", "fixture-initial-password"),
+            ("scope", "openid"),
+        ])
+        .send()
+        .await
+        .expect("administrator login");
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    let token: serde_json::Value = response.json().await.expect("login response");
+    let response = http
+        .post(format!("{base}/idp/oauth2/token"))
+        .form(&[
+            (
+                "grant_type",
+                "urn:ietf:params:oauth:grant-type:token-exchange",
+            ),
+            ("client_id", login_id),
+            (
+                "subject_token",
+                token["access_token"].as_str().expect("login token"),
+            ),
+            (
+                "subject_token_type",
+                "urn:ietf:params:oauth:token-type:access_token",
+            ),
+            (
+                "resource",
+                fixture.config.storage_idp_client.audience.as_str(),
+            ),
+        ])
+        .send()
+        .await
+        .expect("IdP audience User token");
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    let admin: serde_json::Value = response.json().await.expect("administrator bearer");
+    let admin = admin["access_token"].as_str().expect("User bearer");
+    let url = format!(
+        "{base}/idp/oauth2/register/{}",
+        fixture.config.storage_idp_client.client_id
+    );
+    let old_token = rotation_service_token(&http, &base, &fixture.config.storage_idp_client).await;
+    assert_eq!(old_token.status(), reqwest::StatusCode::OK);
+    let old_token: serde_json::Value = old_token.json().await.expect("original service bearer");
+    let old_token = old_token["access_token"].as_str().expect("original bearer");
+    let response = http
+        .get(&url)
+        .bearer_auth(admin)
+        .send()
+        .await
+        .expect("authorized exact infrastructure read");
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    let mut registration: serde_json::Value =
+        response.json().await.expect("full current registration");
+    assert!(registration.get("client_secret").is_none());
+    assert!(
+        LocalProvisioner::open_runtime(rotated.clone())
+            .await
+            .is_err(),
+        "config alone is not authorization"
+    );
+    registration["client_secret"] = rotated.storage_idp_client.client_secret.clone().into();
+    let response = http
+        .put(&url)
+        .bearer_auth(admin)
+        .json(&registration)
+        .send()
+        .await
+        .expect("authorized same-ID secret rotation");
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    let updated: serde_json::Value = response.json().await.expect("rotated registration");
+    assert_eq!(updated["allowed_scopes"], registration["allowed_scopes"]);
+    assert_eq!(
+        updated["allowed_audiences"],
+        registration["allowed_audiences"]
+    );
+    assert!(
+        !rotation_service_token(&http, &base, &fixture.config.storage_idp_client)
+            .await
+            .status()
+            .is_success(),
+        "old secret fails current owner state"
+    );
+    assert_eq!(
+        rotation_service_token(&http, &base, &rotated.storage_idp_client)
+            .await
+            .status(),
+        reqwest::StatusCode::OK
+    );
+    let mut widened = registration.clone();
+    widened["allowed_audiences"]
+        .as_array_mut()
+        .expect("audience list")
+        .push("https://unrelated.test".into());
+    let response = http
+        .put(&url)
+        .bearer_auth(admin)
+        .json(&widened)
+        .send()
+        .await
+        .expect("authorized metadata mutation control");
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert!(
+        LocalProvisioner::open_runtime(rotated.clone())
+            .await
+            .is_err(),
+        "completed startup does not accept widened current relationship"
+    );
+    let response = http
+        .put(&url)
+        .bearer_auth(admin)
+        .json(&registration)
+        .send()
+        .await
+        .expect("authorized exact metadata restoration");
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    cancellation.cancel();
+    tokio::time::timeout(Duration::from_secs(10), task)
+        .await
+        .expect("host shutdown bound")
+        .expect("host task")
+        .expect("host shutdown");
+    assert!(
+        LocalProvisioner::open_runtime(fixture.config.clone())
+            .await
+            .is_err(),
+        "original secret cannot reopen rotated owner state"
+    );
+    let endpoint_key_path = fixture.root.join("endpoint/endpoint.key");
+    let endpoint_key = fs::read(&endpoint_key_path).expect("retained protected endpoint key");
+    fs::write(&endpoint_key_path, iroh::SecretKey::generate().to_bytes())
+        .expect("simulate changed retained endpoint");
+    assert!(
+        LocalProvisioner::open_runtime(rotated.clone())
+            .await
+            .is_err(),
+        "changed endpoint is not accepted"
+    );
+    fs::write(&endpoint_key_path, &endpoint_key).expect("restore only isolated test endpoint");
+    let mut conflicting = rotated.clone();
+    conflicting.idp.oauth2.issuer = "https://changed-issuer.test".into();
+    assert!(LocalProvisioner::open_runtime(conflicting).await.is_err());
+    let mut conflicting = rotated.clone();
+    conflicting.idp.oauth2.local_signer = Some(idp_service::oauth2::NodeSignerBinding {
+        member_id: serde_json::from_value(fixture.journal()["member"].clone())
+            .expect("retained member"),
+        key_id: Id::now_v7(),
+        endpoint_id: endpoint.clone(),
+    });
+    assert!(LocalProvisioner::open_runtime(conflicting).await.is_err());
+    for context in 0..4 {
+        let mut conflicting = rotated.clone();
+        let absent = fixture.root.join(format!("changed-root-{context}"));
+        match context {
+            0 => conflicting.idp.data_dir = absent.to_string_lossy().into_owned(),
+            1 => conflicting.management.data_dir = absent.to_string_lossy().into_owned(),
+            2 => conflicting.storage.data_dir = absent.to_string_lossy().into_owned(),
+            _ => conflicting.endpoint_data_dir = absent.clone(),
+        }
+        assert!(LocalProvisioner::open_runtime(conflicting).await.is_err());
+        assert!(!absent.exists(), "conflicting roots are not initialized");
+    }
+    let owner_inventory_path = fixture.root.join("idp/setup-secret-inventory.json");
+    let owner_inventory = fs::read(&owner_inventory_path).expect("captured owner inventory");
+    let journal_modified = fs::metadata(&journal_path)
+        .expect("journal metadata")
+        .modified()
+        .expect("journal timestamp");
+    for reopen in 0..2 {
+        let (runtime, guard) = LocalProvisioner::open_runtime(rotated.clone())
+            .await
+            .expect("completed CLI reopen accepts owner-verified current secret");
+        assert_eq!(runtime.endpoint_id().to_string(), endpoint);
+        let base = format!("http://{}", runtime.local_addr());
+        let cancellation = runtime.cancellation_token();
+        let task = tokio::spawn(runtime.serve());
+        let client = storage_server::IdpClient::new(
+            &format!("{base}/idp"),
+            &rotated.storage_idp_client.client_id,
+            &rotated.storage_idp_client.client_secret,
+            &rotated.idp.oauth2.issuer,
+            &rotated.storage_idp_client.audience,
+        )
+        .expect("actual Storage owner IdP client");
+        assert!(
+            client
+                .approved_storage_endpoints()
+                .await
+                .expect("authorized Storage to IdP call after restart")
+                .contains(&endpoint)
+        );
+        if reopen == 1 {
+            let response = http
+                .delete(format!(
+                    "{base}/idp/oauth2/register/{}",
+                    rotated.storage_idp_client.client_id
+                ))
+                .bearer_auth(admin)
+                .send()
+                .await
+                .expect("authorized registration deletion");
+            assert!(response.status().is_success());
+            let response = http
+                .get(format!("{base}/idp/devices/endpoints"))
+                .bearer_auth(old_token)
+                .send()
+                .await
+                .expect("learned deletion rejects previously issued bearer");
+            assert_eq!(response.status(), reqwest::StatusCode::UNAUTHORIZED);
+            assert!(
+                !rotation_service_token(&http, &base, &rotated.storage_idp_client)
+                    .await
+                    .status()
+                    .is_success()
+            );
+        }
+        cancellation.cancel();
+        tokio::time::timeout(Duration::from_secs(10), task)
+            .await
+            .expect("reopened shutdown bound")
+            .expect("reopened task")
+            .expect("reopened shutdown");
+        drop(guard);
+        assert_eq!(fs::read(&journal_path).expect("unchanged journal"), journal);
+        assert_eq!(
+            fs::metadata(&journal_path)
+                .expect("journal metadata")
+                .modified()
+                .expect("journal timestamp"),
+            journal_modified
+        );
+        assert_eq!(
+            fs::read(&owner_inventory_path).expect("unchanged owner inventory"),
+            owner_inventory
+        );
+        assert_eq!(
+            fixture.secrets(),
+            secrets,
+            "no private material reproduced at startup"
+        );
+    }
+    assert!(
+        LocalProvisioner::open_runtime(rotated).await.is_err(),
+        "deleted relationship is not recreated by completed startup"
+    );
+    assert_eq!(
+        fs::read(&journal_path).expect("unchanged journal after denial"),
+        journal
+    );
+}
+
+#[test]
+fn local_provisioning_incomplete_rotation_requires_original_exact_secret() {
+    let fixture = Fixture::new();
+    let host = LocalProvisioner::create(
+        fixture.config.clone(),
+        "operator",
+        "Local Node",
+        &fixture.password,
+    )
+    .expect("explicit incomplete intent");
+    drop(host);
+    let journal = fixture.journal();
+    let mut changed = fixture.config.clone();
+    changed.storage_idp_client.client_secret = "fixture-incomplete-rotation-secret".into();
+    assert!(
+        LocalProvisioner::open(changed).is_err(),
+        "incomplete continuation retains original verifiers"
+    );
+    drop(
+        LocalProvisioner::open(fixture.config.clone())
+            .expect("original exact continuation still opens"),
+    );
+    assert_eq!(fixture.journal(), journal);
+    secret_files_absent(&fixture.root);
+}
+
 async fn exercise_running_host(runtime: crate::UnifiedRuntime, config: &UnifiedConfig, user: Id) {
     use idp_model::contract::{
         IdentityAction, IdentityResource, PermissionEvaluationRequest, PermissionSubject,
