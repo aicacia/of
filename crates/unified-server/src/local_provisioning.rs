@@ -113,10 +113,7 @@ impl LocalProvisioner {
                     Path::new(&config.storage.data_dir),
                     &config.endpoint_data_dir,
                 ] {
-                    reject_symlinks(root)?;
-                    if !fs::symlink_metadata(root)?.is_dir() {
-                        return Err(invalid("existing host requires retained context roots"));
-                    }
+                    require_retained_directory(root)?;
                 }
                 require_file(&Path::new(&config.idp.data_dir).join("idp.redb"), false)?;
                 require_file(
@@ -262,6 +259,7 @@ impl LocalProvisioner {
                     "unacknowledged Storage initialization requires explicit recovery",
                 ));
             }
+            require_directory(Path::new(&self.config.storage.data_dir))?;
             require_storage(&self.config)?;
         }
         let endpoint = if journal.endpoint_attempted {
@@ -812,13 +810,17 @@ fn require_absent(path: &Path) -> io::Result<()> {
     }
 }
 
-fn require_directory(path: &Path) -> io::Result<()> {
+fn require_retained_directory(path: &Path) -> io::Result<fs::Metadata> {
     reject_symlinks(path)?;
     let metadata = fs::symlink_metadata(path)?;
     if !metadata.is_dir() {
         return Err(invalid("managed root must be a regular directory"));
     }
-    private_permissions(&metadata)
+    Ok(metadata)
+}
+
+fn require_directory(path: &Path) -> io::Result<()> {
+    private_permissions(&require_retained_directory(path)?)
 }
 
 fn require_file(path: &Path, private: bool) -> io::Result<File> {
@@ -872,7 +874,7 @@ fn create_private_directory(path: &Path, recursive: bool) -> io::Result<()> {
 
 fn require_storage(config: &UnifiedConfig) -> io::Result<()> {
     let root = Path::new(&config.storage.data_dir);
-    require_directory(root)?;
+    require_retained_directory(root)?;
     for name in ["databases", "filesystems"] {
         let path = root.join(name);
         reject_symlinks(&path)?;

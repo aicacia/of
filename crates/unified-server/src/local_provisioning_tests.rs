@@ -556,6 +556,8 @@ async fn local_provisioning_continues_retained_attempt_and_refuses_changed_crede
 
 #[tokio::test]
 async fn local_provisioning_existing_cli_host_without_journal_starts_and_reopens() {
+    use std::os::unix::fs::PermissionsExt;
+
     use idp_service::oauth2::NodeSignerBinding;
     let mut fixture = Fixture::new();
     let mut host = LocalProvisioner::create(
@@ -615,6 +617,19 @@ async fn local_provisioning_existing_cli_host_without_journal_starts_and_reopens
         "present directory with missing intent cannot fall through"
     );
     fs::remove_dir_all(&directory).expect("host retains owner state, not a CLI journal");
+    let storage_root = Path::new(&fixture.config.storage.data_dir);
+    fs::set_permissions(storage_root, fs::Permissions::from_mode(0o755))
+        .expect("retained Storage permissions from ordinary 0022 umask");
+    let runtime = crate::UnifiedRuntime::build(fixture.config.clone())
+        .await
+        .expect("public runtime supports retained 0755 Storage");
+    assert!(
+        runtime
+            .node_public_ready()
+            .await
+            .expect("retained public readiness")
+    );
+    runtime.shutdown().await.expect("retained runtime shutdown");
     for _ in 0..2 {
         let (runtime, guard) = LocalProvisioner::open_runtime(fixture.config.clone())
             .await
@@ -629,6 +644,15 @@ async fn local_provisioning_existing_cli_host_without_journal_starts_and_reopens
         exercise_running_host(runtime, &fixture.config, user).await;
         assert!(!directory.exists(), "no journal migration or synthesis");
         assert!(secrets == fixture.secrets(), "no private replacement");
+        assert_eq!(
+            fs::metadata(storage_root)
+                .expect("retained Storage root")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o755,
+            "existing startup must not chmod retained Storage"
+        );
     }
     // The desktop's public composition seam remains independent of CLI intent.
     let runtime = crate::UnifiedRuntime::build(fixture.config.clone())
@@ -717,7 +741,24 @@ async fn local_provisioning_existing_cli_host_without_journal_starts_and_reopens
         fs::read(fixture.root.join("management/management.redb"))
             .expect("Management unchanged on missing trust")
     );
-    fs::remove_file(fixture.root.join("endpoint/endpoint.key")).expect("lost endpoint");
+    let endpoint_path = fixture.root.join("endpoint/endpoint.key");
+    fs::set_permissions(&endpoint_path, fs::Permissions::from_mode(0o644))
+        .expect("unprotected endpoint fixture");
+    assert!(
+        LocalProvisioner::open_runtime(fixture.config.clone())
+            .await
+            .is_err(),
+        "retained directory policy must not weaken endpoint key security"
+    );
+    assert_eq!(
+        fs::metadata(&endpoint_path)
+            .expect("retained endpoint")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o644
+    );
+    fs::remove_file(endpoint_path).expect("lost endpoint");
     assert!(
         LocalProvisioner::open_runtime(fixture.config.clone())
             .await
