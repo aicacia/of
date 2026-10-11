@@ -12,7 +12,7 @@ The [ticket-06 audit](../.scratch/offline-first-nodes/evidence/06-audit.md) chec
 
 For the password-manager caller delivery, set complete service bases `PUBLIC_LIDP_BASE_URL` (including `/idp`) and **`PUBLIC_STORAGE_BASE_URL`** (including `/storage`). The Storage base is now required; the removed `PUBLIC_STORAGE_AUDIENCE`/origin fallback is not configuration compatibility. Bases locate services, while the filesystem exchange resource/audience remains `storage:filesystems`.
 
-Build the Storage package explicitly before publishing its public `esm`/`types` exports; no automatic `prepack` hook exists. Ship complete build output, including generated dependencies, not just five tracked artifacts. [Owner evidence](../.scratch/offline-first-nodes/evidence/06-audit.md#current-clientcaller-handoff--2026-10-11) records an isolated normal package build and five unaliased consumer checks. Root user-dirty outputs remain unchanged. The caller agent is implementing password-manager's production `kit.alias` to consume the same owned source without stale root outputs; that work is pending, not qualified here. A workspace source alias does not replace the separate distribution build. Ticket04 remains incomplete and 07/08 are unaccepted.
+Build the Storage package explicitly before publishing its public `esm`/`types` exports; no automatic `prepack` hook exists. Ship complete build output, including generated dependencies, not just five tracked artifacts. [Owner evidence](../.scratch/offline-first-nodes/evidence/06-audit.md#current-clientcaller-handoff--2026-10-11) records an isolated normal package build and five unaliased consumer checks. Root user-dirty outputs remain unchanged. Password-manager's production `kit.alias` now consumes the same owned source without stale root outputs; its SvelteKit runtime mapping and TypeScript mapping are qualified in the [caller evidence](../.scratch/offline-first-nodes/evidence/06-callers.md). A workspace source alias does not replace the separate distribution build. Ticket04 remains incomplete and 07/08 are unaccepted.
 
 ## Deployment and readiness
 
@@ -90,7 +90,7 @@ Reset removes only local setup/data/identity and can proceed offline. Attempt au
 ## Verification still required
 
 - Live create/join/interruption/retry/offline restart/reset, actual secure-store support and Windows key ACLs.
-- Safe current API/client generation, complete Node configuration, binary/image feature support and workspace-parent build context, persistence, TLS and unattended secret access.
+- Deployment-specific use of the qualified generated clients, complete Node configuration, binary/image feature support and workspace-parent build context, persistence, TLS and unattended secret access.
 - Real locally authorized client rotation/revocation and learned-state propagation.
 - Tested current-format backup/recovery, offline allowlist restoration/update, pairing isolation, existing-connection denial after learned revocation, and exactly-once runtime shutdown.
 - Public persistence/execution/cleanup owner APIs and generic owner acceptance at `ofdb/.scratch/storage-sync/map.md` and `offs/.scratch/filesystem-sync/map.md` (handoff targets, not verified here).
