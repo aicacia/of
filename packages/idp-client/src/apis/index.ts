@@ -4,4 +4,3 @@ export * from "./DefaultApi.js";
 export * from "./SuperRoutesDevicesApi.js";
 export * from "./SuperRoutesOauth2IntrospectApi.js";
 export * from "./SuperRoutesReplicaSignersApi.js";
-export * from "./SuperRoutesSetupApi.js";

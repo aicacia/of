@@ -19,101 +19,94 @@ import { mapValues } from "../runtime.js";
  * @interface ReplicationAdmissionRequest
  */
 export interface ReplicationAdmissionRequest {
-    /**
-     *
-     */
-    applicationId: string;
-    /**
-     *
-     */
-    kind: string;
-    /**
-     *
-     */
-    operation: string;
-    /**
-     *
-     */
-    resourceId: string;
-    /**
-     *
-     */
-    sourceEndpointId: string;
-    /**
-     *
-     */
-    targetEndpointId: string;
+	/**
+	 *
+	 */
+	applicationId: string;
+	/**
+	 *
+	 */
+	kind: string;
+	/**
+	 *
+	 */
+	operation: string;
+	/**
+	 *
+	 */
+	resourceId: string;
+	/**
+	 *
+	 */
+	sourceEndpointId: string;
+	/**
+	 *
+	 */
+	targetEndpointId: string;
 }
 
 /**
  * Check if a given object implements the ReplicationAdmissionRequest interface.
  */
 export function instanceOfReplicationAdmissionRequest(
-    value: object,
+	value: object,
 ): value is ReplicationAdmissionRequest {
-    if (!("applicationId" in value) || value["applicationId"] === undefined)
-        return false;
-    if (!("kind" in value) || value["kind"] === undefined) return false;
-    if (!("operation" in value) || value["operation"] === undefined)
-        return false;
-    if (!("resourceId" in value) || value["resourceId"] === undefined)
-        return false;
-    if (
-        !("sourceEndpointId" in value) ||
-        value["sourceEndpointId"] === undefined
-    )
-        return false;
-    if (
-        !("targetEndpointId" in value) ||
-        value["targetEndpointId"] === undefined
-    )
-        return false;
-    return true;
+	if (!("applicationId" in value) || value["applicationId"] === undefined)
+		return false;
+	if (!("kind" in value) || value["kind"] === undefined) return false;
+	if (!("operation" in value) || value["operation"] === undefined) return false;
+	if (!("resourceId" in value) || value["resourceId"] === undefined)
+		return false;
+	if (!("sourceEndpointId" in value) || value["sourceEndpointId"] === undefined)
+		return false;
+	if (!("targetEndpointId" in value) || value["targetEndpointId"] === undefined)
+		return false;
+	return true;
 }
 
 export function ReplicationAdmissionRequestFromJSON(
-    json: any,
+	json: any,
 ): ReplicationAdmissionRequest {
-    return ReplicationAdmissionRequestFromJSONTyped(json, false);
+	return ReplicationAdmissionRequestFromJSONTyped(json, false);
 }
 
 export function ReplicationAdmissionRequestFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): ReplicationAdmissionRequest {
-    if (json == null) {
-        return json;
-    }
-    return {
-        applicationId: json["applicationId"],
-        kind: json["kind"],
-        operation: json["operation"],
-        resourceId: json["resourceId"],
-        sourceEndpointId: json["sourceEndpointId"],
-        targetEndpointId: json["targetEndpointId"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		applicationId: json["applicationId"],
+		kind: json["kind"],
+		operation: json["operation"],
+		resourceId: json["resourceId"],
+		sourceEndpointId: json["sourceEndpointId"],
+		targetEndpointId: json["targetEndpointId"],
+	};
 }
 
 export function ReplicationAdmissionRequestToJSON(
-    json: any,
+	json: any,
 ): ReplicationAdmissionRequest {
-    return ReplicationAdmissionRequestToJSONTyped(json, false);
+	return ReplicationAdmissionRequestToJSONTyped(json, false);
 }
 
 export function ReplicationAdmissionRequestToJSONTyped(
-    value?: ReplicationAdmissionRequest | null,
-    ignoreDiscriminator: boolean = false,
+	value?: ReplicationAdmissionRequest | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        applicationId: value["applicationId"],
-        kind: value["kind"],
-        operation: value["operation"],
-        resourceId: value["resourceId"],
-        sourceEndpointId: value["sourceEndpointId"],
-        targetEndpointId: value["targetEndpointId"],
-    };
+	return {
+		applicationId: value["applicationId"],
+		kind: value["kind"],
+		operation: value["operation"],
+		resourceId: value["resourceId"],
+		sourceEndpointId: value["sourceEndpointId"],
+		targetEndpointId: value["targetEndpointId"],
+	};
 }

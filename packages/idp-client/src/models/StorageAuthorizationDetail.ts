@@ -15,10 +15,10 @@
 import { mapValues } from "../runtime.js";
 import type { StorageAuthorizationAction } from "./StorageAuthorizationAction.js";
 import {
-    StorageAuthorizationActionFromJSON,
-    StorageAuthorizationActionFromJSONTyped,
-    StorageAuthorizationActionToJSON,
-    StorageAuthorizationActionToJSONTyped,
+	StorageAuthorizationActionFromJSON,
+	StorageAuthorizationActionFromJSONTyped,
+	StorageAuthorizationActionToJSON,
+	StorageAuthorizationActionToJSONTyped,
 } from "./StorageAuthorizationAction.js";
 
 /**
@@ -27,59 +27,59 @@ import {
  * @interface StorageAuthorizationDetail
  */
 export interface StorageAuthorizationDetail {
-    /**
-     *
-     */
-    actions: Array<StorageAuthorizationAction>;
+	/**
+	 *
+	 */
+	actions: Array<StorageAuthorizationAction>;
 }
 
 /**
  * Check if a given object implements the StorageAuthorizationDetail interface.
  */
 export function instanceOfStorageAuthorizationDetail(
-    value: object,
+	value: object,
 ): value is StorageAuthorizationDetail {
-    if (!("actions" in value) || value["actions"] === undefined) return false;
-    return true;
+	if (!("actions" in value) || value["actions"] === undefined) return false;
+	return true;
 }
 
 export function StorageAuthorizationDetailFromJSON(
-    json: any,
+	json: any,
 ): StorageAuthorizationDetail {
-    return StorageAuthorizationDetailFromJSONTyped(json, false);
+	return StorageAuthorizationDetailFromJSONTyped(json, false);
 }
 
 export function StorageAuthorizationDetailFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): StorageAuthorizationDetail {
-    if (json == null) {
-        return json;
-    }
-    return {
-        actions: (json["actions"] as Array<any>).map(
-            StorageAuthorizationActionFromJSON,
-        ),
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		actions: (json["actions"] as Array<any>).map(
+			StorageAuthorizationActionFromJSON,
+		),
+	};
 }
 
 export function StorageAuthorizationDetailToJSON(
-    json: any,
+	json: any,
 ): StorageAuthorizationDetail {
-    return StorageAuthorizationDetailToJSONTyped(json, false);
+	return StorageAuthorizationDetailToJSONTyped(json, false);
 }
 
 export function StorageAuthorizationDetailToJSONTyped(
-    value?: StorageAuthorizationDetail | null,
-    ignoreDiscriminator: boolean = false,
+	value?: StorageAuthorizationDetail | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        actions: (value["actions"] as Array<any>).map(
-            StorageAuthorizationActionToJSON,
-        ),
-    };
+	return {
+		actions: (value["actions"] as Array<any>).map(
+			StorageAuthorizationActionToJSON,
+		),
+	};
 }

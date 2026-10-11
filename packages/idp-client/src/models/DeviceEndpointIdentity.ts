@@ -19,71 +19,71 @@ import { mapValues } from "../runtime.js";
  * @interface DeviceEndpointIdentity
  */
 export interface DeviceEndpointIdentity {
-    /**
-     *
-     */
-    deviceId: string;
-    /**
-     *
-     */
-    endpointId: string;
-    /**
-     *
-     */
-    ownerSubject: string;
+	/**
+	 *
+	 */
+	deviceId: string;
+	/**
+	 *
+	 */
+	endpointId: string;
+	/**
+	 *
+	 */
+	ownerSubject: string;
 }
 
 /**
  * Check if a given object implements the DeviceEndpointIdentity interface.
  */
 export function instanceOfDeviceEndpointIdentity(
-    value: object,
+	value: object,
 ): value is DeviceEndpointIdentity {
-    if (!("deviceId" in value) || value["deviceId"] === undefined) return false;
-    if (!("endpointId" in value) || value["endpointId"] === undefined)
-        return false;
-    if (!("ownerSubject" in value) || value["ownerSubject"] === undefined)
-        return false;
-    return true;
+	if (!("deviceId" in value) || value["deviceId"] === undefined) return false;
+	if (!("endpointId" in value) || value["endpointId"] === undefined)
+		return false;
+	if (!("ownerSubject" in value) || value["ownerSubject"] === undefined)
+		return false;
+	return true;
 }
 
 export function DeviceEndpointIdentityFromJSON(
-    json: any,
+	json: any,
 ): DeviceEndpointIdentity {
-    return DeviceEndpointIdentityFromJSONTyped(json, false);
+	return DeviceEndpointIdentityFromJSONTyped(json, false);
 }
 
 export function DeviceEndpointIdentityFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): DeviceEndpointIdentity {
-    if (json == null) {
-        return json;
-    }
-    return {
-        deviceId: json["deviceId"],
-        endpointId: json["endpointId"],
-        ownerSubject: json["ownerSubject"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		deviceId: json["deviceId"],
+		endpointId: json["endpointId"],
+		ownerSubject: json["ownerSubject"],
+	};
 }
 
 export function DeviceEndpointIdentityToJSON(
-    json: any,
+	json: any,
 ): DeviceEndpointIdentity {
-    return DeviceEndpointIdentityToJSONTyped(json, false);
+	return DeviceEndpointIdentityToJSONTyped(json, false);
 }
 
 export function DeviceEndpointIdentityToJSONTyped(
-    value?: DeviceEndpointIdentity | null,
-    ignoreDiscriminator: boolean = false,
+	value?: DeviceEndpointIdentity | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        deviceId: value["deviceId"],
-        endpointId: value["endpointId"],
-        ownerSubject: value["ownerSubject"],
-    };
+	return {
+		deviceId: value["deviceId"],
+		endpointId: value["endpointId"],
+		ownerSubject: value["ownerSubject"],
+	};
 }

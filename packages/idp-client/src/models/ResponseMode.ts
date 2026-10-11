@@ -17,40 +17,40 @@
  * @export
  */
 export const ResponseMode = {
-    Query: "query",
-    FormPost: "form_post",
+	Query: "query",
+	FormPost: "form_post",
 } as const;
 export type ResponseMode = (typeof ResponseMode)[keyof typeof ResponseMode];
 
 export function instanceOfResponseMode(value: any): boolean {
-    for (const key in ResponseMode) {
-        if (Object.prototype.hasOwnProperty.call(ResponseMode, key)) {
-            if (ResponseMode[key as keyof typeof ResponseMode] === value) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in ResponseMode) {
+		if (Object.prototype.hasOwnProperty.call(ResponseMode, key)) {
+			if (ResponseMode[key as keyof typeof ResponseMode] === value) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function ResponseModeFromJSON(json: any): ResponseMode {
-    return ResponseModeFromJSONTyped(json, false);
+	return ResponseModeFromJSONTyped(json, false);
 }
 
 export function ResponseModeFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): ResponseMode {
-    return json as ResponseMode;
+	return json as ResponseMode;
 }
 
 export function ResponseModeToJSON(value?: ResponseMode | null): any {
-    return value as any;
+	return value as any;
 }
 
 export function ResponseModeToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): ResponseMode {
-    return value as ResponseMode;
+	return value as ResponseMode;
 }

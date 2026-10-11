@@ -14,21 +14,21 @@
 
 import * as runtime from "../runtime.js";
 import {
-    type IntrospectionRequest,
-    IntrospectionRequestFromJSON,
-    IntrospectionRequestToJSON,
+	type IntrospectionRequest,
+	IntrospectionRequestFromJSON,
+	IntrospectionRequestToJSON,
 } from "../models/IntrospectionRequest.js";
 import {
-    type IntrospectionResponse,
-    IntrospectionResponseFromJSON,
-    IntrospectionResponseToJSON,
+	type IntrospectionResponse,
+	IntrospectionResponseFromJSON,
+	IntrospectionResponseToJSON,
 } from "../models/IntrospectionResponse.js";
 
 export interface IntrospectRequest {
-    /**
-     *
-     */
-    introspectionRequest: IntrospectionRequest;
+	/**
+	 *
+	 */
+	introspectionRequest: IntrospectionRequest;
 }
 
 /**
@@ -38,109 +38,105 @@ export interface IntrospectRequest {
  * @interface SuperRoutesOauth2IntrospectApiInterface
  */
 export interface SuperRoutesOauth2IntrospectApiInterface {
-    /**
-     * Creates request options for introspect without sending the request
-     * @param {IntrospectionRequest} introspectionRequest
-     * @throws {RequiredError}
-     * @memberof SuperRoutesOauth2IntrospectApiInterface
-     */
-    introspectRequestOpts(
-        requestParameters: IntrospectRequest,
-    ): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for introspect without sending the request
+	 * @param {IntrospectionRequest} introspectionRequest
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesOauth2IntrospectApiInterface
+	 */
+	introspectRequestOpts(
+		requestParameters: IntrospectRequest,
+	): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {IntrospectionRequest} introspectionRequest
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof SuperRoutesOauth2IntrospectApiInterface
-     */
-    introspectRaw(
-        requestParameters: IntrospectRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<IntrospectionResponse>>;
+	/**
+	 *
+	 * @param {IntrospectionRequest} introspectionRequest
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesOauth2IntrospectApiInterface
+	 */
+	introspectRaw(
+		requestParameters: IntrospectRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<IntrospectionResponse>>;
 
-    /**
-     */
-    introspect(
-        requestParameters: IntrospectRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<IntrospectionResponse>;
+	/**
+	 */
+	introspect(
+		requestParameters: IntrospectRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<IntrospectionResponse>;
 }
 
 /**
  *
  */
 export class SuperRoutesOauth2IntrospectApi
-    extends runtime.BaseAPI
-    implements SuperRoutesOauth2IntrospectApiInterface
+	extends runtime.BaseAPI
+	implements SuperRoutesOauth2IntrospectApiInterface
 {
-    /**
-     * Creates request options for introspect without sending the request
-     */
-    async introspectRequestOpts(
-        requestParameters: IntrospectRequest,
-    ): Promise<runtime.RequestOpts> {
-        if (requestParameters["introspectionRequest"] == null) {
-            throw new runtime.RequiredError(
-                "introspectionRequest",
-                'Required parameter "introspectionRequest" was null or undefined when calling introspect().',
-            );
-        }
+	/**
+	 * Creates request options for introspect without sending the request
+	 */
+	async introspectRequestOpts(
+		requestParameters: IntrospectRequest,
+	): Promise<runtime.RequestOpts> {
+		if (requestParameters["introspectionRequest"] == null) {
+			throw new runtime.RequiredError(
+				"introspectionRequest",
+				'Required parameter "introspectionRequest" was null or undefined when calling introspect().',
+			);
+		}
 
-        const queryParameters: any = {};
+		const queryParameters: any = {};
 
-        const headerParameters: runtime.HTTPHeaders = {};
+		const headerParameters: runtime.HTTPHeaders = {};
 
-        headerParameters["Content-Type"] = "application/json";
+		headerParameters["Content-Type"] = "application/json";
 
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
 
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
 
-        let urlPath = `/oauth2/introspect`;
+		let urlPath = `/oauth2/introspect`;
 
-        return {
-            path: urlPath,
-            method: "POST",
-            headers: headerParameters,
-            query: queryParameters,
-            body: IntrospectionRequestToJSON(
-                requestParameters["introspectionRequest"],
-            ),
-        };
-    }
+		return {
+			path: urlPath,
+			method: "POST",
+			headers: headerParameters,
+			query: queryParameters,
+			body: IntrospectionRequestToJSON(
+				requestParameters["introspectionRequest"],
+			),
+		};
+	}
 
-    /**
-     */
-    async introspectRaw(
-        requestParameters: IntrospectRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<IntrospectionResponse>> {
-        const requestOptions =
-            await this.introspectRequestOpts(requestParameters);
-        const response = await this.request(requestOptions, initOverrides);
+	/**
+	 */
+	async introspectRaw(
+		requestParameters: IntrospectRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<IntrospectionResponse>> {
+		const requestOptions = await this.introspectRequestOpts(requestParameters);
+		const response = await this.request(requestOptions, initOverrides);
 
-        return new runtime.JSONApiResponse(response, (jsonValue) =>
-            IntrospectionResponseFromJSON(jsonValue),
-        );
-    }
+		return new runtime.JSONApiResponse(response, (jsonValue) =>
+			IntrospectionResponseFromJSON(jsonValue),
+		);
+	}
 
-    /**
-     */
-    async introspect(
-        requestParameters: IntrospectRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<IntrospectionResponse> {
-        const response = await this.introspectRaw(
-            requestParameters,
-            initOverrides,
-        );
-        return await response.value();
-    }
+	/**
+	 */
+	async introspect(
+		requestParameters: IntrospectRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<IntrospectionResponse> {
+		const response = await this.introspectRaw(requestParameters, initOverrides);
+		return await response.value();
+	}
 }

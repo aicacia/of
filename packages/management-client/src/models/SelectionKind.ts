@@ -17,40 +17,40 @@
  * @export
  */
 export const SelectionKind = {
-    Database: "database",
-    Filesystem: "filesystem",
+	Database: "database",
+	Filesystem: "filesystem",
 } as const;
 export type SelectionKind = (typeof SelectionKind)[keyof typeof SelectionKind];
 
 export function instanceOfSelectionKind(value: any): boolean {
-    for (const key in SelectionKind) {
-        if (Object.prototype.hasOwnProperty.call(SelectionKind, key)) {
-            if (SelectionKind[key as keyof typeof SelectionKind] === value) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in SelectionKind) {
+		if (Object.prototype.hasOwnProperty.call(SelectionKind, key)) {
+			if (SelectionKind[key as keyof typeof SelectionKind] === value) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function SelectionKindFromJSON(json: any): SelectionKind {
-    return SelectionKindFromJSONTyped(json, false);
+	return SelectionKindFromJSONTyped(json, false);
 }
 
 export function SelectionKindFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): SelectionKind {
-    return json as SelectionKind;
+	return json as SelectionKind;
 }
 
 export function SelectionKindToJSON(value?: SelectionKind | null): any {
-    return value as any;
+	return value as any;
 }
 
 export function SelectionKindToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): SelectionKind {
-    return value as SelectionKind;
+	return value as SelectionKind;
 }

@@ -19,66 +19,66 @@ import { mapValues } from "../runtime.js";
  * @interface FileSystemResourceResponse
  */
 export interface FileSystemResourceResponse {
-    /**
-     *
-     */
-    id: string;
-    /**
-     *
-     */
-    name?: string | null;
+	/**
+	 *
+	 */
+	id: string;
+	/**
+	 *
+	 */
+	name?: string | null;
 }
 
 /**
  * Check if a given object implements the FileSystemResourceResponse interface.
  */
 export function instanceOfFileSystemResourceResponse(
-    value: object,
+	value: object,
 ): value is FileSystemResourceResponse {
-    if (!("id" in value) || value["id"] === undefined) return false;
-    return true;
+	if (!("id" in value) || value["id"] === undefined) return false;
+	return true;
 }
 
 export function FileSystemResourceResponseFromJSON(
-    json: any,
+	json: any,
 ): FileSystemResourceResponse {
-    return FileSystemResourceResponseFromJSONTyped(json, false);
+	return FileSystemResourceResponseFromJSONTyped(json, false);
 }
 
 export function FileSystemResourceResponseFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): FileSystemResourceResponse {
-    if (json == null) {
-        return json;
-    }
-    return {
-        id: json["id"],
-        name:
-            json["name"] === undefined
-                ? undefined
-                : json["name"] === null
-                  ? null
-                  : json["name"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		id: json["id"],
+		name:
+			json["name"] === undefined
+				? undefined
+				: json["name"] === null
+					? null
+					: json["name"],
+	};
 }
 
 export function FileSystemResourceResponseToJSON(
-    json: any,
+	json: any,
 ): FileSystemResourceResponse {
-    return FileSystemResourceResponseToJSONTyped(json, false);
+	return FileSystemResourceResponseToJSONTyped(json, false);
 }
 
 export function FileSystemResourceResponseToJSONTyped(
-    value?: FileSystemResourceResponse | null,
-    ignoreDiscriminator: boolean = false,
+	value?: FileSystemResourceResponse | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        id: value["id"],
-        name: value["name"],
-    };
+	return {
+		id: value["id"],
+		name: value["name"],
+	};
 }

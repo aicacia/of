@@ -17,50 +17,48 @@
  * @export
  */
 export const SubjectTokenType = {
-    UrnIetfParamsOauthTokenTypeJwt: "urn:ietf:params:oauth:token-type:jwt",
-    UrnIetfParamsOauthTokenTypeAccessToken:
-        "urn:ietf:params:oauth:token-type:access_token",
-    UrnIetfParamsOauthTokenTypeRefreshToken:
-        "urn:ietf:params:oauth:token-type:refresh_token",
-    UrnIetfParamsOauthTokenTypeIdToken:
-        "urn:ietf:params:oauth:token-type:id_token",
-    UrnIetfParamsOauthTokenTypeSaml1: "urn:ietf:params:oauth:token-type:saml1",
-    UrnIetfParamsOauthTokenTypeSaml2: "urn:ietf:params:oauth:token-type:saml2",
+	UrnIetfParamsOauthTokenTypeJwt: "urn:ietf:params:oauth:token-type:jwt",
+	UrnIetfParamsOauthTokenTypeAccessToken:
+		"urn:ietf:params:oauth:token-type:access_token",
+	UrnIetfParamsOauthTokenTypeRefreshToken:
+		"urn:ietf:params:oauth:token-type:refresh_token",
+	UrnIetfParamsOauthTokenTypeIdToken:
+		"urn:ietf:params:oauth:token-type:id_token",
+	UrnIetfParamsOauthTokenTypeSaml1: "urn:ietf:params:oauth:token-type:saml1",
+	UrnIetfParamsOauthTokenTypeSaml2: "urn:ietf:params:oauth:token-type:saml2",
 } as const;
 export type SubjectTokenType =
-    (typeof SubjectTokenType)[keyof typeof SubjectTokenType];
+	(typeof SubjectTokenType)[keyof typeof SubjectTokenType];
 
 export function instanceOfSubjectTokenType(value: any): boolean {
-    for (const key in SubjectTokenType) {
-        if (Object.prototype.hasOwnProperty.call(SubjectTokenType, key)) {
-            if (
-                SubjectTokenType[key as keyof typeof SubjectTokenType] === value
-            ) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in SubjectTokenType) {
+		if (Object.prototype.hasOwnProperty.call(SubjectTokenType, key)) {
+			if (SubjectTokenType[key as keyof typeof SubjectTokenType] === value) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function SubjectTokenTypeFromJSON(json: any): SubjectTokenType {
-    return SubjectTokenTypeFromJSONTyped(json, false);
+	return SubjectTokenTypeFromJSONTyped(json, false);
 }
 
 export function SubjectTokenTypeFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): SubjectTokenType {
-    return json as SubjectTokenType;
+	return json as SubjectTokenType;
 }
 
 export function SubjectTokenTypeToJSON(value?: SubjectTokenType | null): any {
-    return value as any;
+	return value as any;
 }
 
 export function SubjectTokenTypeToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): SubjectTokenType {
-    return value as SubjectTokenType;
+	return value as SubjectTokenType;
 }

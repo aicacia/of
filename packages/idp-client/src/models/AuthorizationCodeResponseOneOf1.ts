@@ -15,10 +15,10 @@
 import { mapValues } from "../runtime.js";
 import type { ErrorCode } from "./ErrorCode.js";
 import {
-    ErrorCodeFromJSON,
-    ErrorCodeFromJSONTyped,
-    ErrorCodeToJSON,
-    ErrorCodeToJSONTyped,
+	ErrorCodeFromJSON,
+	ErrorCodeFromJSONTyped,
+	ErrorCodeToJSON,
+	ErrorCodeToJSONTyped,
 } from "./ErrorCode.js";
 
 /**
@@ -27,84 +27,84 @@ import {
  * @interface AuthorizationCodeResponseOneOf1
  */
 export interface AuthorizationCodeResponseOneOf1 {
-    /**
-     *
-     */
-    error: ErrorCode;
-    /**
-     *
-     */
-    errorDescription?: string | null;
-    /**
-     *
-     */
-    errorUri?: string | null;
-    /**
-     *
-     */
-    state: string;
+	/**
+	 *
+	 */
+	error: ErrorCode;
+	/**
+	 *
+	 */
+	errorDescription?: string | null;
+	/**
+	 *
+	 */
+	errorUri?: string | null;
+	/**
+	 *
+	 */
+	state: string;
 }
 
 /**
  * Check if a given object implements the AuthorizationCodeResponseOneOf1 interface.
  */
 export function instanceOfAuthorizationCodeResponseOneOf1(
-    value: object,
+	value: object,
 ): value is AuthorizationCodeResponseOneOf1 {
-    if (!("error" in value) || value["error"] === undefined) return false;
-    if (!("state" in value) || value["state"] === undefined) return false;
-    return true;
+	if (!("error" in value) || value["error"] === undefined) return false;
+	if (!("state" in value) || value["state"] === undefined) return false;
+	return true;
 }
 
 export function AuthorizationCodeResponseOneOf1FromJSON(
-    json: any,
+	json: any,
 ): AuthorizationCodeResponseOneOf1 {
-    return AuthorizationCodeResponseOneOf1FromJSONTyped(json, false);
+	return AuthorizationCodeResponseOneOf1FromJSONTyped(json, false);
 }
 
 export function AuthorizationCodeResponseOneOf1FromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): AuthorizationCodeResponseOneOf1 {
-    if (json == null) {
-        return json;
-    }
-    return {
-        error: ErrorCodeFromJSON(json["error"]),
-        errorDescription:
-            json["error_description"] === undefined
-                ? undefined
-                : json["error_description"] === null
-                  ? null
-                  : json["error_description"],
-        errorUri:
-            json["error_uri"] === undefined
-                ? undefined
-                : json["error_uri"] === null
-                  ? null
-                  : json["error_uri"],
-        state: json["state"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		error: ErrorCodeFromJSON(json["error"]),
+		errorDescription:
+			json["error_description"] === undefined
+				? undefined
+				: json["error_description"] === null
+					? null
+					: json["error_description"],
+		errorUri:
+			json["error_uri"] === undefined
+				? undefined
+				: json["error_uri"] === null
+					? null
+					: json["error_uri"],
+		state: json["state"],
+	};
 }
 
 export function AuthorizationCodeResponseOneOf1ToJSON(
-    json: any,
+	json: any,
 ): AuthorizationCodeResponseOneOf1 {
-    return AuthorizationCodeResponseOneOf1ToJSONTyped(json, false);
+	return AuthorizationCodeResponseOneOf1ToJSONTyped(json, false);
 }
 
 export function AuthorizationCodeResponseOneOf1ToJSONTyped(
-    value?: AuthorizationCodeResponseOneOf1 | null,
-    ignoreDiscriminator: boolean = false,
+	value?: AuthorizationCodeResponseOneOf1 | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        error: ErrorCodeToJSON(value["error"]),
-        error_description: value["errorDescription"],
-        error_uri: value["errorUri"],
-        state: value["state"],
-    };
+	return {
+		error: ErrorCodeToJSON(value["error"]),
+		error_description: value["errorDescription"],
+		error_uri: value["errorUri"],
+		state: value["state"],
+	};
 }

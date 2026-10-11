@@ -15,38 +15,38 @@
 import { mapValues } from "../runtime.js";
 import type { CodeChallengeMethod } from "./CodeChallengeMethod.js";
 import {
-    CodeChallengeMethodFromJSON,
-    CodeChallengeMethodFromJSONTyped,
-    CodeChallengeMethodToJSON,
-    CodeChallengeMethodToJSONTyped,
+	CodeChallengeMethodFromJSON,
+	CodeChallengeMethodFromJSONTyped,
+	CodeChallengeMethodToJSON,
+	CodeChallengeMethodToJSONTyped,
 } from "./CodeChallengeMethod.js";
 import type { ResponseMode } from "./ResponseMode.js";
 import {
-    ResponseModeFromJSON,
-    ResponseModeFromJSONTyped,
-    ResponseModeToJSON,
-    ResponseModeToJSONTyped,
+	ResponseModeFromJSON,
+	ResponseModeFromJSONTyped,
+	ResponseModeToJSON,
+	ResponseModeToJSONTyped,
 } from "./ResponseMode.js";
 import type { TokenEndpointAuthMethod } from "./TokenEndpointAuthMethod.js";
 import {
-    TokenEndpointAuthMethodFromJSON,
-    TokenEndpointAuthMethodFromJSONTyped,
-    TokenEndpointAuthMethodToJSON,
-    TokenEndpointAuthMethodToJSONTyped,
+	TokenEndpointAuthMethodFromJSON,
+	TokenEndpointAuthMethodFromJSONTyped,
+	TokenEndpointAuthMethodToJSON,
+	TokenEndpointAuthMethodToJSONTyped,
 } from "./TokenEndpointAuthMethod.js";
 import type { GrantType } from "./GrantType.js";
 import {
-    GrantTypeFromJSON,
-    GrantTypeFromJSONTyped,
-    GrantTypeToJSON,
-    GrantTypeToJSONTyped,
+	GrantTypeFromJSON,
+	GrantTypeFromJSONTyped,
+	GrantTypeToJSON,
+	GrantTypeToJSONTyped,
 } from "./GrantType.js";
 import type { ResponseType } from "./ResponseType.js";
 import {
-    ResponseTypeFromJSON,
-    ResponseTypeFromJSONTyped,
-    ResponseTypeToJSON,
-    ResponseTypeToJSONTyped,
+	ResponseTypeFromJSON,
+	ResponseTypeFromJSONTyped,
+	ResponseTypeToJSON,
+	ResponseTypeToJSONTyped,
 } from "./ResponseType.js";
 
 /**
@@ -55,386 +55,365 @@ import {
  * @interface AuthorizationServerMetadata
  */
 export interface AuthorizationServerMetadata {
-    /**
-     * URL of the authorization endpoint.
-     * REQUIRED unless no grant types use it.
-     */
-    authorizationEndpoint?: string | null;
-    /**
-     * PKCE code challenge methods supported (S256 is strongly recommended in 2.1).
-     */
-    codeChallengeMethodsSupported?: Array<CodeChallengeMethod>;
-    /**
-     *
-     */
-    dpopSigningAlgValuesSupported?: Array<string>;
-    /**
-     * List of supported grant types.
-     * In OAuth 2.1: authorization_code, client_credentials, refresh_token (no implicit/password).
-     */
-    grantTypesSupported?: Array<GrantType>;
-    /**
-     * URL of the token introspection endpoint (RFC 7662).
-     */
-    introspectionEndpoint?: string | null;
-    /**
-     * Client authentication methods supported by the introspection endpoint.
-     */
-    introspectionEndpointAuthMethodsSupported?: Array<TokenEndpointAuthMethod>;
-    /**
-     * JWS signing algorithms supported for JWT auth at the introspection endpoint.
-     */
-    introspectionEndpointAuthSigningAlgValuesSupported?: Array<string>;
-    /**
-     * REQUIRED. The authorization server's issuer identifier.
-     * URL using https scheme with no query or fragment.
-     */
-    issuer: string;
-    /**
-     * URL of the JWK Set document containing the server's public keys.
-     */
-    jwksUri?: string | null;
-    /**
-     * URL for the authorization server's policy on client use of data.
-     */
-    opPolicyUri?: string | null;
-    /**
-     * URL for the authorization server's terms of service.
-     */
-    opTosUri?: string | null;
-    /**
-     * List of supported revocation endpoint authentication signing algorithms (additional).
-     */
-    pushedAuthorizationRequestEndpoint?: string | null;
-    /**
-     * URL of the Dynamic Client Registration endpoint.
-     */
-    registrationEndpoint?: string | null;
-    /**
-     * Whether the server requires PKCE for all clients (OAuth 2.1 best practice).
-     */
-    requirePkce?: boolean;
-    /**
-     * List of supported response_mode values.
-     * Defaults to ["query", "fragment"] if omitted.
-     */
-    responseModesSupported?: Array<ResponseMode>;
-    /**
-     * REQUIRED. List of supported response_type values.
-     * In OAuth 2.1 this should primarily be ["code"].
-     */
-    responseTypesSupported?: Array<ResponseType>;
-    /**
-     * URL of the token revocation endpoint (RFC 7009).
-     */
-    revocationEndpoint?: string | null;
-    /**
-     * Client authentication methods supported by the revocation endpoint.
-     */
-    revocationEndpointAuthMethodsSupported?: Array<TokenEndpointAuthMethod>;
-    /**
-     * JWS signing algorithms supported for JWT auth at the revocation endpoint.
-     */
-    revocationEndpointAuthSigningAlgValuesSupported?: Array<string>;
-    /**
-     * RECOMMENDED. List of supported OAuth 2.0 scope values.
-     */
-    scopesSupported?: Array<string>;
-    /**
-     * Human-readable service documentation URL.
-     */
-    serviceDocumentation?: string | null;
-    /**
-     * Signed metadata as a JWT (optional).
-     */
-    signedMetadata?: string | null;
-    /**
-     * URL of the token endpoint.
-     * REQUIRED in most cases (especially for OAuth 2.1).
-     */
-    tokenEndpoint?: string | null;
-    /**
-     * List of client authentication methods supported by the token endpoint.
-     */
-    tokenEndpointAuthMethodsSupported?: Array<TokenEndpointAuthMethod>;
-    /**
-     * JWS signing algorithms supported for JWT client authentication
-     * at the token endpoint (private_key_jwt, client_secret_jwt).
-     */
-    tokenEndpointAuthSigningAlgValuesSupported?: Array<string>;
-    /**
-     * Languages and scripts supported for the user interface (BCP 47).
-     */
-    uiLocalesSupported?: Array<string>;
-    /**
-     * URL of the UserInfo endpoint.
-     */
-    userinfoEndpoint?: string | null;
+	/**
+	 * URL of the authorization endpoint.
+	 * REQUIRED unless no grant types use it.
+	 */
+	authorizationEndpoint?: string | null;
+	/**
+	 * PKCE code challenge methods supported (S256 is strongly recommended in 2.1).
+	 */
+	codeChallengeMethodsSupported?: Array<CodeChallengeMethod>;
+	/**
+	 *
+	 */
+	dpopSigningAlgValuesSupported?: Array<string>;
+	/**
+	 * List of supported grant types.
+	 * In OAuth 2.1: authorization_code, client_credentials, refresh_token (no implicit/password).
+	 */
+	grantTypesSupported?: Array<GrantType>;
+	/**
+	 * URL of the token introspection endpoint (RFC 7662).
+	 */
+	introspectionEndpoint?: string | null;
+	/**
+	 * Client authentication methods supported by the introspection endpoint.
+	 */
+	introspectionEndpointAuthMethodsSupported?: Array<TokenEndpointAuthMethod>;
+	/**
+	 * JWS signing algorithms supported for JWT auth at the introspection endpoint.
+	 */
+	introspectionEndpointAuthSigningAlgValuesSupported?: Array<string>;
+	/**
+	 * REQUIRED. The authorization server's issuer identifier.
+	 * URL using https scheme with no query or fragment.
+	 */
+	issuer: string;
+	/**
+	 * URL of the JWK Set document containing the server's public keys.
+	 */
+	jwksUri?: string | null;
+	/**
+	 * URL for the authorization server's policy on client use of data.
+	 */
+	opPolicyUri?: string | null;
+	/**
+	 * URL for the authorization server's terms of service.
+	 */
+	opTosUri?: string | null;
+	/**
+	 * List of supported revocation endpoint authentication signing algorithms (additional).
+	 */
+	pushedAuthorizationRequestEndpoint?: string | null;
+	/**
+	 * URL of the Dynamic Client Registration endpoint.
+	 */
+	registrationEndpoint?: string | null;
+	/**
+	 * Whether the server requires PKCE for all clients (OAuth 2.1 best practice).
+	 */
+	requirePkce?: boolean;
+	/**
+	 * List of supported response_mode values.
+	 * Defaults to ["query", "fragment"] if omitted.
+	 */
+	responseModesSupported?: Array<ResponseMode>;
+	/**
+	 * REQUIRED. List of supported response_type values.
+	 * In OAuth 2.1 this should primarily be ["code"].
+	 */
+	responseTypesSupported?: Array<ResponseType>;
+	/**
+	 * URL of the token revocation endpoint (RFC 7009).
+	 */
+	revocationEndpoint?: string | null;
+	/**
+	 * Client authentication methods supported by the revocation endpoint.
+	 */
+	revocationEndpointAuthMethodsSupported?: Array<TokenEndpointAuthMethod>;
+	/**
+	 * JWS signing algorithms supported for JWT auth at the revocation endpoint.
+	 */
+	revocationEndpointAuthSigningAlgValuesSupported?: Array<string>;
+	/**
+	 * RECOMMENDED. List of supported OAuth 2.0 scope values.
+	 */
+	scopesSupported?: Array<string>;
+	/**
+	 * Human-readable service documentation URL.
+	 */
+	serviceDocumentation?: string | null;
+	/**
+	 * Signed metadata as a JWT (optional).
+	 */
+	signedMetadata?: string | null;
+	/**
+	 * URL of the token endpoint.
+	 * REQUIRED in most cases (especially for OAuth 2.1).
+	 */
+	tokenEndpoint?: string | null;
+	/**
+	 * List of client authentication methods supported by the token endpoint.
+	 */
+	tokenEndpointAuthMethodsSupported?: Array<TokenEndpointAuthMethod>;
+	/**
+	 * JWS signing algorithms supported for JWT client authentication
+	 * at the token endpoint (private_key_jwt, client_secret_jwt).
+	 */
+	tokenEndpointAuthSigningAlgValuesSupported?: Array<string>;
+	/**
+	 * Languages and scripts supported for the user interface (BCP 47).
+	 */
+	uiLocalesSupported?: Array<string>;
+	/**
+	 * URL of the UserInfo endpoint.
+	 */
+	userinfoEndpoint?: string | null;
 }
 
 /**
  * Check if a given object implements the AuthorizationServerMetadata interface.
  */
 export function instanceOfAuthorizationServerMetadata(
-    value: object,
+	value: object,
 ): value is AuthorizationServerMetadata {
-    if (!("issuer" in value) || value["issuer"] === undefined) return false;
-    return true;
+	if (!("issuer" in value) || value["issuer"] === undefined) return false;
+	return true;
 }
 
 export function AuthorizationServerMetadataFromJSON(
-    json: any,
+	json: any,
 ): AuthorizationServerMetadata {
-    return AuthorizationServerMetadataFromJSONTyped(json, false);
+	return AuthorizationServerMetadataFromJSONTyped(json, false);
 }
 
 export function AuthorizationServerMetadataFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): AuthorizationServerMetadata {
-    if (json == null) {
-        return json;
-    }
-    return {
-        authorizationEndpoint:
-            json["authorization_endpoint"] === undefined
-                ? undefined
-                : json["authorization_endpoint"] === null
-                  ? null
-                  : json["authorization_endpoint"],
-        codeChallengeMethodsSupported:
-            json["code_challenge_methods_supported"] == null
-                ? undefined
-                : (json["code_challenge_methods_supported"] as Array<any>).map(
-                      CodeChallengeMethodFromJSON,
-                  ),
-        dpopSigningAlgValuesSupported:
-            json["dpop_signing_alg_values_supported"] == null
-                ? undefined
-                : json["dpop_signing_alg_values_supported"],
-        grantTypesSupported:
-            json["grant_types_supported"] == null
-                ? undefined
-                : (json["grant_types_supported"] as Array<any>).map(
-                      GrantTypeFromJSON,
-                  ),
-        introspectionEndpoint:
-            json["introspection_endpoint"] === undefined
-                ? undefined
-                : json["introspection_endpoint"] === null
-                  ? null
-                  : json["introspection_endpoint"],
-        introspectionEndpointAuthMethodsSupported:
-            json["introspection_endpoint_auth_methods_supported"] == null
-                ? undefined
-                : (
-                      json[
-                          "introspection_endpoint_auth_methods_supported"
-                      ] as Array<any>
-                  ).map(TokenEndpointAuthMethodFromJSON),
-        introspectionEndpointAuthSigningAlgValuesSupported:
-            json["introspection_endpoint_auth_signing_alg_values_supported"] ==
-            null
-                ? undefined
-                : json[
-                      "introspection_endpoint_auth_signing_alg_values_supported"
-                  ],
-        issuer: json["issuer"],
-        jwksUri:
-            json["jwks_uri"] === undefined
-                ? undefined
-                : json["jwks_uri"] === null
-                  ? null
-                  : json["jwks_uri"],
-        opPolicyUri:
-            json["op_policy_uri"] === undefined
-                ? undefined
-                : json["op_policy_uri"] === null
-                  ? null
-                  : json["op_policy_uri"],
-        opTosUri:
-            json["op_tos_uri"] === undefined
-                ? undefined
-                : json["op_tos_uri"] === null
-                  ? null
-                  : json["op_tos_uri"],
-        pushedAuthorizationRequestEndpoint:
-            json["pushed_authorization_request_endpoint"] === undefined
-                ? undefined
-                : json["pushed_authorization_request_endpoint"] === null
-                  ? null
-                  : json["pushed_authorization_request_endpoint"],
-        registrationEndpoint:
-            json["registration_endpoint"] === undefined
-                ? undefined
-                : json["registration_endpoint"] === null
-                  ? null
-                  : json["registration_endpoint"],
-        requirePkce:
-            json["require_pkce"] == null ? undefined : json["require_pkce"],
-        responseModesSupported:
-            json["response_modes_supported"] == null
-                ? undefined
-                : (json["response_modes_supported"] as Array<any>).map(
-                      ResponseModeFromJSON,
-                  ),
-        responseTypesSupported:
-            json["response_types_supported"] == null
-                ? undefined
-                : (json["response_types_supported"] as Array<any>).map(
-                      ResponseTypeFromJSON,
-                  ),
-        revocationEndpoint:
-            json["revocation_endpoint"] === undefined
-                ? undefined
-                : json["revocation_endpoint"] === null
-                  ? null
-                  : json["revocation_endpoint"],
-        revocationEndpointAuthMethodsSupported:
-            json["revocation_endpoint_auth_methods_supported"] == null
-                ? undefined
-                : (
-                      json[
-                          "revocation_endpoint_auth_methods_supported"
-                      ] as Array<any>
-                  ).map(TokenEndpointAuthMethodFromJSON),
-        revocationEndpointAuthSigningAlgValuesSupported:
-            json["revocation_endpoint_auth_signing_alg_values_supported"] ==
-            null
-                ? undefined
-                : json["revocation_endpoint_auth_signing_alg_values_supported"],
-        scopesSupported:
-            json["scopes_supported"] == null
-                ? undefined
-                : json["scopes_supported"],
-        serviceDocumentation:
-            json["service_documentation"] === undefined
-                ? undefined
-                : json["service_documentation"] === null
-                  ? null
-                  : json["service_documentation"],
-        signedMetadata:
-            json["signed_metadata"] === undefined
-                ? undefined
-                : json["signed_metadata"] === null
-                  ? null
-                  : json["signed_metadata"],
-        tokenEndpoint:
-            json["token_endpoint"] === undefined
-                ? undefined
-                : json["token_endpoint"] === null
-                  ? null
-                  : json["token_endpoint"],
-        tokenEndpointAuthMethodsSupported:
-            json["token_endpoint_auth_methods_supported"] == null
-                ? undefined
-                : (
-                      json[
-                          "token_endpoint_auth_methods_supported"
-                      ] as Array<any>
-                  ).map(TokenEndpointAuthMethodFromJSON),
-        tokenEndpointAuthSigningAlgValuesSupported:
-            json["token_endpoint_auth_signing_alg_values_supported"] == null
-                ? undefined
-                : json["token_endpoint_auth_signing_alg_values_supported"],
-        uiLocalesSupported:
-            json["ui_locales_supported"] == null
-                ? undefined
-                : json["ui_locales_supported"],
-        userinfoEndpoint:
-            json["userinfo_endpoint"] === undefined
-                ? undefined
-                : json["userinfo_endpoint"] === null
-                  ? null
-                  : json["userinfo_endpoint"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		authorizationEndpoint:
+			json["authorization_endpoint"] === undefined
+				? undefined
+				: json["authorization_endpoint"] === null
+					? null
+					: json["authorization_endpoint"],
+		codeChallengeMethodsSupported:
+			json["code_challenge_methods_supported"] == null
+				? undefined
+				: (json["code_challenge_methods_supported"] as Array<any>).map(
+						CodeChallengeMethodFromJSON,
+					),
+		dpopSigningAlgValuesSupported:
+			json["dpop_signing_alg_values_supported"] == null
+				? undefined
+				: json["dpop_signing_alg_values_supported"],
+		grantTypesSupported:
+			json["grant_types_supported"] == null
+				? undefined
+				: (json["grant_types_supported"] as Array<any>).map(GrantTypeFromJSON),
+		introspectionEndpoint:
+			json["introspection_endpoint"] === undefined
+				? undefined
+				: json["introspection_endpoint"] === null
+					? null
+					: json["introspection_endpoint"],
+		introspectionEndpointAuthMethodsSupported:
+			json["introspection_endpoint_auth_methods_supported"] == null
+				? undefined
+				: (
+						json["introspection_endpoint_auth_methods_supported"] as Array<any>
+					).map(TokenEndpointAuthMethodFromJSON),
+		introspectionEndpointAuthSigningAlgValuesSupported:
+			json["introspection_endpoint_auth_signing_alg_values_supported"] == null
+				? undefined
+				: json["introspection_endpoint_auth_signing_alg_values_supported"],
+		issuer: json["issuer"],
+		jwksUri:
+			json["jwks_uri"] === undefined
+				? undefined
+				: json["jwks_uri"] === null
+					? null
+					: json["jwks_uri"],
+		opPolicyUri:
+			json["op_policy_uri"] === undefined
+				? undefined
+				: json["op_policy_uri"] === null
+					? null
+					: json["op_policy_uri"],
+		opTosUri:
+			json["op_tos_uri"] === undefined
+				? undefined
+				: json["op_tos_uri"] === null
+					? null
+					: json["op_tos_uri"],
+		pushedAuthorizationRequestEndpoint:
+			json["pushed_authorization_request_endpoint"] === undefined
+				? undefined
+				: json["pushed_authorization_request_endpoint"] === null
+					? null
+					: json["pushed_authorization_request_endpoint"],
+		registrationEndpoint:
+			json["registration_endpoint"] === undefined
+				? undefined
+				: json["registration_endpoint"] === null
+					? null
+					: json["registration_endpoint"],
+		requirePkce:
+			json["require_pkce"] == null ? undefined : json["require_pkce"],
+		responseModesSupported:
+			json["response_modes_supported"] == null
+				? undefined
+				: (json["response_modes_supported"] as Array<any>).map(
+						ResponseModeFromJSON,
+					),
+		responseTypesSupported:
+			json["response_types_supported"] == null
+				? undefined
+				: (json["response_types_supported"] as Array<any>).map(
+						ResponseTypeFromJSON,
+					),
+		revocationEndpoint:
+			json["revocation_endpoint"] === undefined
+				? undefined
+				: json["revocation_endpoint"] === null
+					? null
+					: json["revocation_endpoint"],
+		revocationEndpointAuthMethodsSupported:
+			json["revocation_endpoint_auth_methods_supported"] == null
+				? undefined
+				: (
+						json["revocation_endpoint_auth_methods_supported"] as Array<any>
+					).map(TokenEndpointAuthMethodFromJSON),
+		revocationEndpointAuthSigningAlgValuesSupported:
+			json["revocation_endpoint_auth_signing_alg_values_supported"] == null
+				? undefined
+				: json["revocation_endpoint_auth_signing_alg_values_supported"],
+		scopesSupported:
+			json["scopes_supported"] == null ? undefined : json["scopes_supported"],
+		serviceDocumentation:
+			json["service_documentation"] === undefined
+				? undefined
+				: json["service_documentation"] === null
+					? null
+					: json["service_documentation"],
+		signedMetadata:
+			json["signed_metadata"] === undefined
+				? undefined
+				: json["signed_metadata"] === null
+					? null
+					: json["signed_metadata"],
+		tokenEndpoint:
+			json["token_endpoint"] === undefined
+				? undefined
+				: json["token_endpoint"] === null
+					? null
+					: json["token_endpoint"],
+		tokenEndpointAuthMethodsSupported:
+			json["token_endpoint_auth_methods_supported"] == null
+				? undefined
+				: (json["token_endpoint_auth_methods_supported"] as Array<any>).map(
+						TokenEndpointAuthMethodFromJSON,
+					),
+		tokenEndpointAuthSigningAlgValuesSupported:
+			json["token_endpoint_auth_signing_alg_values_supported"] == null
+				? undefined
+				: json["token_endpoint_auth_signing_alg_values_supported"],
+		uiLocalesSupported:
+			json["ui_locales_supported"] == null
+				? undefined
+				: json["ui_locales_supported"],
+		userinfoEndpoint:
+			json["userinfo_endpoint"] === undefined
+				? undefined
+				: json["userinfo_endpoint"] === null
+					? null
+					: json["userinfo_endpoint"],
+	};
 }
 
 export function AuthorizationServerMetadataToJSON(
-    json: any,
+	json: any,
 ): AuthorizationServerMetadata {
-    return AuthorizationServerMetadataToJSONTyped(json, false);
+	return AuthorizationServerMetadataToJSONTyped(json, false);
 }
 
 export function AuthorizationServerMetadataToJSONTyped(
-    value?: AuthorizationServerMetadata | null,
-    ignoreDiscriminator: boolean = false,
+	value?: AuthorizationServerMetadata | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        authorization_endpoint: value["authorizationEndpoint"],
-        code_challenge_methods_supported:
-            value["codeChallengeMethodsSupported"] == null
-                ? undefined
-                : (value["codeChallengeMethodsSupported"] as Array<any>).map(
-                      CodeChallengeMethodToJSON,
-                  ),
-        dpop_signing_alg_values_supported:
-            value["dpopSigningAlgValuesSupported"],
-        grant_types_supported:
-            value["grantTypesSupported"] == null
-                ? undefined
-                : (value["grantTypesSupported"] as Array<any>).map(
-                      GrantTypeToJSON,
-                  ),
-        introspection_endpoint: value["introspectionEndpoint"],
-        introspection_endpoint_auth_methods_supported:
-            value["introspectionEndpointAuthMethodsSupported"] == null
-                ? undefined
-                : (
-                      value[
-                          "introspectionEndpointAuthMethodsSupported"
-                      ] as Array<any>
-                  ).map(TokenEndpointAuthMethodToJSON),
-        introspection_endpoint_auth_signing_alg_values_supported:
-            value["introspectionEndpointAuthSigningAlgValuesSupported"],
-        issuer: value["issuer"],
-        jwks_uri: value["jwksUri"],
-        op_policy_uri: value["opPolicyUri"],
-        op_tos_uri: value["opTosUri"],
-        pushed_authorization_request_endpoint:
-            value["pushedAuthorizationRequestEndpoint"],
-        registration_endpoint: value["registrationEndpoint"],
-        require_pkce: value["requirePkce"],
-        response_modes_supported:
-            value["responseModesSupported"] == null
-                ? undefined
-                : (value["responseModesSupported"] as Array<any>).map(
-                      ResponseModeToJSON,
-                  ),
-        response_types_supported:
-            value["responseTypesSupported"] == null
-                ? undefined
-                : (value["responseTypesSupported"] as Array<any>).map(
-                      ResponseTypeToJSON,
-                  ),
-        revocation_endpoint: value["revocationEndpoint"],
-        revocation_endpoint_auth_methods_supported:
-            value["revocationEndpointAuthMethodsSupported"] == null
-                ? undefined
-                : (
-                      value[
-                          "revocationEndpointAuthMethodsSupported"
-                      ] as Array<any>
-                  ).map(TokenEndpointAuthMethodToJSON),
-        revocation_endpoint_auth_signing_alg_values_supported:
-            value["revocationEndpointAuthSigningAlgValuesSupported"],
-        scopes_supported: value["scopesSupported"],
-        service_documentation: value["serviceDocumentation"],
-        signed_metadata: value["signedMetadata"],
-        token_endpoint: value["tokenEndpoint"],
-        token_endpoint_auth_methods_supported:
-            value["tokenEndpointAuthMethodsSupported"] == null
-                ? undefined
-                : (
-                      value["tokenEndpointAuthMethodsSupported"] as Array<any>
-                  ).map(TokenEndpointAuthMethodToJSON),
-        token_endpoint_auth_signing_alg_values_supported:
-            value["tokenEndpointAuthSigningAlgValuesSupported"],
-        ui_locales_supported: value["uiLocalesSupported"],
-        userinfo_endpoint: value["userinfoEndpoint"],
-    };
+	return {
+		authorization_endpoint: value["authorizationEndpoint"],
+		code_challenge_methods_supported:
+			value["codeChallengeMethodsSupported"] == null
+				? undefined
+				: (value["codeChallengeMethodsSupported"] as Array<any>).map(
+						CodeChallengeMethodToJSON,
+					),
+		dpop_signing_alg_values_supported: value["dpopSigningAlgValuesSupported"],
+		grant_types_supported:
+			value["grantTypesSupported"] == null
+				? undefined
+				: (value["grantTypesSupported"] as Array<any>).map(GrantTypeToJSON),
+		introspection_endpoint: value["introspectionEndpoint"],
+		introspection_endpoint_auth_methods_supported:
+			value["introspectionEndpointAuthMethodsSupported"] == null
+				? undefined
+				: (
+						value["introspectionEndpointAuthMethodsSupported"] as Array<any>
+					).map(TokenEndpointAuthMethodToJSON),
+		introspection_endpoint_auth_signing_alg_values_supported:
+			value["introspectionEndpointAuthSigningAlgValuesSupported"],
+		issuer: value["issuer"],
+		jwks_uri: value["jwksUri"],
+		op_policy_uri: value["opPolicyUri"],
+		op_tos_uri: value["opTosUri"],
+		pushed_authorization_request_endpoint:
+			value["pushedAuthorizationRequestEndpoint"],
+		registration_endpoint: value["registrationEndpoint"],
+		require_pkce: value["requirePkce"],
+		response_modes_supported:
+			value["responseModesSupported"] == null
+				? undefined
+				: (value["responseModesSupported"] as Array<any>).map(
+						ResponseModeToJSON,
+					),
+		response_types_supported:
+			value["responseTypesSupported"] == null
+				? undefined
+				: (value["responseTypesSupported"] as Array<any>).map(
+						ResponseTypeToJSON,
+					),
+		revocation_endpoint: value["revocationEndpoint"],
+		revocation_endpoint_auth_methods_supported:
+			value["revocationEndpointAuthMethodsSupported"] == null
+				? undefined
+				: (value["revocationEndpointAuthMethodsSupported"] as Array<any>).map(
+						TokenEndpointAuthMethodToJSON,
+					),
+		revocation_endpoint_auth_signing_alg_values_supported:
+			value["revocationEndpointAuthSigningAlgValuesSupported"],
+		scopes_supported: value["scopesSupported"],
+		service_documentation: value["serviceDocumentation"],
+		signed_metadata: value["signedMetadata"],
+		token_endpoint: value["tokenEndpoint"],
+		token_endpoint_auth_methods_supported:
+			value["tokenEndpointAuthMethodsSupported"] == null
+				? undefined
+				: (value["tokenEndpointAuthMethodsSupported"] as Array<any>).map(
+						TokenEndpointAuthMethodToJSON,
+					),
+		token_endpoint_auth_signing_alg_values_supported:
+			value["tokenEndpointAuthSigningAlgValuesSupported"],
+		ui_locales_supported: value["uiLocalesSupported"],
+		userinfo_endpoint: value["userinfoEndpoint"],
+	};
 }

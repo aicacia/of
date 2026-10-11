@@ -15,10 +15,10 @@
 import { mapValues } from "../runtime.js";
 import type { DeviceState } from "./DeviceState.js";
 import {
-    DeviceStateFromJSON,
-    DeviceStateFromJSONTyped,
-    DeviceStateToJSON,
-    DeviceStateToJSONTyped,
+	DeviceStateFromJSON,
+	DeviceStateFromJSONTyped,
+	DeviceStateToJSON,
+	DeviceStateToJSONTyped,
 } from "./DeviceState.js";
 
 /**
@@ -27,105 +27,102 @@ import {
  * @interface DeviceInfo
  */
 export interface DeviceInfo {
-    /**
-     *
-     */
-    address: string;
-    /**
-     *
-     */
-    createdAt: number;
-    /**
-     *
-     */
-    id: string;
-    /**
-     *
-     */
-    name: string;
-    /**
-     *
-     */
-    publicKey: string;
-    /**
-     *
-     */
-    revokedAt?: number | null;
-    /**
-     *
-     */
-    state: DeviceState;
-    /**
-     *
-     */
-    updatedAt: number;
+	/**
+	 *
+	 */
+	address: string;
+	/**
+	 *
+	 */
+	createdAt: number;
+	/**
+	 *
+	 */
+	id: string;
+	/**
+	 *
+	 */
+	name: string;
+	/**
+	 *
+	 */
+	publicKey: string;
+	/**
+	 *
+	 */
+	revokedAt?: number | null;
+	/**
+	 *
+	 */
+	state: DeviceState;
+	/**
+	 *
+	 */
+	updatedAt: number;
 }
 
 /**
  * Check if a given object implements the DeviceInfo interface.
  */
 export function instanceOfDeviceInfo(value: object): value is DeviceInfo {
-    if (!("address" in value) || value["address"] === undefined) return false;
-    if (!("createdAt" in value) || value["createdAt"] === undefined)
-        return false;
-    if (!("id" in value) || value["id"] === undefined) return false;
-    if (!("name" in value) || value["name"] === undefined) return false;
-    if (!("publicKey" in value) || value["publicKey"] === undefined)
-        return false;
-    if (!("state" in value) || value["state"] === undefined) return false;
-    if (!("updatedAt" in value) || value["updatedAt"] === undefined)
-        return false;
-    return true;
+	if (!("address" in value) || value["address"] === undefined) return false;
+	if (!("createdAt" in value) || value["createdAt"] === undefined) return false;
+	if (!("id" in value) || value["id"] === undefined) return false;
+	if (!("name" in value) || value["name"] === undefined) return false;
+	if (!("publicKey" in value) || value["publicKey"] === undefined) return false;
+	if (!("state" in value) || value["state"] === undefined) return false;
+	if (!("updatedAt" in value) || value["updatedAt"] === undefined) return false;
+	return true;
 }
 
 export function DeviceInfoFromJSON(json: any): DeviceInfo {
-    return DeviceInfoFromJSONTyped(json, false);
+	return DeviceInfoFromJSONTyped(json, false);
 }
 
 export function DeviceInfoFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): DeviceInfo {
-    if (json == null) {
-        return json;
-    }
-    return {
-        address: json["address"],
-        createdAt: json["createdAt"],
-        id: json["id"],
-        name: json["name"],
-        publicKey: json["publicKey"],
-        revokedAt:
-            json["revokedAt"] === undefined
-                ? undefined
-                : json["revokedAt"] === null
-                  ? null
-                  : json["revokedAt"],
-        state: DeviceStateFromJSON(json["state"]),
-        updatedAt: json["updatedAt"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		address: json["address"],
+		createdAt: json["createdAt"],
+		id: json["id"],
+		name: json["name"],
+		publicKey: json["publicKey"],
+		revokedAt:
+			json["revokedAt"] === undefined
+				? undefined
+				: json["revokedAt"] === null
+					? null
+					: json["revokedAt"],
+		state: DeviceStateFromJSON(json["state"]),
+		updatedAt: json["updatedAt"],
+	};
 }
 
 export function DeviceInfoToJSON(json: any): DeviceInfo {
-    return DeviceInfoToJSONTyped(json, false);
+	return DeviceInfoToJSONTyped(json, false);
 }
 
 export function DeviceInfoToJSONTyped(
-    value?: DeviceInfo | null,
-    ignoreDiscriminator: boolean = false,
+	value?: DeviceInfo | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        address: value["address"],
-        createdAt: value["createdAt"],
-        id: value["id"],
-        name: value["name"],
-        publicKey: value["publicKey"],
-        revokedAt: value["revokedAt"],
-        state: DeviceStateToJSON(value["state"]),
-        updatedAt: value["updatedAt"],
-    };
+	return {
+		address: value["address"],
+		createdAt: value["createdAt"],
+		id: value["id"],
+		name: value["name"],
+		publicKey: value["publicKey"],
+		revokedAt: value["revokedAt"],
+		state: DeviceStateToJSON(value["state"]),
+		updatedAt: value["updatedAt"],
+	};
 }

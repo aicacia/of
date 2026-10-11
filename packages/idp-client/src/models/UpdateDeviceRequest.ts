@@ -19,51 +19,51 @@ import { mapValues } from "../runtime.js";
  * @interface UpdateDeviceRequest
  */
 export interface UpdateDeviceRequest {
-    /**
-     *
-     */
-    name: string;
+	/**
+	 *
+	 */
+	name: string;
 }
 
 /**
  * Check if a given object implements the UpdateDeviceRequest interface.
  */
 export function instanceOfUpdateDeviceRequest(
-    value: object,
+	value: object,
 ): value is UpdateDeviceRequest {
-    if (!("name" in value) || value["name"] === undefined) return false;
-    return true;
+	if (!("name" in value) || value["name"] === undefined) return false;
+	return true;
 }
 
 export function UpdateDeviceRequestFromJSON(json: any): UpdateDeviceRequest {
-    return UpdateDeviceRequestFromJSONTyped(json, false);
+	return UpdateDeviceRequestFromJSONTyped(json, false);
 }
 
 export function UpdateDeviceRequestFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): UpdateDeviceRequest {
-    if (json == null) {
-        return json;
-    }
-    return {
-        name: json["name"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		name: json["name"],
+	};
 }
 
 export function UpdateDeviceRequestToJSON(json: any): UpdateDeviceRequest {
-    return UpdateDeviceRequestToJSONTyped(json, false);
+	return UpdateDeviceRequestToJSONTyped(json, false);
 }
 
 export function UpdateDeviceRequestToJSONTyped(
-    value?: UpdateDeviceRequest | null,
-    ignoreDiscriminator: boolean = false,
+	value?: UpdateDeviceRequest | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        name: value["name"],
-    };
+	return {
+		name: value["name"],
+	};
 }

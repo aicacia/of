@@ -19,84 +19,84 @@ import { mapValues } from "../runtime.js";
  * @interface IdentityResourceOneOf3
  */
 export interface IdentityResourceOneOf3 {
-    /**
-     *
-     */
-    id?: string | null;
-    /**
-     *
-     */
-    type: IdentityResourceOneOf3TypeEnum;
-    /**
-     *
-     */
-    userId: string;
+	/**
+	 *
+	 */
+	id?: string | null;
+	/**
+	 *
+	 */
+	type: IdentityResourceOneOf3TypeEnum;
+	/**
+	 *
+	 */
+	userId: string;
 }
 
 /**
  * @export
  */
 export const IdentityResourceOneOf3TypeEnum = {
-    Consent: "consent",
+	Consent: "consent",
 } as const;
 export type IdentityResourceOneOf3TypeEnum =
-    (typeof IdentityResourceOneOf3TypeEnum)[keyof typeof IdentityResourceOneOf3TypeEnum];
+	(typeof IdentityResourceOneOf3TypeEnum)[keyof typeof IdentityResourceOneOf3TypeEnum];
 
 /**
  * Check if a given object implements the IdentityResourceOneOf3 interface.
  */
 export function instanceOfIdentityResourceOneOf3(
-    value: object,
+	value: object,
 ): value is IdentityResourceOneOf3 {
-    if (!("type" in value) || value["type"] === undefined) return false;
-    if (value["type"] !== "consent") return false;
+	if (!("type" in value) || value["type"] === undefined) return false;
+	if (value["type"] !== "consent") return false;
 
-    if (!("userId" in value) || value["userId"] === undefined) return false;
-    return true;
+	if (!("userId" in value) || value["userId"] === undefined) return false;
+	return true;
 }
 
 export function IdentityResourceOneOf3FromJSON(
-    json: any,
+	json: any,
 ): IdentityResourceOneOf3 {
-    return IdentityResourceOneOf3FromJSONTyped(json, false);
+	return IdentityResourceOneOf3FromJSONTyped(json, false);
 }
 
 export function IdentityResourceOneOf3FromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): IdentityResourceOneOf3 {
-    if (json == null) {
-        return json;
-    }
-    return {
-        id:
-            json["id"] === undefined
-                ? undefined
-                : json["id"] === null
-                  ? null
-                  : json["id"],
-        type: json["type"],
-        userId: json["userId"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		id:
+			json["id"] === undefined
+				? undefined
+				: json["id"] === null
+					? null
+					: json["id"],
+		type: json["type"],
+		userId: json["userId"],
+	};
 }
 
 export function IdentityResourceOneOf3ToJSON(
-    json: any,
+	json: any,
 ): IdentityResourceOneOf3 {
-    return IdentityResourceOneOf3ToJSONTyped(json, false);
+	return IdentityResourceOneOf3ToJSONTyped(json, false);
 }
 
 export function IdentityResourceOneOf3ToJSONTyped(
-    value?: IdentityResourceOneOf3 | null,
-    ignoreDiscriminator: boolean = false,
+	value?: IdentityResourceOneOf3 | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        id: value["id"],
-        type: value["type"],
-        userId: value["userId"],
-    };
+	return {
+		id: value["id"],
+		type: value["type"],
+		userId: value["userId"],
+	};
 }

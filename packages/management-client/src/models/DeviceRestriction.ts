@@ -19,52 +19,52 @@ import { mapValues } from "../runtime.js";
  * @interface DeviceRestriction
  */
 export interface DeviceRestriction {
-    /**
-     *
-     */
-    adminAllowed: boolean;
+	/**
+	 *
+	 */
+	adminAllowed: boolean;
 }
 
 /**
  * Check if a given object implements the DeviceRestriction interface.
  */
 export function instanceOfDeviceRestriction(
-    value: object,
+	value: object,
 ): value is DeviceRestriction {
-    if (!("adminAllowed" in value) || value["adminAllowed"] === undefined)
-        return false;
-    return true;
+	if (!("adminAllowed" in value) || value["adminAllowed"] === undefined)
+		return false;
+	return true;
 }
 
 export function DeviceRestrictionFromJSON(json: any): DeviceRestriction {
-    return DeviceRestrictionFromJSONTyped(json, false);
+	return DeviceRestrictionFromJSONTyped(json, false);
 }
 
 export function DeviceRestrictionFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): DeviceRestriction {
-    if (json == null) {
-        return json;
-    }
-    return {
-        adminAllowed: json["adminAllowed"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		adminAllowed: json["adminAllowed"],
+	};
 }
 
 export function DeviceRestrictionToJSON(json: any): DeviceRestriction {
-    return DeviceRestrictionToJSONTyped(json, false);
+	return DeviceRestrictionToJSONTyped(json, false);
 }
 
 export function DeviceRestrictionToJSONTyped(
-    value?: DeviceRestriction | null,
-    ignoreDiscriminator: boolean = false,
+	value?: DeviceRestriction | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        adminAllowed: value["adminAllowed"],
-    };
+	return {
+		adminAllowed: value["adminAllowed"],
+	};
 }

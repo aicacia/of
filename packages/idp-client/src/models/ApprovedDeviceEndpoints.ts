@@ -19,56 +19,56 @@ import { mapValues } from "../runtime.js";
  * @interface ApprovedDeviceEndpoints
  */
 export interface ApprovedDeviceEndpoints {
-    /**
-     *
-     */
-    endpointIds: Array<string>;
+	/**
+	 *
+	 */
+	endpointIds: Array<string>;
 }
 
 /**
  * Check if a given object implements the ApprovedDeviceEndpoints interface.
  */
 export function instanceOfApprovedDeviceEndpoints(
-    value: object,
+	value: object,
 ): value is ApprovedDeviceEndpoints {
-    if (!("endpointIds" in value) || value["endpointIds"] === undefined)
-        return false;
-    return true;
+	if (!("endpointIds" in value) || value["endpointIds"] === undefined)
+		return false;
+	return true;
 }
 
 export function ApprovedDeviceEndpointsFromJSON(
-    json: any,
+	json: any,
 ): ApprovedDeviceEndpoints {
-    return ApprovedDeviceEndpointsFromJSONTyped(json, false);
+	return ApprovedDeviceEndpointsFromJSONTyped(json, false);
 }
 
 export function ApprovedDeviceEndpointsFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): ApprovedDeviceEndpoints {
-    if (json == null) {
-        return json;
-    }
-    return {
-        endpointIds: json["endpointIds"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		endpointIds: json["endpointIds"],
+	};
 }
 
 export function ApprovedDeviceEndpointsToJSON(
-    json: any,
+	json: any,
 ): ApprovedDeviceEndpoints {
-    return ApprovedDeviceEndpointsToJSONTyped(json, false);
+	return ApprovedDeviceEndpointsToJSONTyped(json, false);
 }
 
 export function ApprovedDeviceEndpointsToJSONTyped(
-    value?: ApprovedDeviceEndpoints | null,
-    ignoreDiscriminator: boolean = false,
+	value?: ApprovedDeviceEndpoints | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        endpointIds: value["endpointIds"],
-    };
+	return {
+		endpointIds: value["endpointIds"],
+	};
 }

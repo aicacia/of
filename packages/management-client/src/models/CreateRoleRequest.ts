@@ -19,62 +19,62 @@ import { mapValues } from "../runtime.js";
  * @interface CreateRoleRequest
  */
 export interface CreateRoleRequest {
-    /**
-     *
-     */
-    description?: string | null;
-    /**
-     *
-     */
-    name: string;
+	/**
+	 *
+	 */
+	description?: string | null;
+	/**
+	 *
+	 */
+	name: string;
 }
 
 /**
  * Check if a given object implements the CreateRoleRequest interface.
  */
 export function instanceOfCreateRoleRequest(
-    value: object,
+	value: object,
 ): value is CreateRoleRequest {
-    if (!("name" in value) || value["name"] === undefined) return false;
-    return true;
+	if (!("name" in value) || value["name"] === undefined) return false;
+	return true;
 }
 
 export function CreateRoleRequestFromJSON(json: any): CreateRoleRequest {
-    return CreateRoleRequestFromJSONTyped(json, false);
+	return CreateRoleRequestFromJSONTyped(json, false);
 }
 
 export function CreateRoleRequestFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): CreateRoleRequest {
-    if (json == null) {
-        return json;
-    }
-    return {
-        description:
-            json["description"] === undefined
-                ? undefined
-                : json["description"] === null
-                  ? null
-                  : json["description"],
-        name: json["name"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		description:
+			json["description"] === undefined
+				? undefined
+				: json["description"] === null
+					? null
+					: json["description"],
+		name: json["name"],
+	};
 }
 
 export function CreateRoleRequestToJSON(json: any): CreateRoleRequest {
-    return CreateRoleRequestToJSONTyped(json, false);
+	return CreateRoleRequestToJSONTyped(json, false);
 }
 
 export function CreateRoleRequestToJSONTyped(
-    value?: CreateRoleRequest | null,
-    ignoreDiscriminator: boolean = false,
+	value?: CreateRoleRequest | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        description: value["description"],
-        name: value["name"],
-    };
+	return {
+		description: value["description"],
+		name: value["name"],
+	};
 }

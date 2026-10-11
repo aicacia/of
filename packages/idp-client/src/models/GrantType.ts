@@ -17,44 +17,44 @@
  * @export
  */
 export const GrantType = {
-    Password: "password",
-    AuthorizationCode: "authorization_code",
-    ClientCredentials: "client_credentials",
-    RefreshToken: "refresh_token",
-    UrnIetfParamsOauthGrantTypeTokenExchange:
-        "urn:ietf:params:oauth:grant-type:token-exchange",
+	Password: "password",
+	AuthorizationCode: "authorization_code",
+	ClientCredentials: "client_credentials",
+	RefreshToken: "refresh_token",
+	UrnIetfParamsOauthGrantTypeTokenExchange:
+		"urn:ietf:params:oauth:grant-type:token-exchange",
 } as const;
 export type GrantType = (typeof GrantType)[keyof typeof GrantType];
 
 export function instanceOfGrantType(value: any): boolean {
-    for (const key in GrantType) {
-        if (Object.prototype.hasOwnProperty.call(GrantType, key)) {
-            if (GrantType[key as keyof typeof GrantType] === value) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in GrantType) {
+		if (Object.prototype.hasOwnProperty.call(GrantType, key)) {
+			if (GrantType[key as keyof typeof GrantType] === value) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function GrantTypeFromJSON(json: any): GrantType {
-    return GrantTypeFromJSONTyped(json, false);
+	return GrantTypeFromJSONTyped(json, false);
 }
 
 export function GrantTypeFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): GrantType {
-    return json as GrantType;
+	return json as GrantType;
 }
 
 export function GrantTypeToJSON(value?: GrantType | null): any {
-    return value as any;
+	return value as any;
 }
 
 export function GrantTypeToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): GrantType {
-    return value as GrantType;
+	return value as GrantType;
 }

@@ -13,24 +13,24 @@
  */
 
 import {
-    parseDate,
-    parseDateTime,
-    serializeDate,
-    serializeDateTime,
+	parseDate,
+	parseDateTime,
+	serializeDate,
+	serializeDateTime,
 } from "../runtime.js";
 import type { PermissionTargetOneOf } from "./PermissionTargetOneOf.js";
 import {
-    instanceOfPermissionTargetOneOf,
-    PermissionTargetOneOfFromJSON,
-    PermissionTargetOneOfFromJSONTyped,
-    PermissionTargetOneOfToJSON,
+	instanceOfPermissionTargetOneOf,
+	PermissionTargetOneOfFromJSON,
+	PermissionTargetOneOfFromJSONTyped,
+	PermissionTargetOneOfToJSON,
 } from "./PermissionTargetOneOf.js";
 import type { PermissionTargetOneOf1 } from "./PermissionTargetOneOf1.js";
 import {
-    instanceOfPermissionTargetOneOf1,
-    PermissionTargetOneOf1FromJSON,
-    PermissionTargetOneOf1FromJSONTyped,
-    PermissionTargetOneOf1ToJSON,
+	instanceOfPermissionTargetOneOf1,
+	PermissionTargetOneOf1FromJSON,
+	PermissionTargetOneOf1FromJSONTyped,
+	PermissionTargetOneOf1ToJSON,
 } from "./PermissionTargetOneOf1.js";
 
 /**
@@ -41,47 +41,47 @@ import {
 export type PermissionTarget = PermissionTargetOneOf | PermissionTargetOneOf1;
 
 export function PermissionTargetFromJSON(json: any): PermissionTarget {
-    return PermissionTargetFromJSONTyped(json, false);
+	return PermissionTargetFromJSONTyped(json, false);
 }
 
 export function PermissionTargetFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): PermissionTarget {
-    if (json == null) {
-        return json;
-    }
-    if (typeof json !== "object") {
-        return json;
-    }
-    if (instanceOfPermissionTargetOneOf(json)) {
-        return PermissionTargetOneOfFromJSONTyped(json, true);
-    }
-    if (instanceOfPermissionTargetOneOf1(json)) {
-        return PermissionTargetOneOf1FromJSONTyped(json, true);
-    }
-    return {} as any;
+	if (json == null) {
+		return json;
+	}
+	if (typeof json !== "object") {
+		return json;
+	}
+	if (instanceOfPermissionTargetOneOf(json)) {
+		return PermissionTargetOneOfFromJSONTyped(json, true);
+	}
+	if (instanceOfPermissionTargetOneOf1(json)) {
+		return PermissionTargetOneOf1FromJSONTyped(json, true);
+	}
+	return {} as any;
 }
 
 export function PermissionTargetToJSON(json: any): any {
-    return PermissionTargetToJSONTyped(json, false);
+	return PermissionTargetToJSONTyped(json, false);
 }
 
 export function PermissionTargetToJSONTyped(
-    value?: PermissionTarget | null,
-    ignoreDiscriminator: boolean = false,
+	value?: PermissionTarget | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
-    if (typeof value !== "object") {
-        return value;
-    }
-    if (instanceOfPermissionTargetOneOf(value)) {
-        return PermissionTargetOneOfToJSON(value as PermissionTargetOneOf);
-    }
-    if (instanceOfPermissionTargetOneOf1(value)) {
-        return PermissionTargetOneOf1ToJSON(value as PermissionTargetOneOf1);
-    }
-    return {};
+	if (value == null) {
+		return value;
+	}
+	if (typeof value !== "object") {
+		return value;
+	}
+	if (instanceOfPermissionTargetOneOf(value)) {
+		return PermissionTargetOneOfToJSON(value as PermissionTargetOneOf);
+	}
+	if (instanceOfPermissionTargetOneOf1(value)) {
+		return PermissionTargetOneOf1ToJSON(value as PermissionTargetOneOf1);
+	}
+	return {};
 }

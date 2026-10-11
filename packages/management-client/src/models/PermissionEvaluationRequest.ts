@@ -15,24 +15,24 @@
 import { mapValues } from "../runtime.js";
 import type { PermissionSubject } from "./PermissionSubject.js";
 import {
-    PermissionSubjectFromJSON,
-    PermissionSubjectFromJSONTyped,
-    PermissionSubjectToJSON,
-    PermissionSubjectToJSONTyped,
+	PermissionSubjectFromJSON,
+	PermissionSubjectFromJSONTyped,
+	PermissionSubjectToJSON,
+	PermissionSubjectToJSONTyped,
 } from "./PermissionSubject.js";
 import type { IdentityAction } from "./IdentityAction.js";
 import {
-    IdentityActionFromJSON,
-    IdentityActionFromJSONTyped,
-    IdentityActionToJSON,
-    IdentityActionToJSONTyped,
+	IdentityActionFromJSON,
+	IdentityActionFromJSONTyped,
+	IdentityActionToJSON,
+	IdentityActionToJSONTyped,
 } from "./IdentityAction.js";
 import type { PermissionTarget } from "./PermissionTarget.js";
 import {
-    PermissionTargetFromJSON,
-    PermissionTargetFromJSONTyped,
-    PermissionTargetToJSON,
-    PermissionTargetToJSONTyped,
+	PermissionTargetFromJSON,
+	PermissionTargetFromJSONTyped,
+	PermissionTargetToJSON,
+	PermissionTargetToJSONTyped,
 } from "./PermissionTarget.js";
 
 /**
@@ -41,77 +41,76 @@ import {
  * @interface PermissionEvaluationRequest
  */
 export interface PermissionEvaluationRequest {
-    /**
-     *
-     */
-    action: IdentityAction;
-    /**
-     *
-     */
-    requestId: string;
-    /**
-     *
-     */
-    subject: PermissionSubject;
-    /**
-     *
-     */
-    target: PermissionTarget;
+	/**
+	 *
+	 */
+	action: IdentityAction;
+	/**
+	 *
+	 */
+	requestId: string;
+	/**
+	 *
+	 */
+	subject: PermissionSubject;
+	/**
+	 *
+	 */
+	target: PermissionTarget;
 }
 
 /**
  * Check if a given object implements the PermissionEvaluationRequest interface.
  */
 export function instanceOfPermissionEvaluationRequest(
-    value: object,
+	value: object,
 ): value is PermissionEvaluationRequest {
-    if (!("action" in value) || value["action"] === undefined) return false;
-    if (!("requestId" in value) || value["requestId"] === undefined)
-        return false;
-    if (!("subject" in value) || value["subject"] === undefined) return false;
-    if (!("target" in value) || value["target"] === undefined) return false;
-    return true;
+	if (!("action" in value) || value["action"] === undefined) return false;
+	if (!("requestId" in value) || value["requestId"] === undefined) return false;
+	if (!("subject" in value) || value["subject"] === undefined) return false;
+	if (!("target" in value) || value["target"] === undefined) return false;
+	return true;
 }
 
 export function PermissionEvaluationRequestFromJSON(
-    json: any,
+	json: any,
 ): PermissionEvaluationRequest {
-    return PermissionEvaluationRequestFromJSONTyped(json, false);
+	return PermissionEvaluationRequestFromJSONTyped(json, false);
 }
 
 export function PermissionEvaluationRequestFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): PermissionEvaluationRequest {
-    if (json == null) {
-        return json;
-    }
-    return {
-        action: IdentityActionFromJSON(json["action"]),
-        requestId: json["requestId"],
-        subject: PermissionSubjectFromJSON(json["subject"]),
-        target: PermissionTargetFromJSON(json["target"]),
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		action: IdentityActionFromJSON(json["action"]),
+		requestId: json["requestId"],
+		subject: PermissionSubjectFromJSON(json["subject"]),
+		target: PermissionTargetFromJSON(json["target"]),
+	};
 }
 
 export function PermissionEvaluationRequestToJSON(
-    json: any,
+	json: any,
 ): PermissionEvaluationRequest {
-    return PermissionEvaluationRequestToJSONTyped(json, false);
+	return PermissionEvaluationRequestToJSONTyped(json, false);
 }
 
 export function PermissionEvaluationRequestToJSONTyped(
-    value?: PermissionEvaluationRequest | null,
-    ignoreDiscriminator: boolean = false,
+	value?: PermissionEvaluationRequest | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        action: IdentityActionToJSON(value["action"]),
-        requestId: value["requestId"],
-        subject: PermissionSubjectToJSON(value["subject"]),
-        target: PermissionTargetToJSON(value["target"]),
-    };
+	return {
+		action: IdentityActionToJSON(value["action"]),
+		requestId: value["requestId"],
+		subject: PermissionSubjectToJSON(value["subject"]),
+		target: PermissionTargetToJSON(value["target"]),
+	};
 }

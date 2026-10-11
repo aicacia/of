@@ -19,66 +19,66 @@ import { mapValues } from "../runtime.js";
  * @interface IdentityResourceOneOf8
  */
 export interface IdentityResourceOneOf8 {
-    /**
-     *
-     */
-    type: IdentityResourceOneOf8TypeEnum;
+	/**
+	 *
+	 */
+	type: IdentityResourceOneOf8TypeEnum;
 }
 
 /**
  * @export
  */
 export const IdentityResourceOneOf8TypeEnum = {
-    ManagementSecurity: "managementSecurity",
+	ManagementSecurity: "managementSecurity",
 } as const;
 export type IdentityResourceOneOf8TypeEnum =
-    (typeof IdentityResourceOneOf8TypeEnum)[keyof typeof IdentityResourceOneOf8TypeEnum];
+	(typeof IdentityResourceOneOf8TypeEnum)[keyof typeof IdentityResourceOneOf8TypeEnum];
 
 /**
  * Check if a given object implements the IdentityResourceOneOf8 interface.
  */
 export function instanceOfIdentityResourceOneOf8(
-    value: object,
+	value: object,
 ): value is IdentityResourceOneOf8 {
-    if (!("type" in value) || value["type"] === undefined) return false;
-    if (value["type"] !== "managementSecurity") return false;
+	if (!("type" in value) || value["type"] === undefined) return false;
+	if (value["type"] !== "managementSecurity") return false;
 
-    return true;
+	return true;
 }
 
 export function IdentityResourceOneOf8FromJSON(
-    json: any,
+	json: any,
 ): IdentityResourceOneOf8 {
-    return IdentityResourceOneOf8FromJSONTyped(json, false);
+	return IdentityResourceOneOf8FromJSONTyped(json, false);
 }
 
 export function IdentityResourceOneOf8FromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): IdentityResourceOneOf8 {
-    if (json == null) {
-        return json;
-    }
-    return {
-        type: json["type"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		type: json["type"],
+	};
 }
 
 export function IdentityResourceOneOf8ToJSON(
-    json: any,
+	json: any,
 ): IdentityResourceOneOf8 {
-    return IdentityResourceOneOf8ToJSONTyped(json, false);
+	return IdentityResourceOneOf8ToJSONTyped(json, false);
 }
 
 export function IdentityResourceOneOf8ToJSONTyped(
-    value?: IdentityResourceOneOf8 | null,
-    ignoreDiscriminator: boolean = false,
+	value?: IdentityResourceOneOf8 | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        type: value["type"],
-    };
+	return {
+		type: value["type"],
+	};
 }

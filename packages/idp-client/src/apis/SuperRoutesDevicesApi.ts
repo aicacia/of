@@ -14,21 +14,21 @@
 
 import * as runtime from "../runtime.js";
 import {
-    type ApprovedDeviceEndpoints,
-    ApprovedDeviceEndpointsFromJSON,
-    ApprovedDeviceEndpointsToJSON,
+	type ApprovedDeviceEndpoints,
+	ApprovedDeviceEndpointsFromJSON,
+	ApprovedDeviceEndpointsToJSON,
 } from "../models/ApprovedDeviceEndpoints.js";
 import {
-    type DeviceEndpointIdentity,
-    DeviceEndpointIdentityFromJSON,
-    DeviceEndpointIdentityToJSON,
+	type DeviceEndpointIdentity,
+	DeviceEndpointIdentityFromJSON,
+	DeviceEndpointIdentityToJSON,
 } from "../models/DeviceEndpointIdentity.js";
 
 export interface LookupDeviceEndpointRequest {
-    /**
-     * Iroh endpoint public key
-     */
-    endpointId: string;
+	/**
+	 * Iroh endpoint public key
+	 */
+	endpointId: string;
 }
 
 /**
@@ -38,182 +38,180 @@ export interface LookupDeviceEndpointRequest {
  * @interface SuperRoutesDevicesApiInterface
  */
 export interface SuperRoutesDevicesApiInterface {
-    /**
-     * Creates request options for listApprovedDeviceEndpoints without sending the request
-     * @throws {RequiredError}
-     * @memberof SuperRoutesDevicesApiInterface
-     */
-    listApprovedDeviceEndpointsRequestOpts(): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for listApprovedDeviceEndpoints without sending the request
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesDevicesApiInterface
+	 */
+	listApprovedDeviceEndpointsRequestOpts(): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof SuperRoutesDevicesApiInterface
-     */
-    listApprovedDeviceEndpointsRaw(
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<ApprovedDeviceEndpoints>>;
+	/**
+	 *
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesDevicesApiInterface
+	 */
+	listApprovedDeviceEndpointsRaw(
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<ApprovedDeviceEndpoints>>;
 
-    /**
-     */
-    listApprovedDeviceEndpoints(
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<ApprovedDeviceEndpoints>;
+	/**
+	 */
+	listApprovedDeviceEndpoints(
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<ApprovedDeviceEndpoints>;
 
-    /**
-     * Creates request options for lookupDeviceEndpoint without sending the request
-     * @param {string} endpointId Iroh endpoint public key
-     * @throws {RequiredError}
-     * @memberof SuperRoutesDevicesApiInterface
-     */
-    lookupDeviceEndpointRequestOpts(
-        requestParameters: LookupDeviceEndpointRequest,
-    ): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for lookupDeviceEndpoint without sending the request
+	 * @param {string} endpointId Iroh endpoint public key
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesDevicesApiInterface
+	 */
+	lookupDeviceEndpointRequestOpts(
+		requestParameters: LookupDeviceEndpointRequest,
+	): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {string} endpointId Iroh endpoint public key
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof SuperRoutesDevicesApiInterface
-     */
-    lookupDeviceEndpointRaw(
-        requestParameters: LookupDeviceEndpointRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<DeviceEndpointIdentity>>;
+	/**
+	 *
+	 * @param {string} endpointId Iroh endpoint public key
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesDevicesApiInterface
+	 */
+	lookupDeviceEndpointRaw(
+		requestParameters: LookupDeviceEndpointRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<DeviceEndpointIdentity>>;
 
-    /**
-     */
-    lookupDeviceEndpoint(
-        requestParameters: LookupDeviceEndpointRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<DeviceEndpointIdentity>;
+	/**
+	 */
+	lookupDeviceEndpoint(
+		requestParameters: LookupDeviceEndpointRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<DeviceEndpointIdentity>;
 }
 
 /**
  *
  */
 export class SuperRoutesDevicesApi
-    extends runtime.BaseAPI
-    implements SuperRoutesDevicesApiInterface
+	extends runtime.BaseAPI
+	implements SuperRoutesDevicesApiInterface
 {
-    /**
-     * Creates request options for listApprovedDeviceEndpoints without sending the request
-     */
-    async listApprovedDeviceEndpointsRequestOpts(): Promise<runtime.RequestOpts> {
-        const queryParameters: any = {};
+	/**
+	 * Creates request options for listApprovedDeviceEndpoints without sending the request
+	 */
+	async listApprovedDeviceEndpointsRequestOpts(): Promise<runtime.RequestOpts> {
+		const queryParameters: any = {};
 
-        const headerParameters: runtime.HTTPHeaders = {};
+		const headerParameters: runtime.HTTPHeaders = {};
 
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
 
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
 
-        let urlPath = `/devices/endpoints`;
+		let urlPath = `/devices/endpoints`;
 
-        return {
-            path: urlPath,
-            method: "GET",
-            headers: headerParameters,
-            query: queryParameters,
-        };
-    }
+		return {
+			path: urlPath,
+			method: "GET",
+			headers: headerParameters,
+			query: queryParameters,
+		};
+	}
 
-    /**
-     */
-    async listApprovedDeviceEndpointsRaw(
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<ApprovedDeviceEndpoints>> {
-        const requestOptions =
-            await this.listApprovedDeviceEndpointsRequestOpts();
-        const response = await this.request(requestOptions, initOverrides);
+	/**
+	 */
+	async listApprovedDeviceEndpointsRaw(
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<ApprovedDeviceEndpoints>> {
+		const requestOptions = await this.listApprovedDeviceEndpointsRequestOpts();
+		const response = await this.request(requestOptions, initOverrides);
 
-        return new runtime.JSONApiResponse(response, (jsonValue) =>
-            ApprovedDeviceEndpointsFromJSON(jsonValue),
-        );
-    }
+		return new runtime.JSONApiResponse(response, (jsonValue) =>
+			ApprovedDeviceEndpointsFromJSON(jsonValue),
+		);
+	}
 
-    /**
-     */
-    async listApprovedDeviceEndpoints(
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<ApprovedDeviceEndpoints> {
-        const response =
-            await this.listApprovedDeviceEndpointsRaw(initOverrides);
-        return await response.value();
-    }
+	/**
+	 */
+	async listApprovedDeviceEndpoints(
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<ApprovedDeviceEndpoints> {
+		const response = await this.listApprovedDeviceEndpointsRaw(initOverrides);
+		return await response.value();
+	}
 
-    /**
-     * Creates request options for lookupDeviceEndpoint without sending the request
-     */
-    async lookupDeviceEndpointRequestOpts(
-        requestParameters: LookupDeviceEndpointRequest,
-    ): Promise<runtime.RequestOpts> {
-        if (requestParameters["endpointId"] == null) {
-            throw new runtime.RequiredError(
-                "endpointId",
-                'Required parameter "endpointId" was null or undefined when calling lookupDeviceEndpoint().',
-            );
-        }
+	/**
+	 * Creates request options for lookupDeviceEndpoint without sending the request
+	 */
+	async lookupDeviceEndpointRequestOpts(
+		requestParameters: LookupDeviceEndpointRequest,
+	): Promise<runtime.RequestOpts> {
+		if (requestParameters["endpointId"] == null) {
+			throw new runtime.RequiredError(
+				"endpointId",
+				'Required parameter "endpointId" was null or undefined when calling lookupDeviceEndpoint().',
+			);
+		}
 
-        const queryParameters: any = {};
+		const queryParameters: any = {};
 
-        const headerParameters: runtime.HTTPHeaders = {};
+		const headerParameters: runtime.HTTPHeaders = {};
 
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
 
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
 
-        let urlPath = `/devices/endpoints/{endpoint_id}`;
-        urlPath = urlPath.replace(
-            "{endpoint_id}",
-            encodeURIComponent(String(requestParameters["endpointId"])),
-        );
+		let urlPath = `/devices/endpoints/{endpoint_id}`;
+		urlPath = urlPath.replace(
+			"{endpoint_id}",
+			encodeURIComponent(String(requestParameters["endpointId"])),
+		);
 
-        return {
-            path: urlPath,
-            method: "GET",
-            headers: headerParameters,
-            query: queryParameters,
-        };
-    }
+		return {
+			path: urlPath,
+			method: "GET",
+			headers: headerParameters,
+			query: queryParameters,
+		};
+	}
 
-    /**
-     */
-    async lookupDeviceEndpointRaw(
-        requestParameters: LookupDeviceEndpointRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<DeviceEndpointIdentity>> {
-        const requestOptions =
-            await this.lookupDeviceEndpointRequestOpts(requestParameters);
-        const response = await this.request(requestOptions, initOverrides);
+	/**
+	 */
+	async lookupDeviceEndpointRaw(
+		requestParameters: LookupDeviceEndpointRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<DeviceEndpointIdentity>> {
+		const requestOptions =
+			await this.lookupDeviceEndpointRequestOpts(requestParameters);
+		const response = await this.request(requestOptions, initOverrides);
 
-        return new runtime.JSONApiResponse(response, (jsonValue) =>
-            DeviceEndpointIdentityFromJSON(jsonValue),
-        );
-    }
+		return new runtime.JSONApiResponse(response, (jsonValue) =>
+			DeviceEndpointIdentityFromJSON(jsonValue),
+		);
+	}
 
-    /**
-     */
-    async lookupDeviceEndpoint(
-        requestParameters: LookupDeviceEndpointRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<DeviceEndpointIdentity> {
-        const response = await this.lookupDeviceEndpointRaw(
-            requestParameters,
-            initOverrides,
-        );
-        return await response.value();
-    }
+	/**
+	 */
+	async lookupDeviceEndpoint(
+		requestParameters: LookupDeviceEndpointRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<DeviceEndpointIdentity> {
+		const response = await this.lookupDeviceEndpointRaw(
+			requestParameters,
+			initOverrides,
+		);
+		return await response.value();
+	}
 }

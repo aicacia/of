@@ -15,10 +15,10 @@
 import { mapValues } from "../runtime.js";
 import type { IdentityResource } from "./IdentityResource.js";
 import {
-    IdentityResourceFromJSON,
-    IdentityResourceFromJSONTyped,
-    IdentityResourceToJSON,
-    IdentityResourceToJSONTyped,
+	IdentityResourceFromJSON,
+	IdentityResourceFromJSONTyped,
+	IdentityResourceToJSON,
+	IdentityResourceToJSONTyped,
 } from "./IdentityResource.js";
 
 /**
@@ -27,79 +27,79 @@ import {
  * @interface PermissionTargetOneOf
  */
 export interface PermissionTargetOneOf {
-    /**
-     *
-     */
-    applicationId: string;
-    /**
-     *
-     */
-    resource: IdentityResource;
-    /**
-     *
-     */
-    scope: PermissionTargetOneOfScopeEnum;
+	/**
+	 *
+	 */
+	applicationId: string;
+	/**
+	 *
+	 */
+	resource: IdentityResource;
+	/**
+	 *
+	 */
+	scope: PermissionTargetOneOfScopeEnum;
 }
 
 /**
  * @export
  */
 export const PermissionTargetOneOfScopeEnum = {
-    Application: "application",
+	Application: "application",
 } as const;
 export type PermissionTargetOneOfScopeEnum =
-    (typeof PermissionTargetOneOfScopeEnum)[keyof typeof PermissionTargetOneOfScopeEnum];
+	(typeof PermissionTargetOneOfScopeEnum)[keyof typeof PermissionTargetOneOfScopeEnum];
 
 /**
  * Check if a given object implements the PermissionTargetOneOf interface.
  */
 export function instanceOfPermissionTargetOneOf(
-    value: object,
+	value: object,
 ): value is PermissionTargetOneOf {
-    if (!("applicationId" in value) || value["applicationId"] === undefined)
-        return false;
-    if (!("resource" in value) || value["resource"] === undefined) return false;
-    if (!("scope" in value) || value["scope"] === undefined) return false;
-    if (value["scope"] !== "application") return false;
+	if (!("applicationId" in value) || value["applicationId"] === undefined)
+		return false;
+	if (!("resource" in value) || value["resource"] === undefined) return false;
+	if (!("scope" in value) || value["scope"] === undefined) return false;
+	if (value["scope"] !== "application") return false;
 
-    return true;
+	return true;
 }
 
 export function PermissionTargetOneOfFromJSON(
-    json: any,
+	json: any,
 ): PermissionTargetOneOf {
-    return PermissionTargetOneOfFromJSONTyped(json, false);
+	return PermissionTargetOneOfFromJSONTyped(json, false);
 }
 
 export function PermissionTargetOneOfFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): PermissionTargetOneOf {
-    if (json == null) {
-        return json;
-    }
-    return {
-        applicationId: json["applicationId"],
-        resource: IdentityResourceFromJSON(json["resource"]),
-        scope: json["scope"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		applicationId: json["applicationId"],
+		resource: IdentityResourceFromJSON(json["resource"]),
+		scope: json["scope"],
+	};
 }
 
 export function PermissionTargetOneOfToJSON(json: any): PermissionTargetOneOf {
-    return PermissionTargetOneOfToJSONTyped(json, false);
+	return PermissionTargetOneOfToJSONTyped(json, false);
 }
 
 export function PermissionTargetOneOfToJSONTyped(
-    value?: PermissionTargetOneOf | null,
-    ignoreDiscriminator: boolean = false,
+	value?: PermissionTargetOneOf | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        applicationId: value["applicationId"],
-        resource: IdentityResourceToJSON(value["resource"]),
-        scope: value["scope"],
-    };
+	return {
+		applicationId: value["applicationId"],
+		resource: IdentityResourceToJSON(value["resource"]),
+		scope: value["scope"],
+	};
 }

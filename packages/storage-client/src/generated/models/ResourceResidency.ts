@@ -15,10 +15,10 @@
 import { mapValues } from "../runtime.js";
 import type { ResidencyMode } from "./ResidencyMode.js";
 import {
-    ResidencyModeFromJSON,
-    ResidencyModeFromJSONTyped,
-    ResidencyModeToJSON,
-    ResidencyModeToJSONTyped,
+	ResidencyModeFromJSON,
+	ResidencyModeFromJSONTyped,
+	ResidencyModeToJSON,
+	ResidencyModeToJSONTyped,
 } from "./ResidencyMode.js";
 
 /**
@@ -27,51 +27,51 @@ import {
  * @interface ResourceResidency
  */
 export interface ResourceResidency {
-    /**
-     *
-     */
-    mode: ResidencyMode;
+	/**
+	 *
+	 */
+	mode: ResidencyMode;
 }
 
 /**
  * Check if a given object implements the ResourceResidency interface.
  */
 export function instanceOfResourceResidency(
-    value: object,
+	value: object,
 ): value is ResourceResidency {
-    if (!("mode" in value) || value["mode"] === undefined) return false;
-    return true;
+	if (!("mode" in value) || value["mode"] === undefined) return false;
+	return true;
 }
 
 export function ResourceResidencyFromJSON(json: any): ResourceResidency {
-    return ResourceResidencyFromJSONTyped(json, false);
+	return ResourceResidencyFromJSONTyped(json, false);
 }
 
 export function ResourceResidencyFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): ResourceResidency {
-    if (json == null) {
-        return json;
-    }
-    return {
-        mode: ResidencyModeFromJSON(json["mode"]),
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		mode: ResidencyModeFromJSON(json["mode"]),
+	};
 }
 
 export function ResourceResidencyToJSON(json: any): ResourceResidency {
-    return ResourceResidencyToJSONTyped(json, false);
+	return ResourceResidencyToJSONTyped(json, false);
 }
 
 export function ResourceResidencyToJSONTyped(
-    value?: ResourceResidency | null,
-    ignoreDiscriminator: boolean = false,
+	value?: ResourceResidency | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        mode: ResidencyModeToJSON(value["mode"]),
-    };
+	return {
+		mode: ResidencyModeToJSON(value["mode"]),
+	};
 }

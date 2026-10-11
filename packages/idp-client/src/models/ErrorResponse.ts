@@ -15,10 +15,10 @@
 import { mapValues } from "../runtime.js";
 import type { ErrorCode } from "./ErrorCode.js";
 import {
-    ErrorCodeFromJSON,
-    ErrorCodeFromJSONTyped,
-    ErrorCodeToJSON,
-    ErrorCodeToJSONTyped,
+	ErrorCodeFromJSON,
+	ErrorCodeFromJSONTyped,
+	ErrorCodeToJSON,
+	ErrorCodeToJSONTyped,
 } from "./ErrorCode.js";
 
 /**
@@ -28,71 +28,71 @@ import {
  * @interface ErrorResponse
  */
 export interface ErrorResponse {
-    /**
-     *
-     */
-    error: ErrorCode;
-    /**
-     *
-     */
-    errorDescription?: string | null;
-    /**
-     *
-     */
-    errorUri?: string | null;
+	/**
+	 *
+	 */
+	error: ErrorCode;
+	/**
+	 *
+	 */
+	errorDescription?: string | null;
+	/**
+	 *
+	 */
+	errorUri?: string | null;
 }
 
 /**
  * Check if a given object implements the ErrorResponse interface.
  */
 export function instanceOfErrorResponse(value: object): value is ErrorResponse {
-    if (!("error" in value) || value["error"] === undefined) return false;
-    return true;
+	if (!("error" in value) || value["error"] === undefined) return false;
+	return true;
 }
 
 export function ErrorResponseFromJSON(json: any): ErrorResponse {
-    return ErrorResponseFromJSONTyped(json, false);
+	return ErrorResponseFromJSONTyped(json, false);
 }
 
 export function ErrorResponseFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): ErrorResponse {
-    if (json == null) {
-        return json;
-    }
-    return {
-        error: ErrorCodeFromJSON(json["error"]),
-        errorDescription:
-            json["error_description"] === undefined
-                ? undefined
-                : json["error_description"] === null
-                  ? null
-                  : json["error_description"],
-        errorUri:
-            json["error_uri"] === undefined
-                ? undefined
-                : json["error_uri"] === null
-                  ? null
-                  : json["error_uri"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		error: ErrorCodeFromJSON(json["error"]),
+		errorDescription:
+			json["error_description"] === undefined
+				? undefined
+				: json["error_description"] === null
+					? null
+					: json["error_description"],
+		errorUri:
+			json["error_uri"] === undefined
+				? undefined
+				: json["error_uri"] === null
+					? null
+					: json["error_uri"],
+	};
 }
 
 export function ErrorResponseToJSON(json: any): ErrorResponse {
-    return ErrorResponseToJSONTyped(json, false);
+	return ErrorResponseToJSONTyped(json, false);
 }
 
 export function ErrorResponseToJSONTyped(
-    value?: ErrorResponse | null,
-    ignoreDiscriminator: boolean = false,
+	value?: ErrorResponse | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        error: ErrorCodeToJSON(value["error"]),
-        error_description: value["errorDescription"],
-        error_uri: value["errorUri"],
-    };
+	return {
+		error: ErrorCodeToJSON(value["error"]),
+		error_description: value["errorDescription"],
+		error_uri: value["errorUri"],
+	};
 }

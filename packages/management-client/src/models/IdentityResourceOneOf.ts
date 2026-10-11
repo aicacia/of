@@ -19,75 +19,75 @@ import { mapValues } from "../runtime.js";
  * @interface IdentityResourceOneOf
  */
 export interface IdentityResourceOneOf {
-    /**
-     *
-     */
-    clientId?: string | null;
-    /**
-     *
-     */
-    type: IdentityResourceOneOfTypeEnum;
+	/**
+	 *
+	 */
+	clientId?: string | null;
+	/**
+	 *
+	 */
+	type: IdentityResourceOneOfTypeEnum;
 }
 
 /**
  * @export
  */
 export const IdentityResourceOneOfTypeEnum = {
-    Client: "client",
+	Client: "client",
 } as const;
 export type IdentityResourceOneOfTypeEnum =
-    (typeof IdentityResourceOneOfTypeEnum)[keyof typeof IdentityResourceOneOfTypeEnum];
+	(typeof IdentityResourceOneOfTypeEnum)[keyof typeof IdentityResourceOneOfTypeEnum];
 
 /**
  * Check if a given object implements the IdentityResourceOneOf interface.
  */
 export function instanceOfIdentityResourceOneOf(
-    value: object,
+	value: object,
 ): value is IdentityResourceOneOf {
-    if (!("type" in value) || value["type"] === undefined) return false;
-    if (value["type"] !== "client") return false;
+	if (!("type" in value) || value["type"] === undefined) return false;
+	if (value["type"] !== "client") return false;
 
-    return true;
+	return true;
 }
 
 export function IdentityResourceOneOfFromJSON(
-    json: any,
+	json: any,
 ): IdentityResourceOneOf {
-    return IdentityResourceOneOfFromJSONTyped(json, false);
+	return IdentityResourceOneOfFromJSONTyped(json, false);
 }
 
 export function IdentityResourceOneOfFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): IdentityResourceOneOf {
-    if (json == null) {
-        return json;
-    }
-    return {
-        clientId:
-            json["clientId"] === undefined
-                ? undefined
-                : json["clientId"] === null
-                  ? null
-                  : json["clientId"],
-        type: json["type"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		clientId:
+			json["clientId"] === undefined
+				? undefined
+				: json["clientId"] === null
+					? null
+					: json["clientId"],
+		type: json["type"],
+	};
 }
 
 export function IdentityResourceOneOfToJSON(json: any): IdentityResourceOneOf {
-    return IdentityResourceOneOfToJSONTyped(json, false);
+	return IdentityResourceOneOfToJSONTyped(json, false);
 }
 
 export function IdentityResourceOneOfToJSONTyped(
-    value?: IdentityResourceOneOf | null,
-    ignoreDiscriminator: boolean = false,
+	value?: IdentityResourceOneOf | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        clientId: value["clientId"],
-        type: value["type"],
-    };
+	return {
+		clientId: value["clientId"],
+		type: value["type"],
+	};
 }

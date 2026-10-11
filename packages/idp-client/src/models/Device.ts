@@ -19,57 +19,56 @@ import { mapValues } from "../runtime.js";
  * @interface Device
  */
 export interface Device {
-    /**
-     *
-     */
-    address: string;
-    /**
-     *
-     */
-    publicKey: string;
+	/**
+	 *
+	 */
+	address: string;
+	/**
+	 *
+	 */
+	publicKey: string;
 }
 
 /**
  * Check if a given object implements the Device interface.
  */
 export function instanceOfDevice(value: object): value is Device {
-    if (!("address" in value) || value["address"] === undefined) return false;
-    if (!("publicKey" in value) || value["publicKey"] === undefined)
-        return false;
-    return true;
+	if (!("address" in value) || value["address"] === undefined) return false;
+	if (!("publicKey" in value) || value["publicKey"] === undefined) return false;
+	return true;
 }
 
 export function DeviceFromJSON(json: any): Device {
-    return DeviceFromJSONTyped(json, false);
+	return DeviceFromJSONTyped(json, false);
 }
 
 export function DeviceFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): Device {
-    if (json == null) {
-        return json;
-    }
-    return {
-        address: json["address"],
-        publicKey: json["publicKey"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		address: json["address"],
+		publicKey: json["publicKey"],
+	};
 }
 
 export function DeviceToJSON(json: any): Device {
-    return DeviceToJSONTyped(json, false);
+	return DeviceToJSONTyped(json, false);
 }
 
 export function DeviceToJSONTyped(
-    value?: Device | null,
-    ignoreDiscriminator: boolean = false,
+	value?: Device | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        address: value["address"],
-        publicKey: value["publicKey"],
-    };
+	return {
+		address: value["address"],
+		publicKey: value["publicKey"],
+	};
 }

@@ -17,40 +17,40 @@
  * @export
  */
 export const PrincipalType = {
-    User: "user",
-    Client: "client",
+	User: "user",
+	Client: "client",
 } as const;
 export type PrincipalType = (typeof PrincipalType)[keyof typeof PrincipalType];
 
 export function instanceOfPrincipalType(value: any): boolean {
-    for (const key in PrincipalType) {
-        if (Object.prototype.hasOwnProperty.call(PrincipalType, key)) {
-            if (PrincipalType[key as keyof typeof PrincipalType] === value) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in PrincipalType) {
+		if (Object.prototype.hasOwnProperty.call(PrincipalType, key)) {
+			if (PrincipalType[key as keyof typeof PrincipalType] === value) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function PrincipalTypeFromJSON(json: any): PrincipalType {
-    return PrincipalTypeFromJSONTyped(json, false);
+	return PrincipalTypeFromJSONTyped(json, false);
 }
 
 export function PrincipalTypeFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): PrincipalType {
-    return json as PrincipalType;
+	return json as PrincipalType;
 }
 
 export function PrincipalTypeToJSON(value?: PrincipalType | null): any {
-    return value as any;
+	return value as any;
 }
 
 export function PrincipalTypeToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): PrincipalType {
-    return value as PrincipalType;
+	return value as PrincipalType;
 }

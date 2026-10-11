@@ -1345,6 +1345,23 @@ mod tests {
             }
         }
 
+        let client_qualification =
+            if let Some(script) = std::env::var_os("OF06_CLIENT_QUALIFICATION") {
+                Some(
+                    tokio::task::spawn_blocking(move || {
+                        std::process::Command::new("node")
+                            .arg(script)
+                            .arg(format!("http://{server_address}"))
+                            .status()
+                            .expect("run client qualification against live public routers")
+                    })
+                    .await
+                    .expect("client qualification worker joins"),
+                )
+            } else {
+                None
+            };
+
         for path in ["/idp/health", "/management/health", "/storage/health"] {
             let response = client
                 .get(format!("http://{server_address}{path}"))
@@ -1747,6 +1764,12 @@ mod tests {
         restored_endpoint.close().await;
         drop(restored_idp);
         fs::remove_dir_all(root).expect("remove unified runtime data");
+        if let Some(status) = client_qualification {
+            assert!(
+                status.success(),
+                "live public API client qualification failed"
+            );
+        }
     }
 
     async fn issue_client_token(

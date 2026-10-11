@@ -19,77 +19,77 @@ import { mapValues } from "../runtime.js";
  * @interface ApplicationRegistration
  */
 export interface ApplicationRegistration {
-    /**
-     *
-     */
-    description?: string | null;
-    /**
-     *
-     */
-    name?: string | null;
-    /**
-     *
-     */
-    uri: string;
+	/**
+	 *
+	 */
+	description?: string | null;
+	/**
+	 *
+	 */
+	name?: string | null;
+	/**
+	 *
+	 */
+	uri: string;
 }
 
 /**
  * Check if a given object implements the ApplicationRegistration interface.
  */
 export function instanceOfApplicationRegistration(
-    value: object,
+	value: object,
 ): value is ApplicationRegistration {
-    if (!("uri" in value) || value["uri"] === undefined) return false;
-    return true;
+	if (!("uri" in value) || value["uri"] === undefined) return false;
+	return true;
 }
 
 export function ApplicationRegistrationFromJSON(
-    json: any,
+	json: any,
 ): ApplicationRegistration {
-    return ApplicationRegistrationFromJSONTyped(json, false);
+	return ApplicationRegistrationFromJSONTyped(json, false);
 }
 
 export function ApplicationRegistrationFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): ApplicationRegistration {
-    if (json == null) {
-        return json;
-    }
-    return {
-        description:
-            json["description"] === undefined
-                ? undefined
-                : json["description"] === null
-                  ? null
-                  : json["description"],
-        name:
-            json["name"] === undefined
-                ? undefined
-                : json["name"] === null
-                  ? null
-                  : json["name"],
-        uri: json["uri"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		description:
+			json["description"] === undefined
+				? undefined
+				: json["description"] === null
+					? null
+					: json["description"],
+		name:
+			json["name"] === undefined
+				? undefined
+				: json["name"] === null
+					? null
+					: json["name"],
+		uri: json["uri"],
+	};
 }
 
 export function ApplicationRegistrationToJSON(
-    json: any,
+	json: any,
 ): ApplicationRegistration {
-    return ApplicationRegistrationToJSONTyped(json, false);
+	return ApplicationRegistrationToJSONTyped(json, false);
 }
 
 export function ApplicationRegistrationToJSONTyped(
-    value?: ApplicationRegistration | null,
-    ignoreDiscriminator: boolean = false,
+	value?: ApplicationRegistration | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        description: value["description"],
-        name: value["name"],
-        uri: value["uri"],
-    };
+	return {
+		description: value["description"],
+		name: value["name"],
+		uri: value["uri"],
+	};
 }

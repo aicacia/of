@@ -19,77 +19,77 @@ import { mapValues } from "../runtime.js";
  * @interface IdentityResourceOneOf9
  */
 export interface IdentityResourceOneOf9 {
-    /**
-     *
-     */
-    memberId?: string | null;
-    /**
-     *
-     */
-    type: IdentityResourceOneOf9TypeEnum;
+	/**
+	 *
+	 */
+	memberId?: string | null;
+	/**
+	 *
+	 */
+	type: IdentityResourceOneOf9TypeEnum;
 }
 
 /**
  * @export
  */
 export const IdentityResourceOneOf9TypeEnum = {
-    ReplicaSigner: "replicaSigner",
+	ReplicaSigner: "replicaSigner",
 } as const;
 export type IdentityResourceOneOf9TypeEnum =
-    (typeof IdentityResourceOneOf9TypeEnum)[keyof typeof IdentityResourceOneOf9TypeEnum];
+	(typeof IdentityResourceOneOf9TypeEnum)[keyof typeof IdentityResourceOneOf9TypeEnum];
 
 /**
  * Check if a given object implements the IdentityResourceOneOf9 interface.
  */
 export function instanceOfIdentityResourceOneOf9(
-    value: object,
+	value: object,
 ): value is IdentityResourceOneOf9 {
-    if (!("type" in value) || value["type"] === undefined) return false;
-    if (value["type"] !== "replicaSigner") return false;
+	if (!("type" in value) || value["type"] === undefined) return false;
+	if (value["type"] !== "replicaSigner") return false;
 
-    return true;
+	return true;
 }
 
 export function IdentityResourceOneOf9FromJSON(
-    json: any,
+	json: any,
 ): IdentityResourceOneOf9 {
-    return IdentityResourceOneOf9FromJSONTyped(json, false);
+	return IdentityResourceOneOf9FromJSONTyped(json, false);
 }
 
 export function IdentityResourceOneOf9FromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): IdentityResourceOneOf9 {
-    if (json == null) {
-        return json;
-    }
-    return {
-        memberId:
-            json["member_id"] === undefined
-                ? undefined
-                : json["member_id"] === null
-                  ? null
-                  : json["member_id"],
-        type: json["type"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		memberId:
+			json["member_id"] === undefined
+				? undefined
+				: json["member_id"] === null
+					? null
+					: json["member_id"],
+		type: json["type"],
+	};
 }
 
 export function IdentityResourceOneOf9ToJSON(
-    json: any,
+	json: any,
 ): IdentityResourceOneOf9 {
-    return IdentityResourceOneOf9ToJSONTyped(json, false);
+	return IdentityResourceOneOf9ToJSONTyped(json, false);
 }
 
 export function IdentityResourceOneOf9ToJSONTyped(
-    value?: IdentityResourceOneOf9 | null,
-    ignoreDiscriminator: boolean = false,
+	value?: IdentityResourceOneOf9 | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        member_id: value["memberId"],
-        type: value["type"],
-    };
+	return {
+		member_id: value["memberId"],
+		type: value["type"],
+	};
 }

@@ -17,52 +17,52 @@
  * @export
  */
 export const ErrorCode = {
-    NotFound: "not_found",
-    UnauthorizedClient: "unauthorized_client",
-    AccessDenied: "access_denied",
-    NotAuthorized: "not_authorized",
-    ServerError: "server_error",
-    TemporarilyUnavailable: "temporarily_unavailable",
-    InvalidGrant: "invalid_grant",
-    InvalidClient: "invalid_client",
-    InvalidRequest: "invalid_request",
-    InvalidScope: "invalid_scope",
-    InvalidResponseType: "invalid_response_type",
-    UnsupportedResponseType: "unsupported_response_type",
-    UnsupportedGrantType: "unsupported_grant_type",
-    NotImplemented: "not_implemented",
+	NotFound: "not_found",
+	UnauthorizedClient: "unauthorized_client",
+	AccessDenied: "access_denied",
+	NotAuthorized: "not_authorized",
+	ServerError: "server_error",
+	TemporarilyUnavailable: "temporarily_unavailable",
+	InvalidGrant: "invalid_grant",
+	InvalidClient: "invalid_client",
+	InvalidRequest: "invalid_request",
+	InvalidScope: "invalid_scope",
+	InvalidResponseType: "invalid_response_type",
+	UnsupportedResponseType: "unsupported_response_type",
+	UnsupportedGrantType: "unsupported_grant_type",
+	NotImplemented: "not_implemented",
 } as const;
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 
 export function instanceOfErrorCode(value: any): boolean {
-    for (const key in ErrorCode) {
-        if (Object.prototype.hasOwnProperty.call(ErrorCode, key)) {
-            if (ErrorCode[key as keyof typeof ErrorCode] === value) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in ErrorCode) {
+		if (Object.prototype.hasOwnProperty.call(ErrorCode, key)) {
+			if (ErrorCode[key as keyof typeof ErrorCode] === value) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function ErrorCodeFromJSON(json: any): ErrorCode {
-    return ErrorCodeFromJSONTyped(json, false);
+	return ErrorCodeFromJSONTyped(json, false);
 }
 
 export function ErrorCodeFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): ErrorCode {
-    return json as ErrorCode;
+	return json as ErrorCode;
 }
 
 export function ErrorCodeToJSON(value?: ErrorCode | null): any {
-    return value as any;
+	return value as any;
 }
 
 export function ErrorCodeToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): ErrorCode {
-    return value as ErrorCode;
+	return value as ErrorCode;
 }

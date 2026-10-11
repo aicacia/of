@@ -13,24 +13,24 @@
  */
 
 import {
-    parseDate,
-    parseDateTime,
-    serializeDate,
-    serializeDateTime,
+	parseDate,
+	parseDateTime,
+	serializeDate,
+	serializeDateTime,
 } from "../runtime.js";
 import type { AuthorizationCodeResponseOneOf } from "./AuthorizationCodeResponseOneOf.js";
 import {
-    instanceOfAuthorizationCodeResponseOneOf,
-    AuthorizationCodeResponseOneOfFromJSON,
-    AuthorizationCodeResponseOneOfFromJSONTyped,
-    AuthorizationCodeResponseOneOfToJSON,
+	instanceOfAuthorizationCodeResponseOneOf,
+	AuthorizationCodeResponseOneOfFromJSON,
+	AuthorizationCodeResponseOneOfFromJSONTyped,
+	AuthorizationCodeResponseOneOfToJSON,
 } from "./AuthorizationCodeResponseOneOf.js";
 import type { AuthorizationCodeResponseOneOf1 } from "./AuthorizationCodeResponseOneOf1.js";
 import {
-    instanceOfAuthorizationCodeResponseOneOf1,
-    AuthorizationCodeResponseOneOf1FromJSON,
-    AuthorizationCodeResponseOneOf1FromJSONTyped,
-    AuthorizationCodeResponseOneOf1ToJSON,
+	instanceOfAuthorizationCodeResponseOneOf1,
+	AuthorizationCodeResponseOneOf1FromJSON,
+	AuthorizationCodeResponseOneOf1FromJSONTyped,
+	AuthorizationCodeResponseOneOf1ToJSON,
 } from "./AuthorizationCodeResponseOneOf1.js";
 
 /**
@@ -39,57 +39,57 @@ import {
  * @export
  */
 export type AuthorizationCodeResponse =
-    | AuthorizationCodeResponseOneOf
-    | AuthorizationCodeResponseOneOf1;
+	| AuthorizationCodeResponseOneOf
+	| AuthorizationCodeResponseOneOf1;
 
 export function AuthorizationCodeResponseFromJSON(
-    json: any,
+	json: any,
 ): AuthorizationCodeResponse {
-    return AuthorizationCodeResponseFromJSONTyped(json, false);
+	return AuthorizationCodeResponseFromJSONTyped(json, false);
 }
 
 export function AuthorizationCodeResponseFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): AuthorizationCodeResponse {
-    if (json == null) {
-        return json;
-    }
-    if (typeof json !== "object") {
-        return json;
-    }
-    if (instanceOfAuthorizationCodeResponseOneOf(json)) {
-        return AuthorizationCodeResponseOneOfFromJSONTyped(json, true);
-    }
-    if (instanceOfAuthorizationCodeResponseOneOf1(json)) {
-        return AuthorizationCodeResponseOneOf1FromJSONTyped(json, true);
-    }
-    return {} as any;
+	if (json == null) {
+		return json;
+	}
+	if (typeof json !== "object") {
+		return json;
+	}
+	if (instanceOfAuthorizationCodeResponseOneOf(json)) {
+		return AuthorizationCodeResponseOneOfFromJSONTyped(json, true);
+	}
+	if (instanceOfAuthorizationCodeResponseOneOf1(json)) {
+		return AuthorizationCodeResponseOneOf1FromJSONTyped(json, true);
+	}
+	return {} as any;
 }
 
 export function AuthorizationCodeResponseToJSON(json: any): any {
-    return AuthorizationCodeResponseToJSONTyped(json, false);
+	return AuthorizationCodeResponseToJSONTyped(json, false);
 }
 
 export function AuthorizationCodeResponseToJSONTyped(
-    value?: AuthorizationCodeResponse | null,
-    ignoreDiscriminator: boolean = false,
+	value?: AuthorizationCodeResponse | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
-    if (typeof value !== "object") {
-        return value;
-    }
-    if (instanceOfAuthorizationCodeResponseOneOf(value)) {
-        return AuthorizationCodeResponseOneOfToJSON(
-            value as AuthorizationCodeResponseOneOf,
-        );
-    }
-    if (instanceOfAuthorizationCodeResponseOneOf1(value)) {
-        return AuthorizationCodeResponseOneOf1ToJSON(
-            value as AuthorizationCodeResponseOneOf1,
-        );
-    }
-    return {};
+	if (value == null) {
+		return value;
+	}
+	if (typeof value !== "object") {
+		return value;
+	}
+	if (instanceOfAuthorizationCodeResponseOneOf(value)) {
+		return AuthorizationCodeResponseOneOfToJSON(
+			value as AuthorizationCodeResponseOneOf,
+		);
+	}
+	if (instanceOfAuthorizationCodeResponseOneOf1(value)) {
+		return AuthorizationCodeResponseOneOf1ToJSON(
+			value as AuthorizationCodeResponseOneOf1,
+		);
+	}
+	return {};
 }

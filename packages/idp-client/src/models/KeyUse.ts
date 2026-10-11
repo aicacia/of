@@ -17,40 +17,40 @@
  * @export
  */
 export const KeyUse = {
-    Sig: "sig",
-    Enc: "enc",
+	Sig: "sig",
+	Enc: "enc",
 } as const;
 export type KeyUse = (typeof KeyUse)[keyof typeof KeyUse];
 
 export function instanceOfKeyUse(value: any): boolean {
-    for (const key in KeyUse) {
-        if (Object.prototype.hasOwnProperty.call(KeyUse, key)) {
-            if (KeyUse[key as keyof typeof KeyUse] === value) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in KeyUse) {
+		if (Object.prototype.hasOwnProperty.call(KeyUse, key)) {
+			if (KeyUse[key as keyof typeof KeyUse] === value) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function KeyUseFromJSON(json: any): KeyUse {
-    return KeyUseFromJSONTyped(json, false);
+	return KeyUseFromJSONTyped(json, false);
 }
 
 export function KeyUseFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): KeyUse {
-    return json as KeyUse;
+	return json as KeyUse;
 }
 
 export function KeyUseToJSON(value?: KeyUse | null): any {
-    return value as any;
+	return value as any;
 }
 
 export function KeyUseToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): KeyUse {
-    return value as KeyUse;
+	return value as KeyUse;
 }

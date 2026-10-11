@@ -19,66 +19,66 @@ import { mapValues } from "../runtime.js";
  * @interface IdentityResourceOneOf6
  */
 export interface IdentityResourceOneOf6 {
-    /**
-     *
-     */
-    type: IdentityResourceOneOf6TypeEnum;
+	/**
+	 *
+	 */
+	type: IdentityResourceOneOf6TypeEnum;
 }
 
 /**
  * @export
  */
 export const IdentityResourceOneOf6TypeEnum = {
-    DevicePairing: "devicePairing",
+	DevicePairing: "devicePairing",
 } as const;
 export type IdentityResourceOneOf6TypeEnum =
-    (typeof IdentityResourceOneOf6TypeEnum)[keyof typeof IdentityResourceOneOf6TypeEnum];
+	(typeof IdentityResourceOneOf6TypeEnum)[keyof typeof IdentityResourceOneOf6TypeEnum];
 
 /**
  * Check if a given object implements the IdentityResourceOneOf6 interface.
  */
 export function instanceOfIdentityResourceOneOf6(
-    value: object,
+	value: object,
 ): value is IdentityResourceOneOf6 {
-    if (!("type" in value) || value["type"] === undefined) return false;
-    if (value["type"] !== "devicePairing") return false;
+	if (!("type" in value) || value["type"] === undefined) return false;
+	if (value["type"] !== "devicePairing") return false;
 
-    return true;
+	return true;
 }
 
 export function IdentityResourceOneOf6FromJSON(
-    json: any,
+	json: any,
 ): IdentityResourceOneOf6 {
-    return IdentityResourceOneOf6FromJSONTyped(json, false);
+	return IdentityResourceOneOf6FromJSONTyped(json, false);
 }
 
 export function IdentityResourceOneOf6FromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): IdentityResourceOneOf6 {
-    if (json == null) {
-        return json;
-    }
-    return {
-        type: json["type"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		type: json["type"],
+	};
 }
 
 export function IdentityResourceOneOf6ToJSON(
-    json: any,
+	json: any,
 ): IdentityResourceOneOf6 {
-    return IdentityResourceOneOf6ToJSONTyped(json, false);
+	return IdentityResourceOneOf6ToJSONTyped(json, false);
 }
 
 export function IdentityResourceOneOf6ToJSONTyped(
-    value?: IdentityResourceOneOf6 | null,
-    ignoreDiscriminator: boolean = false,
+	value?: IdentityResourceOneOf6 | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        type: value["type"],
-    };
+	return {
+		type: value["type"],
+	};
 }

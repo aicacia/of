@@ -14,71 +14,71 @@
 
 import * as runtime from "../runtime.js";
 import {
-    type CreateResourceRequest,
-    CreateResourceRequestFromJSON,
-    CreateResourceRequestToJSON,
+	type CreateResourceRequest,
+	CreateResourceRequestFromJSON,
+	CreateResourceRequestToJSON,
 } from "../models/CreateResourceRequest.js";
 import {
-    type DatabaseDetailResponse,
-    DatabaseDetailResponseFromJSON,
-    DatabaseDetailResponseToJSON,
+	type DatabaseDetailResponse,
+	DatabaseDetailResponseFromJSON,
+	DatabaseDetailResponseToJSON,
 } from "../models/DatabaseDetailResponse.js";
 import {
-    type DatabaseResource,
-    DatabaseResourceFromJSON,
-    DatabaseResourceToJSON,
+	type DatabaseResource,
+	DatabaseResourceFromJSON,
+	DatabaseResourceToJSON,
 } from "../models/DatabaseResource.js";
 import {
-    type FileSystemDetailResponse,
-    FileSystemDetailResponseFromJSON,
-    FileSystemDetailResponseToJSON,
+	type FileSystemDetailResponse,
+	FileSystemDetailResponseFromJSON,
+	FileSystemDetailResponseToJSON,
 } from "../models/FileSystemDetailResponse.js";
 import {
-    type FileSystemResourceResponse,
-    FileSystemResourceResponseFromJSON,
-    FileSystemResourceResponseToJSON,
+	type FileSystemResourceResponse,
+	FileSystemResourceResponseFromJSON,
+	FileSystemResourceResponseToJSON,
 } from "../models/FileSystemResourceResponse.js";
 
 export interface CreateDatabaseRequest {
-    /**
-     *
-     */
-    createResourceRequest: CreateResourceRequest;
+	/**
+	 *
+	 */
+	createResourceRequest: CreateResourceRequest;
 }
 
 export interface CreateFileSystemRequest {
-    /**
-     *
-     */
-    createResourceRequest: CreateResourceRequest;
+	/**
+	 *
+	 */
+	createResourceRequest: CreateResourceRequest;
 }
 
 export interface DeleteDatabaseRequest {
-    /**
-     * Database resource ID
-     */
-    databaseId: string;
+	/**
+	 * Database resource ID
+	 */
+	databaseId: string;
 }
 
 export interface DeleteFileSystemRequest {
-    /**
-     * Filesystem resource ID
-     */
-    filesystemId: string;
+	/**
+	 * Filesystem resource ID
+	 */
+	filesystemId: string;
 }
 
 export interface GetDatabaseRequest {
-    /**
-     * Database resource ID
-     */
-    databaseId: string;
+	/**
+	 * Database resource ID
+	 */
+	databaseId: string;
 }
 
 export interface GetFileSystemRequest {
-    /**
-     * Filesystem resource ID
-     */
-    filesystemId: string;
+	/**
+	 * Filesystem resource ID
+	 */
+	filesystemId: string;
 }
 
 /**
@@ -88,727 +88,726 @@ export interface GetFileSystemRequest {
  * @interface ResourcesApiInterface
  */
 export interface ResourcesApiInterface {
-    /**
-     * Creates request options for createDatabase without sending the request
-     * @param {CreateResourceRequest} createResourceRequest
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    createDatabaseRequestOpts(
-        requestParameters: CreateDatabaseRequest,
-    ): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for createDatabase without sending the request
+	 * @param {CreateResourceRequest} createResourceRequest
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	createDatabaseRequestOpts(
+		requestParameters: CreateDatabaseRequest,
+	): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {CreateResourceRequest} createResourceRequest
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    createDatabaseRaw(
-        requestParameters: CreateDatabaseRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<DatabaseResource>>;
+	/**
+	 *
+	 * @param {CreateResourceRequest} createResourceRequest
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	createDatabaseRaw(
+		requestParameters: CreateDatabaseRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<DatabaseResource>>;
 
-    /**
-     */
-    createDatabase(
-        requestParameters: CreateDatabaseRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<DatabaseResource>;
+	/**
+	 */
+	createDatabase(
+		requestParameters: CreateDatabaseRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<DatabaseResource>;
 
-    /**
-     * Creates request options for createFileSystem without sending the request
-     * @param {CreateResourceRequest} createResourceRequest
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    createFileSystemRequestOpts(
-        requestParameters: CreateFileSystemRequest,
-    ): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for createFileSystem without sending the request
+	 * @param {CreateResourceRequest} createResourceRequest
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	createFileSystemRequestOpts(
+		requestParameters: CreateFileSystemRequest,
+	): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {CreateResourceRequest} createResourceRequest
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    createFileSystemRaw(
-        requestParameters: CreateFileSystemRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<FileSystemResourceResponse>>;
+	/**
+	 *
+	 * @param {CreateResourceRequest} createResourceRequest
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	createFileSystemRaw(
+		requestParameters: CreateFileSystemRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<FileSystemResourceResponse>>;
 
-    /**
-     */
-    createFileSystem(
-        requestParameters: CreateFileSystemRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<FileSystemResourceResponse>;
+	/**
+	 */
+	createFileSystem(
+		requestParameters: CreateFileSystemRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<FileSystemResourceResponse>;
 
-    /**
-     * Creates request options for deleteDatabase without sending the request
-     * @param {string} databaseId Database resource ID
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    deleteDatabaseRequestOpts(
-        requestParameters: DeleteDatabaseRequest,
-    ): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for deleteDatabase without sending the request
+	 * @param {string} databaseId Database resource ID
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	deleteDatabaseRequestOpts(
+		requestParameters: DeleteDatabaseRequest,
+	): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {string} databaseId Database resource ID
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    deleteDatabaseRaw(
-        requestParameters: DeleteDatabaseRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<void>>;
+	/**
+	 *
+	 * @param {string} databaseId Database resource ID
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	deleteDatabaseRaw(
+		requestParameters: DeleteDatabaseRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<void>>;
 
-    /**
-     */
-    deleteDatabase(
-        requestParameters: DeleteDatabaseRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<void>;
+	/**
+	 */
+	deleteDatabase(
+		requestParameters: DeleteDatabaseRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<void>;
 
-    /**
-     * Creates request options for deleteFileSystem without sending the request
-     * @param {string} filesystemId Filesystem resource ID
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    deleteFileSystemRequestOpts(
-        requestParameters: DeleteFileSystemRequest,
-    ): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for deleteFileSystem without sending the request
+	 * @param {string} filesystemId Filesystem resource ID
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	deleteFileSystemRequestOpts(
+		requestParameters: DeleteFileSystemRequest,
+	): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {string} filesystemId Filesystem resource ID
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    deleteFileSystemRaw(
-        requestParameters: DeleteFileSystemRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<void>>;
+	/**
+	 *
+	 * @param {string} filesystemId Filesystem resource ID
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	deleteFileSystemRaw(
+		requestParameters: DeleteFileSystemRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<void>>;
 
-    /**
-     */
-    deleteFileSystem(
-        requestParameters: DeleteFileSystemRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<void>;
+	/**
+	 */
+	deleteFileSystem(
+		requestParameters: DeleteFileSystemRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<void>;
 
-    /**
-     * Creates request options for getDatabase without sending the request
-     * @param {string} databaseId Database resource ID
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    getDatabaseRequestOpts(
-        requestParameters: GetDatabaseRequest,
-    ): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for getDatabase without sending the request
+	 * @param {string} databaseId Database resource ID
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	getDatabaseRequestOpts(
+		requestParameters: GetDatabaseRequest,
+	): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {string} databaseId Database resource ID
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    getDatabaseRaw(
-        requestParameters: GetDatabaseRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<DatabaseDetailResponse>>;
+	/**
+	 *
+	 * @param {string} databaseId Database resource ID
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	getDatabaseRaw(
+		requestParameters: GetDatabaseRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<DatabaseDetailResponse>>;
 
-    /**
-     */
-    getDatabase(
-        requestParameters: GetDatabaseRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<DatabaseDetailResponse>;
+	/**
+	 */
+	getDatabase(
+		requestParameters: GetDatabaseRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<DatabaseDetailResponse>;
 
-    /**
-     * Creates request options for getFileSystem without sending the request
-     * @param {string} filesystemId Filesystem resource ID
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    getFileSystemRequestOpts(
-        requestParameters: GetFileSystemRequest,
-    ): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for getFileSystem without sending the request
+	 * @param {string} filesystemId Filesystem resource ID
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	getFileSystemRequestOpts(
+		requestParameters: GetFileSystemRequest,
+	): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {string} filesystemId Filesystem resource ID
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    getFileSystemRaw(
-        requestParameters: GetFileSystemRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<FileSystemDetailResponse>>;
+	/**
+	 *
+	 * @param {string} filesystemId Filesystem resource ID
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	getFileSystemRaw(
+		requestParameters: GetFileSystemRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<FileSystemDetailResponse>>;
 
-    /**
-     */
-    getFileSystem(
-        requestParameters: GetFileSystemRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<FileSystemDetailResponse>;
+	/**
+	 */
+	getFileSystem(
+		requestParameters: GetFileSystemRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<FileSystemDetailResponse>;
 
-    /**
-     * Creates request options for listDatabases without sending the request
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    listDatabasesRequestOpts(): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for listDatabases without sending the request
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	listDatabasesRequestOpts(): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    listDatabasesRaw(
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<Array<DatabaseResource>>>;
+	/**
+	 *
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	listDatabasesRaw(
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<Array<DatabaseResource>>>;
 
-    /**
-     */
-    listDatabases(
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<Array<DatabaseResource>>;
+	/**
+	 */
+	listDatabases(
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<Array<DatabaseResource>>;
 
-    /**
-     * Creates request options for listFileSystems without sending the request
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    listFileSystemsRequestOpts(): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for listFileSystems without sending the request
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	listFileSystemsRequestOpts(): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof ResourcesApiInterface
-     */
-    listFileSystemsRaw(
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<Array<FileSystemResourceResponse>>>;
+	/**
+	 *
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof ResourcesApiInterface
+	 */
+	listFileSystemsRaw(
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<Array<FileSystemResourceResponse>>>;
 
-    /**
-     */
-    listFileSystems(
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<Array<FileSystemResourceResponse>>;
+	/**
+	 */
+	listFileSystems(
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<Array<FileSystemResourceResponse>>;
 }
 
 /**
  *
  */
 export class ResourcesApi
-    extends runtime.BaseAPI
-    implements ResourcesApiInterface
+	extends runtime.BaseAPI
+	implements ResourcesApiInterface
 {
-    /**
-     * Creates request options for createDatabase without sending the request
-     */
-    async createDatabaseRequestOpts(
-        requestParameters: CreateDatabaseRequest,
-    ): Promise<runtime.RequestOpts> {
-        if (requestParameters["createResourceRequest"] == null) {
-            throw new runtime.RequiredError(
-                "createResourceRequest",
-                'Required parameter "createResourceRequest" was null or undefined when calling createDatabase().',
-            );
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        headerParameters["Content-Type"] = "application/json";
-
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-
-        let urlPath = `/databases`;
-
-        return {
-            path: urlPath,
-            method: "POST",
-            headers: headerParameters,
-            query: queryParameters,
-            body: CreateResourceRequestToJSON(
-                requestParameters["createResourceRequest"],
-            ),
-        };
-    }
-
-    /**
-     */
-    async createDatabaseRaw(
-        requestParameters: CreateDatabaseRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<DatabaseResource>> {
-        const requestOptions =
-            await this.createDatabaseRequestOpts(requestParameters);
-        const response = await this.request(requestOptions, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) =>
-            DatabaseResourceFromJSON(jsonValue),
-        );
-    }
-
-    /**
-     */
-    async createDatabase(
-        requestParameters: CreateDatabaseRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<DatabaseResource> {
-        const response = await this.createDatabaseRaw(
-            requestParameters,
-            initOverrides,
-        );
-        return await response.value();
-    }
-
-    /**
-     * Creates request options for createFileSystem without sending the request
-     */
-    async createFileSystemRequestOpts(
-        requestParameters: CreateFileSystemRequest,
-    ): Promise<runtime.RequestOpts> {
-        if (requestParameters["createResourceRequest"] == null) {
-            throw new runtime.RequiredError(
-                "createResourceRequest",
-                'Required parameter "createResourceRequest" was null or undefined when calling createFileSystem().',
-            );
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        headerParameters["Content-Type"] = "application/json";
-
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-
-        let urlPath = `/filesystems`;
-
-        return {
-            path: urlPath,
-            method: "POST",
-            headers: headerParameters,
-            query: queryParameters,
-            body: CreateResourceRequestToJSON(
-                requestParameters["createResourceRequest"],
-            ),
-        };
-    }
-
-    /**
-     */
-    async createFileSystemRaw(
-        requestParameters: CreateFileSystemRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<FileSystemResourceResponse>> {
-        const requestOptions =
-            await this.createFileSystemRequestOpts(requestParameters);
-        const response = await this.request(requestOptions, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) =>
-            FileSystemResourceResponseFromJSON(jsonValue),
-        );
-    }
-
-    /**
-     */
-    async createFileSystem(
-        requestParameters: CreateFileSystemRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<FileSystemResourceResponse> {
-        const response = await this.createFileSystemRaw(
-            requestParameters,
-            initOverrides,
-        );
-        return await response.value();
-    }
-
-    /**
-     * Creates request options for deleteDatabase without sending the request
-     */
-    async deleteDatabaseRequestOpts(
-        requestParameters: DeleteDatabaseRequest,
-    ): Promise<runtime.RequestOpts> {
-        if (requestParameters["databaseId"] == null) {
-            throw new runtime.RequiredError(
-                "databaseId",
-                'Required parameter "databaseId" was null or undefined when calling deleteDatabase().',
-            );
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-
-        let urlPath = `/databases/{database_id}`;
-        urlPath = urlPath.replace(
-            "{database_id}",
-            encodeURIComponent(String(requestParameters["databaseId"])),
-        );
-
-        return {
-            path: urlPath,
-            method: "DELETE",
-            headers: headerParameters,
-            query: queryParameters,
-        };
-    }
-
-    /**
-     */
-    async deleteDatabaseRaw(
-        requestParameters: DeleteDatabaseRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<void>> {
-        const requestOptions =
-            await this.deleteDatabaseRequestOpts(requestParameters);
-        const response = await this.request(requestOptions, initOverrides);
-
-        return new runtime.VoidApiResponse(response);
-    }
-
-    /**
-     */
-    async deleteDatabase(
-        requestParameters: DeleteDatabaseRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<void> {
-        await this.deleteDatabaseRaw(requestParameters, initOverrides);
-    }
-
-    /**
-     * Creates request options for deleteFileSystem without sending the request
-     */
-    async deleteFileSystemRequestOpts(
-        requestParameters: DeleteFileSystemRequest,
-    ): Promise<runtime.RequestOpts> {
-        if (requestParameters["filesystemId"] == null) {
-            throw new runtime.RequiredError(
-                "filesystemId",
-                'Required parameter "filesystemId" was null or undefined when calling deleteFileSystem().',
-            );
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-
-        let urlPath = `/filesystems/{filesystem_id}`;
-        urlPath = urlPath.replace(
-            "{filesystem_id}",
-            encodeURIComponent(String(requestParameters["filesystemId"])),
-        );
-
-        return {
-            path: urlPath,
-            method: "DELETE",
-            headers: headerParameters,
-            query: queryParameters,
-        };
-    }
-
-    /**
-     */
-    async deleteFileSystemRaw(
-        requestParameters: DeleteFileSystemRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<void>> {
-        const requestOptions =
-            await this.deleteFileSystemRequestOpts(requestParameters);
-        const response = await this.request(requestOptions, initOverrides);
-
-        return new runtime.VoidApiResponse(response);
-    }
-
-    /**
-     */
-    async deleteFileSystem(
-        requestParameters: DeleteFileSystemRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<void> {
-        await this.deleteFileSystemRaw(requestParameters, initOverrides);
-    }
-
-    /**
-     * Creates request options for getDatabase without sending the request
-     */
-    async getDatabaseRequestOpts(
-        requestParameters: GetDatabaseRequest,
-    ): Promise<runtime.RequestOpts> {
-        if (requestParameters["databaseId"] == null) {
-            throw new runtime.RequiredError(
-                "databaseId",
-                'Required parameter "databaseId" was null or undefined when calling getDatabase().',
-            );
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-
-        let urlPath = `/databases/{database_id}`;
-        urlPath = urlPath.replace(
-            "{database_id}",
-            encodeURIComponent(String(requestParameters["databaseId"])),
-        );
-
-        return {
-            path: urlPath,
-            method: "GET",
-            headers: headerParameters,
-            query: queryParameters,
-        };
-    }
-
-    /**
-     */
-    async getDatabaseRaw(
-        requestParameters: GetDatabaseRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<DatabaseDetailResponse>> {
-        const requestOptions =
-            await this.getDatabaseRequestOpts(requestParameters);
-        const response = await this.request(requestOptions, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) =>
-            DatabaseDetailResponseFromJSON(jsonValue),
-        );
-    }
-
-    /**
-     */
-    async getDatabase(
-        requestParameters: GetDatabaseRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<DatabaseDetailResponse> {
-        const response = await this.getDatabaseRaw(
-            requestParameters,
-            initOverrides,
-        );
-        return await response.value();
-    }
-
-    /**
-     * Creates request options for getFileSystem without sending the request
-     */
-    async getFileSystemRequestOpts(
-        requestParameters: GetFileSystemRequest,
-    ): Promise<runtime.RequestOpts> {
-        if (requestParameters["filesystemId"] == null) {
-            throw new runtime.RequiredError(
-                "filesystemId",
-                'Required parameter "filesystemId" was null or undefined when calling getFileSystem().',
-            );
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-
-        let urlPath = `/filesystems/{filesystem_id}`;
-        urlPath = urlPath.replace(
-            "{filesystem_id}",
-            encodeURIComponent(String(requestParameters["filesystemId"])),
-        );
-
-        return {
-            path: urlPath,
-            method: "GET",
-            headers: headerParameters,
-            query: queryParameters,
-        };
-    }
-
-    /**
-     */
-    async getFileSystemRaw(
-        requestParameters: GetFileSystemRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<FileSystemDetailResponse>> {
-        const requestOptions =
-            await this.getFileSystemRequestOpts(requestParameters);
-        const response = await this.request(requestOptions, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) =>
-            FileSystemDetailResponseFromJSON(jsonValue),
-        );
-    }
-
-    /**
-     */
-    async getFileSystem(
-        requestParameters: GetFileSystemRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<FileSystemDetailResponse> {
-        const response = await this.getFileSystemRaw(
-            requestParameters,
-            initOverrides,
-        );
-        return await response.value();
-    }
-
-    /**
-     * Creates request options for listDatabases without sending the request
-     */
-    async listDatabasesRequestOpts(): Promise<runtime.RequestOpts> {
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-
-        let urlPath = `/databases`;
-
-        return {
-            path: urlPath,
-            method: "GET",
-            headers: headerParameters,
-            query: queryParameters,
-        };
-    }
-
-    /**
-     */
-    async listDatabasesRaw(
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<Array<DatabaseResource>>> {
-        const requestOptions = await this.listDatabasesRequestOpts();
-        const response = await this.request(requestOptions, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) =>
-            jsonValue.map(DatabaseResourceFromJSON),
-        );
-    }
-
-    /**
-     */
-    async listDatabases(
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<Array<DatabaseResource>> {
-        const response = await this.listDatabasesRaw(initOverrides);
-        return await response.value();
-    }
-
-    /**
-     * Creates request options for listFileSystems without sending the request
-     */
-    async listFileSystemsRequestOpts(): Promise<runtime.RequestOpts> {
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-
-        let urlPath = `/filesystems`;
-
-        return {
-            path: urlPath,
-            method: "GET",
-            headers: headerParameters,
-            query: queryParameters,
-        };
-    }
-
-    /**
-     */
-    async listFileSystemsRaw(
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<Array<FileSystemResourceResponse>>> {
-        const requestOptions = await this.listFileSystemsRequestOpts();
-        const response = await this.request(requestOptions, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) =>
-            jsonValue.map(FileSystemResourceResponseFromJSON),
-        );
-    }
-
-    /**
-     */
-    async listFileSystems(
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<Array<FileSystemResourceResponse>> {
-        const response = await this.listFileSystemsRaw(initOverrides);
-        return await response.value();
-    }
+	/**
+	 * Creates request options for createDatabase without sending the request
+	 */
+	async createDatabaseRequestOpts(
+		requestParameters: CreateDatabaseRequest,
+	): Promise<runtime.RequestOpts> {
+		if (requestParameters["createResourceRequest"] == null) {
+			throw new runtime.RequiredError(
+				"createResourceRequest",
+				'Required parameter "createResourceRequest" was null or undefined when calling createDatabase().',
+			);
+		}
+
+		const queryParameters: any = {};
+
+		const headerParameters: runtime.HTTPHeaders = {};
+
+		headerParameters["Content-Type"] = "application/json";
+
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
+
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
+
+		let urlPath = `/databases`;
+
+		return {
+			path: urlPath,
+			method: "POST",
+			headers: headerParameters,
+			query: queryParameters,
+			body: CreateResourceRequestToJSON(
+				requestParameters["createResourceRequest"],
+			),
+		};
+	}
+
+	/**
+	 */
+	async createDatabaseRaw(
+		requestParameters: CreateDatabaseRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<DatabaseResource>> {
+		const requestOptions =
+			await this.createDatabaseRequestOpts(requestParameters);
+		const response = await this.request(requestOptions, initOverrides);
+
+		return new runtime.JSONApiResponse(response, (jsonValue) =>
+			DatabaseResourceFromJSON(jsonValue),
+		);
+	}
+
+	/**
+	 */
+	async createDatabase(
+		requestParameters: CreateDatabaseRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<DatabaseResource> {
+		const response = await this.createDatabaseRaw(
+			requestParameters,
+			initOverrides,
+		);
+		return await response.value();
+	}
+
+	/**
+	 * Creates request options for createFileSystem without sending the request
+	 */
+	async createFileSystemRequestOpts(
+		requestParameters: CreateFileSystemRequest,
+	): Promise<runtime.RequestOpts> {
+		if (requestParameters["createResourceRequest"] == null) {
+			throw new runtime.RequiredError(
+				"createResourceRequest",
+				'Required parameter "createResourceRequest" was null or undefined when calling createFileSystem().',
+			);
+		}
+
+		const queryParameters: any = {};
+
+		const headerParameters: runtime.HTTPHeaders = {};
+
+		headerParameters["Content-Type"] = "application/json";
+
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
+
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
+
+		let urlPath = `/filesystems`;
+
+		return {
+			path: urlPath,
+			method: "POST",
+			headers: headerParameters,
+			query: queryParameters,
+			body: CreateResourceRequestToJSON(
+				requestParameters["createResourceRequest"],
+			),
+		};
+	}
+
+	/**
+	 */
+	async createFileSystemRaw(
+		requestParameters: CreateFileSystemRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<FileSystemResourceResponse>> {
+		const requestOptions =
+			await this.createFileSystemRequestOpts(requestParameters);
+		const response = await this.request(requestOptions, initOverrides);
+
+		return new runtime.JSONApiResponse(response, (jsonValue) =>
+			FileSystemResourceResponseFromJSON(jsonValue),
+		);
+	}
+
+	/**
+	 */
+	async createFileSystem(
+		requestParameters: CreateFileSystemRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<FileSystemResourceResponse> {
+		const response = await this.createFileSystemRaw(
+			requestParameters,
+			initOverrides,
+		);
+		return await response.value();
+	}
+
+	/**
+	 * Creates request options for deleteDatabase without sending the request
+	 */
+	async deleteDatabaseRequestOpts(
+		requestParameters: DeleteDatabaseRequest,
+	): Promise<runtime.RequestOpts> {
+		if (requestParameters["databaseId"] == null) {
+			throw new runtime.RequiredError(
+				"databaseId",
+				'Required parameter "databaseId" was null or undefined when calling deleteDatabase().',
+			);
+		}
+
+		const queryParameters: any = {};
+
+		const headerParameters: runtime.HTTPHeaders = {};
+
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
+
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
+
+		let urlPath = `/databases/{database_id}`;
+		urlPath = urlPath.replace(
+			"{database_id}",
+			encodeURIComponent(String(requestParameters["databaseId"])),
+		);
+
+		return {
+			path: urlPath,
+			method: "DELETE",
+			headers: headerParameters,
+			query: queryParameters,
+		};
+	}
+
+	/**
+	 */
+	async deleteDatabaseRaw(
+		requestParameters: DeleteDatabaseRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<void>> {
+		const requestOptions =
+			await this.deleteDatabaseRequestOpts(requestParameters);
+		const response = await this.request(requestOptions, initOverrides);
+
+		return new runtime.VoidApiResponse(response);
+	}
+
+	/**
+	 */
+	async deleteDatabase(
+		requestParameters: DeleteDatabaseRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<void> {
+		await this.deleteDatabaseRaw(requestParameters, initOverrides);
+	}
+
+	/**
+	 * Creates request options for deleteFileSystem without sending the request
+	 */
+	async deleteFileSystemRequestOpts(
+		requestParameters: DeleteFileSystemRequest,
+	): Promise<runtime.RequestOpts> {
+		if (requestParameters["filesystemId"] == null) {
+			throw new runtime.RequiredError(
+				"filesystemId",
+				'Required parameter "filesystemId" was null or undefined when calling deleteFileSystem().',
+			);
+		}
+
+		const queryParameters: any = {};
+
+		const headerParameters: runtime.HTTPHeaders = {};
+
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
+
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
+
+		let urlPath = `/filesystems/{filesystem_id}`;
+		urlPath = urlPath.replace(
+			"{filesystem_id}",
+			encodeURIComponent(String(requestParameters["filesystemId"])),
+		);
+
+		return {
+			path: urlPath,
+			method: "DELETE",
+			headers: headerParameters,
+			query: queryParameters,
+		};
+	}
+
+	/**
+	 */
+	async deleteFileSystemRaw(
+		requestParameters: DeleteFileSystemRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<void>> {
+		const requestOptions =
+			await this.deleteFileSystemRequestOpts(requestParameters);
+		const response = await this.request(requestOptions, initOverrides);
+
+		return new runtime.VoidApiResponse(response);
+	}
+
+	/**
+	 */
+	async deleteFileSystem(
+		requestParameters: DeleteFileSystemRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<void> {
+		await this.deleteFileSystemRaw(requestParameters, initOverrides);
+	}
+
+	/**
+	 * Creates request options for getDatabase without sending the request
+	 */
+	async getDatabaseRequestOpts(
+		requestParameters: GetDatabaseRequest,
+	): Promise<runtime.RequestOpts> {
+		if (requestParameters["databaseId"] == null) {
+			throw new runtime.RequiredError(
+				"databaseId",
+				'Required parameter "databaseId" was null or undefined when calling getDatabase().',
+			);
+		}
+
+		const queryParameters: any = {};
+
+		const headerParameters: runtime.HTTPHeaders = {};
+
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
+
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
+
+		let urlPath = `/databases/{database_id}`;
+		urlPath = urlPath.replace(
+			"{database_id}",
+			encodeURIComponent(String(requestParameters["databaseId"])),
+		);
+
+		return {
+			path: urlPath,
+			method: "GET",
+			headers: headerParameters,
+			query: queryParameters,
+		};
+	}
+
+	/**
+	 */
+	async getDatabaseRaw(
+		requestParameters: GetDatabaseRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<DatabaseDetailResponse>> {
+		const requestOptions = await this.getDatabaseRequestOpts(requestParameters);
+		const response = await this.request(requestOptions, initOverrides);
+
+		return new runtime.JSONApiResponse(response, (jsonValue) =>
+			DatabaseDetailResponseFromJSON(jsonValue),
+		);
+	}
+
+	/**
+	 */
+	async getDatabase(
+		requestParameters: GetDatabaseRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<DatabaseDetailResponse> {
+		const response = await this.getDatabaseRaw(
+			requestParameters,
+			initOverrides,
+		);
+		return await response.value();
+	}
+
+	/**
+	 * Creates request options for getFileSystem without sending the request
+	 */
+	async getFileSystemRequestOpts(
+		requestParameters: GetFileSystemRequest,
+	): Promise<runtime.RequestOpts> {
+		if (requestParameters["filesystemId"] == null) {
+			throw new runtime.RequiredError(
+				"filesystemId",
+				'Required parameter "filesystemId" was null or undefined when calling getFileSystem().',
+			);
+		}
+
+		const queryParameters: any = {};
+
+		const headerParameters: runtime.HTTPHeaders = {};
+
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
+
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
+
+		let urlPath = `/filesystems/{filesystem_id}`;
+		urlPath = urlPath.replace(
+			"{filesystem_id}",
+			encodeURIComponent(String(requestParameters["filesystemId"])),
+		);
+
+		return {
+			path: urlPath,
+			method: "GET",
+			headers: headerParameters,
+			query: queryParameters,
+		};
+	}
+
+	/**
+	 */
+	async getFileSystemRaw(
+		requestParameters: GetFileSystemRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<FileSystemDetailResponse>> {
+		const requestOptions =
+			await this.getFileSystemRequestOpts(requestParameters);
+		const response = await this.request(requestOptions, initOverrides);
+
+		return new runtime.JSONApiResponse(response, (jsonValue) =>
+			FileSystemDetailResponseFromJSON(jsonValue),
+		);
+	}
+
+	/**
+	 */
+	async getFileSystem(
+		requestParameters: GetFileSystemRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<FileSystemDetailResponse> {
+		const response = await this.getFileSystemRaw(
+			requestParameters,
+			initOverrides,
+		);
+		return await response.value();
+	}
+
+	/**
+	 * Creates request options for listDatabases without sending the request
+	 */
+	async listDatabasesRequestOpts(): Promise<runtime.RequestOpts> {
+		const queryParameters: any = {};
+
+		const headerParameters: runtime.HTTPHeaders = {};
+
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
+
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
+
+		let urlPath = `/databases`;
+
+		return {
+			path: urlPath,
+			method: "GET",
+			headers: headerParameters,
+			query: queryParameters,
+		};
+	}
+
+	/**
+	 */
+	async listDatabasesRaw(
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<Array<DatabaseResource>>> {
+		const requestOptions = await this.listDatabasesRequestOpts();
+		const response = await this.request(requestOptions, initOverrides);
+
+		return new runtime.JSONApiResponse(response, (jsonValue) =>
+			jsonValue.map(DatabaseResourceFromJSON),
+		);
+	}
+
+	/**
+	 */
+	async listDatabases(
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<Array<DatabaseResource>> {
+		const response = await this.listDatabasesRaw(initOverrides);
+		return await response.value();
+	}
+
+	/**
+	 * Creates request options for listFileSystems without sending the request
+	 */
+	async listFileSystemsRequestOpts(): Promise<runtime.RequestOpts> {
+		const queryParameters: any = {};
+
+		const headerParameters: runtime.HTTPHeaders = {};
+
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
+
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
+
+		let urlPath = `/filesystems`;
+
+		return {
+			path: urlPath,
+			method: "GET",
+			headers: headerParameters,
+			query: queryParameters,
+		};
+	}
+
+	/**
+	 */
+	async listFileSystemsRaw(
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<Array<FileSystemResourceResponse>>> {
+		const requestOptions = await this.listFileSystemsRequestOpts();
+		const response = await this.request(requestOptions, initOverrides);
+
+		return new runtime.JSONApiResponse(response, (jsonValue) =>
+			jsonValue.map(FileSystemResourceResponseFromJSON),
+		);
+	}
+
+	/**
+	 */
+	async listFileSystems(
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<Array<FileSystemResourceResponse>> {
+		const response = await this.listFileSystemsRaw(initOverrides);
+		return await response.value();
+	}
 }

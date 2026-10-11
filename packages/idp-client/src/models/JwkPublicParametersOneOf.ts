@@ -19,80 +19,80 @@ import { mapValues } from "../runtime.js";
  * @interface JwkPublicParametersOneOf
  */
 export interface JwkPublicParametersOneOf {
-    /**
-     *
-     */
-    e: string;
-    /**
-     *
-     */
-    kty: JwkPublicParametersOneOfKtyEnum;
-    /**
-     *
-     */
-    n: string;
+	/**
+	 *
+	 */
+	e: string;
+	/**
+	 *
+	 */
+	kty: JwkPublicParametersOneOfKtyEnum;
+	/**
+	 *
+	 */
+	n: string;
 }
 
 /**
  * @export
  */
 export const JwkPublicParametersOneOfKtyEnum = {
-    Rsa: "Rsa",
+	Rsa: "Rsa",
 } as const;
 export type JwkPublicParametersOneOfKtyEnum =
-    (typeof JwkPublicParametersOneOfKtyEnum)[keyof typeof JwkPublicParametersOneOfKtyEnum];
+	(typeof JwkPublicParametersOneOfKtyEnum)[keyof typeof JwkPublicParametersOneOfKtyEnum];
 
 /**
  * Check if a given object implements the JwkPublicParametersOneOf interface.
  */
 export function instanceOfJwkPublicParametersOneOf(
-    value: object,
+	value: object,
 ): value is JwkPublicParametersOneOf {
-    if (!("e" in value) || value["e"] === undefined) return false;
-    if (!("kty" in value) || value["kty"] === undefined) return false;
-    if (value["kty"] !== "Rsa") return false;
+	if (!("e" in value) || value["e"] === undefined) return false;
+	if (!("kty" in value) || value["kty"] === undefined) return false;
+	if (value["kty"] !== "Rsa") return false;
 
-    if (!("n" in value) || value["n"] === undefined) return false;
-    return true;
+	if (!("n" in value) || value["n"] === undefined) return false;
+	return true;
 }
 
 export function JwkPublicParametersOneOfFromJSON(
-    json: any,
+	json: any,
 ): JwkPublicParametersOneOf {
-    return JwkPublicParametersOneOfFromJSONTyped(json, false);
+	return JwkPublicParametersOneOfFromJSONTyped(json, false);
 }
 
 export function JwkPublicParametersOneOfFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): JwkPublicParametersOneOf {
-    if (json == null) {
-        return json;
-    }
-    return {
-        e: json["e"],
-        kty: json["kty"],
-        n: json["n"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		e: json["e"],
+		kty: json["kty"],
+		n: json["n"],
+	};
 }
 
 export function JwkPublicParametersOneOfToJSON(
-    json: any,
+	json: any,
 ): JwkPublicParametersOneOf {
-    return JwkPublicParametersOneOfToJSONTyped(json, false);
+	return JwkPublicParametersOneOfToJSONTyped(json, false);
 }
 
 export function JwkPublicParametersOneOfToJSONTyped(
-    value?: JwkPublicParametersOneOf | null,
-    ignoreDiscriminator: boolean = false,
+	value?: JwkPublicParametersOneOf | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        e: value["e"],
-        kty: value["kty"],
-        n: value["n"],
-    };
+	return {
+		e: value["e"],
+		kty: value["kty"],
+		n: value["n"],
+	};
 }

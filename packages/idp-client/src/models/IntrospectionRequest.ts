@@ -19,62 +19,62 @@ import { mapValues } from "../runtime.js";
  * @interface IntrospectionRequest
  */
 export interface IntrospectionRequest {
-    /**
-     *
-     */
-    token: string;
-    /**
-     *
-     */
-    tokenTypeHint?: string | null;
+	/**
+	 *
+	 */
+	token: string;
+	/**
+	 *
+	 */
+	tokenTypeHint?: string | null;
 }
 
 /**
  * Check if a given object implements the IntrospectionRequest interface.
  */
 export function instanceOfIntrospectionRequest(
-    value: object,
+	value: object,
 ): value is IntrospectionRequest {
-    if (!("token" in value) || value["token"] === undefined) return false;
-    return true;
+	if (!("token" in value) || value["token"] === undefined) return false;
+	return true;
 }
 
 export function IntrospectionRequestFromJSON(json: any): IntrospectionRequest {
-    return IntrospectionRequestFromJSONTyped(json, false);
+	return IntrospectionRequestFromJSONTyped(json, false);
 }
 
 export function IntrospectionRequestFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): IntrospectionRequest {
-    if (json == null) {
-        return json;
-    }
-    return {
-        token: json["token"],
-        tokenTypeHint:
-            json["token_type_hint"] === undefined
-                ? undefined
-                : json["token_type_hint"] === null
-                  ? null
-                  : json["token_type_hint"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		token: json["token"],
+		tokenTypeHint:
+			json["token_type_hint"] === undefined
+				? undefined
+				: json["token_type_hint"] === null
+					? null
+					: json["token_type_hint"],
+	};
 }
 
 export function IntrospectionRequestToJSON(json: any): IntrospectionRequest {
-    return IntrospectionRequestToJSONTyped(json, false);
+	return IntrospectionRequestToJSONTyped(json, false);
 }
 
 export function IntrospectionRequestToJSONTyped(
-    value?: IntrospectionRequest | null,
-    ignoreDiscriminator: boolean = false,
+	value?: IntrospectionRequest | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        token: value["token"],
-        token_type_hint: value["tokenTypeHint"],
-    };
+	return {
+		token: value["token"],
+		token_type_hint: value["tokenTypeHint"],
+	};
 }

@@ -19,87 +19,87 @@ import { mapValues } from "../runtime.js";
  * @interface JwkPublicParametersOneOf1
  */
 export interface JwkPublicParametersOneOf1 {
-    /**
-     *
-     */
-    crv: string;
-    /**
-     *
-     */
-    kty: JwkPublicParametersOneOf1KtyEnum;
-    /**
-     *
-     */
-    x: string;
-    /**
-     *
-     */
-    y: string;
+	/**
+	 *
+	 */
+	crv: string;
+	/**
+	 *
+	 */
+	kty: JwkPublicParametersOneOf1KtyEnum;
+	/**
+	 *
+	 */
+	x: string;
+	/**
+	 *
+	 */
+	y: string;
 }
 
 /**
  * @export
  */
 export const JwkPublicParametersOneOf1KtyEnum = {
-    Ec: "Ec",
+	Ec: "Ec",
 } as const;
 export type JwkPublicParametersOneOf1KtyEnum =
-    (typeof JwkPublicParametersOneOf1KtyEnum)[keyof typeof JwkPublicParametersOneOf1KtyEnum];
+	(typeof JwkPublicParametersOneOf1KtyEnum)[keyof typeof JwkPublicParametersOneOf1KtyEnum];
 
 /**
  * Check if a given object implements the JwkPublicParametersOneOf1 interface.
  */
 export function instanceOfJwkPublicParametersOneOf1(
-    value: object,
+	value: object,
 ): value is JwkPublicParametersOneOf1 {
-    if (!("crv" in value) || value["crv"] === undefined) return false;
-    if (!("kty" in value) || value["kty"] === undefined) return false;
-    if (value["kty"] !== "Ec") return false;
+	if (!("crv" in value) || value["crv"] === undefined) return false;
+	if (!("kty" in value) || value["kty"] === undefined) return false;
+	if (value["kty"] !== "Ec") return false;
 
-    if (!("x" in value) || value["x"] === undefined) return false;
-    if (!("y" in value) || value["y"] === undefined) return false;
-    return true;
+	if (!("x" in value) || value["x"] === undefined) return false;
+	if (!("y" in value) || value["y"] === undefined) return false;
+	return true;
 }
 
 export function JwkPublicParametersOneOf1FromJSON(
-    json: any,
+	json: any,
 ): JwkPublicParametersOneOf1 {
-    return JwkPublicParametersOneOf1FromJSONTyped(json, false);
+	return JwkPublicParametersOneOf1FromJSONTyped(json, false);
 }
 
 export function JwkPublicParametersOneOf1FromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): JwkPublicParametersOneOf1 {
-    if (json == null) {
-        return json;
-    }
-    return {
-        crv: json["crv"],
-        kty: json["kty"],
-        x: json["x"],
-        y: json["y"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		crv: json["crv"],
+		kty: json["kty"],
+		x: json["x"],
+		y: json["y"],
+	};
 }
 
 export function JwkPublicParametersOneOf1ToJSON(
-    json: any,
+	json: any,
 ): JwkPublicParametersOneOf1 {
-    return JwkPublicParametersOneOf1ToJSONTyped(json, false);
+	return JwkPublicParametersOneOf1ToJSONTyped(json, false);
 }
 
 export function JwkPublicParametersOneOf1ToJSONTyped(
-    value?: JwkPublicParametersOneOf1 | null,
-    ignoreDiscriminator: boolean = false,
+	value?: JwkPublicParametersOneOf1 | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        crv: value["crv"],
-        kty: value["kty"],
-        x: value["x"],
-        y: value["y"],
-    };
+	return {
+		crv: value["crv"],
+		kty: value["kty"],
+		x: value["x"],
+		y: value["y"],
+	};
 }

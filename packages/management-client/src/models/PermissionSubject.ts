@@ -19,69 +19,69 @@ import { mapValues } from "../runtime.js";
  * @interface PermissionSubject
  */
 export interface PermissionSubject {
-    /**
-     *
-     */
-    id: string;
-    /**
-     *
-     */
-    type: PermissionSubjectTypeEnum;
+	/**
+	 *
+	 */
+	id: string;
+	/**
+	 *
+	 */
+	type: PermissionSubjectTypeEnum;
 }
 
 /**
  * @export
  */
 export const PermissionSubjectTypeEnum = {
-    User: "user",
+	User: "user",
 } as const;
 export type PermissionSubjectTypeEnum =
-    (typeof PermissionSubjectTypeEnum)[keyof typeof PermissionSubjectTypeEnum];
+	(typeof PermissionSubjectTypeEnum)[keyof typeof PermissionSubjectTypeEnum];
 
 /**
  * Check if a given object implements the PermissionSubject interface.
  */
 export function instanceOfPermissionSubject(
-    value: object,
+	value: object,
 ): value is PermissionSubject {
-    if (!("id" in value) || value["id"] === undefined) return false;
-    if (!("type" in value) || value["type"] === undefined) return false;
-    if (value["type"] !== "user") return false;
+	if (!("id" in value) || value["id"] === undefined) return false;
+	if (!("type" in value) || value["type"] === undefined) return false;
+	if (value["type"] !== "user") return false;
 
-    return true;
+	return true;
 }
 
 export function PermissionSubjectFromJSON(json: any): PermissionSubject {
-    return PermissionSubjectFromJSONTyped(json, false);
+	return PermissionSubjectFromJSONTyped(json, false);
 }
 
 export function PermissionSubjectFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): PermissionSubject {
-    if (json == null) {
-        return json;
-    }
-    return {
-        id: json["id"],
-        type: json["type"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		id: json["id"],
+		type: json["type"],
+	};
 }
 
 export function PermissionSubjectToJSON(json: any): PermissionSubject {
-    return PermissionSubjectToJSONTyped(json, false);
+	return PermissionSubjectToJSONTyped(json, false);
 }
 
 export function PermissionSubjectToJSONTyped(
-    value?: PermissionSubject | null,
-    ignoreDiscriminator: boolean = false,
+	value?: PermissionSubject | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        id: value["id"],
-        type: value["type"],
-    };
+	return {
+		id: value["id"],
+		type: value["type"],
+	};
 }

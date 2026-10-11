@@ -17,54 +17,49 @@
  * @export
  */
 export const StorageAuthorizationAction = {
-    Read: "read",
-    Write: "write",
+	Read: "read",
+	Write: "write",
 } as const;
 export type StorageAuthorizationAction =
-    (typeof StorageAuthorizationAction)[keyof typeof StorageAuthorizationAction];
+	(typeof StorageAuthorizationAction)[keyof typeof StorageAuthorizationAction];
 
 export function instanceOfStorageAuthorizationAction(value: any): boolean {
-    for (const key in StorageAuthorizationAction) {
-        if (
-            Object.prototype.hasOwnProperty.call(
-                StorageAuthorizationAction,
-                key,
-            )
-        ) {
-            if (
-                StorageAuthorizationAction[
-                    key as keyof typeof StorageAuthorizationAction
-                ] === value
-            ) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in StorageAuthorizationAction) {
+		if (Object.prototype.hasOwnProperty.call(StorageAuthorizationAction, key)) {
+			if (
+				StorageAuthorizationAction[
+					key as keyof typeof StorageAuthorizationAction
+				] === value
+			) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function StorageAuthorizationActionFromJSON(
-    json: any,
+	json: any,
 ): StorageAuthorizationAction {
-    return StorageAuthorizationActionFromJSONTyped(json, false);
+	return StorageAuthorizationActionFromJSONTyped(json, false);
 }
 
 export function StorageAuthorizationActionFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): StorageAuthorizationAction {
-    return json as StorageAuthorizationAction;
+	return json as StorageAuthorizationAction;
 }
 
 export function StorageAuthorizationActionToJSON(
-    value?: StorageAuthorizationAction | null,
+	value?: StorageAuthorizationAction | null,
 ): any {
-    return value as any;
+	return value as any;
 }
 
 export function StorageAuthorizationActionToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): StorageAuthorizationAction {
-    return value as StorageAuthorizationAction;
+	return value as StorageAuthorizationAction;
 }

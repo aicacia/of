@@ -19,49 +19,49 @@ import { mapValues } from "../runtime.js";
  * @interface ResetPassword
  */
 export interface ResetPassword {
-    /**
-     *
-     */
-    password: string;
+	/**
+	 *
+	 */
+	password: string;
 }
 
 /**
  * Check if a given object implements the ResetPassword interface.
  */
 export function instanceOfResetPassword(value: object): value is ResetPassword {
-    if (!("password" in value) || value["password"] === undefined) return false;
-    return true;
+	if (!("password" in value) || value["password"] === undefined) return false;
+	return true;
 }
 
 export function ResetPasswordFromJSON(json: any): ResetPassword {
-    return ResetPasswordFromJSONTyped(json, false);
+	return ResetPasswordFromJSONTyped(json, false);
 }
 
 export function ResetPasswordFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): ResetPassword {
-    if (json == null) {
-        return json;
-    }
-    return {
-        password: json["password"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		password: json["password"],
+	};
 }
 
 export function ResetPasswordToJSON(json: any): ResetPassword {
-    return ResetPasswordToJSONTyped(json, false);
+	return ResetPasswordToJSONTyped(json, false);
 }
 
 export function ResetPasswordToJSONTyped(
-    value?: ResetPassword | null,
-    ignoreDiscriminator: boolean = false,
+	value?: ResetPassword | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        password: value["password"],
-    };
+	return {
+		password: value["password"],
+	};
 }

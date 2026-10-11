@@ -17,40 +17,40 @@
  * @export
  */
 export const TokenType = {
-    Bearer: "Bearer",
-    DpoP: "DPoP",
+	Bearer: "Bearer",
+	DpoP: "DPoP",
 } as const;
 export type TokenType = (typeof TokenType)[keyof typeof TokenType];
 
 export function instanceOfTokenType(value: any): boolean {
-    for (const key in TokenType) {
-        if (Object.prototype.hasOwnProperty.call(TokenType, key)) {
-            if (TokenType[key as keyof typeof TokenType] === value) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in TokenType) {
+		if (Object.prototype.hasOwnProperty.call(TokenType, key)) {
+			if (TokenType[key as keyof typeof TokenType] === value) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function TokenTypeFromJSON(json: any): TokenType {
-    return TokenTypeFromJSONTyped(json, false);
+	return TokenTypeFromJSONTyped(json, false);
 }
 
 export function TokenTypeFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): TokenType {
-    return json as TokenType;
+	return json as TokenType;
 }
 
 export function TokenTypeToJSON(value?: TokenType | null): any {
-    return value as any;
+	return value as any;
 }
 
 export function TokenTypeToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): TokenType {
-    return value as TokenType;
+	return value as TokenType;
 }

@@ -15,10 +15,10 @@
 import { mapValues } from "../runtime.js";
 import type { JwkPublic } from "./JwkPublic.js";
 import {
-    JwkPublicFromJSON,
-    JwkPublicFromJSONTyped,
-    JwkPublicToJSON,
-    JwkPublicToJSONTyped,
+	JwkPublicFromJSON,
+	JwkPublicFromJSONTyped,
+	JwkPublicToJSON,
+	JwkPublicToJSONTyped,
 } from "./JwkPublic.js";
 
 /**
@@ -27,52 +27,51 @@ import {
  * @interface RotateReplicaSigner
  */
 export interface RotateReplicaSigner {
-    /**
-     *
-     */
-    publicJwk: JwkPublic;
+	/**
+	 *
+	 */
+	publicJwk: JwkPublic;
 }
 
 /**
  * Check if a given object implements the RotateReplicaSigner interface.
  */
 export function instanceOfRotateReplicaSigner(
-    value: object,
+	value: object,
 ): value is RotateReplicaSigner {
-    if (!("publicJwk" in value) || value["publicJwk"] === undefined)
-        return false;
-    return true;
+	if (!("publicJwk" in value) || value["publicJwk"] === undefined) return false;
+	return true;
 }
 
 export function RotateReplicaSignerFromJSON(json: any): RotateReplicaSigner {
-    return RotateReplicaSignerFromJSONTyped(json, false);
+	return RotateReplicaSignerFromJSONTyped(json, false);
 }
 
 export function RotateReplicaSignerFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): RotateReplicaSigner {
-    if (json == null) {
-        return json;
-    }
-    return {
-        publicJwk: JwkPublicFromJSON(json["publicJwk"]),
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		publicJwk: JwkPublicFromJSON(json["publicJwk"]),
+	};
 }
 
 export function RotateReplicaSignerToJSON(json: any): RotateReplicaSigner {
-    return RotateReplicaSignerToJSONTyped(json, false);
+	return RotateReplicaSignerToJSONTyped(json, false);
 }
 
 export function RotateReplicaSignerToJSONTyped(
-    value?: RotateReplicaSigner | null,
-    ignoreDiscriminator: boolean = false,
+	value?: RotateReplicaSigner | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        publicJwk: JwkPublicToJSON(value["publicJwk"]),
-    };
+	return {
+		publicJwk: JwkPublicToJSON(value["publicJwk"]),
+	};
 }

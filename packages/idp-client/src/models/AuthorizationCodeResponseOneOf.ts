@@ -19,77 +19,77 @@ import { mapValues } from "../runtime.js";
  * @interface AuthorizationCodeResponseOneOf
  */
 export interface AuthorizationCodeResponseOneOf {
-    /**
-     *
-     */
-    code: string;
-    /**
-     *
-     */
-    iss?: string | null;
-    /**
-     *
-     */
-    state?: string | null;
+	/**
+	 *
+	 */
+	code: string;
+	/**
+	 *
+	 */
+	iss?: string | null;
+	/**
+	 *
+	 */
+	state?: string | null;
 }
 
 /**
  * Check if a given object implements the AuthorizationCodeResponseOneOf interface.
  */
 export function instanceOfAuthorizationCodeResponseOneOf(
-    value: object,
+	value: object,
 ): value is AuthorizationCodeResponseOneOf {
-    if (!("code" in value) || value["code"] === undefined) return false;
-    return true;
+	if (!("code" in value) || value["code"] === undefined) return false;
+	return true;
 }
 
 export function AuthorizationCodeResponseOneOfFromJSON(
-    json: any,
+	json: any,
 ): AuthorizationCodeResponseOneOf {
-    return AuthorizationCodeResponseOneOfFromJSONTyped(json, false);
+	return AuthorizationCodeResponseOneOfFromJSONTyped(json, false);
 }
 
 export function AuthorizationCodeResponseOneOfFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): AuthorizationCodeResponseOneOf {
-    if (json == null) {
-        return json;
-    }
-    return {
-        code: json["code"],
-        iss:
-            json["iss"] === undefined
-                ? undefined
-                : json["iss"] === null
-                  ? null
-                  : json["iss"],
-        state:
-            json["state"] === undefined
-                ? undefined
-                : json["state"] === null
-                  ? null
-                  : json["state"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		code: json["code"],
+		iss:
+			json["iss"] === undefined
+				? undefined
+				: json["iss"] === null
+					? null
+					: json["iss"],
+		state:
+			json["state"] === undefined
+				? undefined
+				: json["state"] === null
+					? null
+					: json["state"],
+	};
 }
 
 export function AuthorizationCodeResponseOneOfToJSON(
-    json: any,
+	json: any,
 ): AuthorizationCodeResponseOneOf {
-    return AuthorizationCodeResponseOneOfToJSONTyped(json, false);
+	return AuthorizationCodeResponseOneOfToJSONTyped(json, false);
 }
 
 export function AuthorizationCodeResponseOneOfToJSONTyped(
-    value?: AuthorizationCodeResponseOneOf | null,
-    ignoreDiscriminator: boolean = false,
+	value?: AuthorizationCodeResponseOneOf | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        code: value["code"],
-        iss: value["iss"],
-        state: value["state"],
-    };
+	return {
+		code: value["code"],
+		iss: value["iss"],
+		state: value["state"],
+	};
 }

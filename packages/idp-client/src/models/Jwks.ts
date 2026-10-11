@@ -15,10 +15,10 @@
 import { mapValues } from "../runtime.js";
 import type { JwkPublic } from "./JwkPublic.js";
 import {
-    JwkPublicFromJSON,
-    JwkPublicFromJSONTyped,
-    JwkPublicToJSON,
-    JwkPublicToJSONTyped,
+	JwkPublicFromJSON,
+	JwkPublicFromJSONTyped,
+	JwkPublicToJSON,
+	JwkPublicToJSONTyped,
 } from "./JwkPublic.js";
 
 /**
@@ -27,49 +27,49 @@ import {
  * @interface Jwks
  */
 export interface Jwks {
-    /**
-     *
-     */
-    keys: Array<JwkPublic>;
+	/**
+	 *
+	 */
+	keys: Array<JwkPublic>;
 }
 
 /**
  * Check if a given object implements the Jwks interface.
  */
 export function instanceOfJwks(value: object): value is Jwks {
-    if (!("keys" in value) || value["keys"] === undefined) return false;
-    return true;
+	if (!("keys" in value) || value["keys"] === undefined) return false;
+	return true;
 }
 
 export function JwksFromJSON(json: any): Jwks {
-    return JwksFromJSONTyped(json, false);
+	return JwksFromJSONTyped(json, false);
 }
 
 export function JwksFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): Jwks {
-    if (json == null) {
-        return json;
-    }
-    return {
-        keys: (json["keys"] as Array<any>).map(JwkPublicFromJSON),
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		keys: (json["keys"] as Array<any>).map(JwkPublicFromJSON),
+	};
 }
 
 export function JwksToJSON(json: any): Jwks {
-    return JwksToJSONTyped(json, false);
+	return JwksToJSONTyped(json, false);
 }
 
 export function JwksToJSONTyped(
-    value?: Jwks | null,
-    ignoreDiscriminator: boolean = false,
+	value?: Jwks | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        keys: (value["keys"] as Array<any>).map(JwkPublicToJSON),
-    };
+	return {
+		keys: (value["keys"] as Array<any>).map(JwkPublicToJSON),
+	};
 }

@@ -19,64 +19,62 @@ import { mapValues } from "../runtime.js";
  * @interface DeviceSelfRevocationRequest
  */
 export interface DeviceSelfRevocationRequest {
-    /**
-     *
-     */
-    publicKey: string;
-    /**
-     *
-     */
-    signature: string;
+	/**
+	 *
+	 */
+	publicKey: string;
+	/**
+	 *
+	 */
+	signature: string;
 }
 
 /**
  * Check if a given object implements the DeviceSelfRevocationRequest interface.
  */
 export function instanceOfDeviceSelfRevocationRequest(
-    value: object,
+	value: object,
 ): value is DeviceSelfRevocationRequest {
-    if (!("publicKey" in value) || value["publicKey"] === undefined)
-        return false;
-    if (!("signature" in value) || value["signature"] === undefined)
-        return false;
-    return true;
+	if (!("publicKey" in value) || value["publicKey"] === undefined) return false;
+	if (!("signature" in value) || value["signature"] === undefined) return false;
+	return true;
 }
 
 export function DeviceSelfRevocationRequestFromJSON(
-    json: any,
+	json: any,
 ): DeviceSelfRevocationRequest {
-    return DeviceSelfRevocationRequestFromJSONTyped(json, false);
+	return DeviceSelfRevocationRequestFromJSONTyped(json, false);
 }
 
 export function DeviceSelfRevocationRequestFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): DeviceSelfRevocationRequest {
-    if (json == null) {
-        return json;
-    }
-    return {
-        publicKey: json["publicKey"],
-        signature: json["signature"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		publicKey: json["publicKey"],
+		signature: json["signature"],
+	};
 }
 
 export function DeviceSelfRevocationRequestToJSON(
-    json: any,
+	json: any,
 ): DeviceSelfRevocationRequest {
-    return DeviceSelfRevocationRequestToJSONTyped(json, false);
+	return DeviceSelfRevocationRequestToJSONTyped(json, false);
 }
 
 export function DeviceSelfRevocationRequestToJSONTyped(
-    value?: DeviceSelfRevocationRequest | null,
-    ignoreDiscriminator: boolean = false,
+	value?: DeviceSelfRevocationRequest | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        publicKey: value["publicKey"],
-        signature: value["signature"],
-    };
+	return {
+		publicKey: value["publicKey"],
+		signature: value["signature"],
+	};
 }

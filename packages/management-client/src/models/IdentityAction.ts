@@ -17,72 +17,73 @@
  * @export
  */
 export const IdentityAction = {
-    ClientsRead: "clients_read",
-    ClientsCreate: "clients_create",
-    ClientsUpdate: "clients_update",
-    ClientsDelete: "clients_delete",
-    InfrastructureClientsRead: "infrastructure_clients_read",
-    InfrastructureClientsCreate: "infrastructure_clients_create",
-    InfrastructureClientsUpdate: "infrastructure_clients_update",
-    InfrastructureClientsDelete: "infrastructure_clients_delete",
-    ApplicationsRead: "applications_read",
-    ApplicationsCreate: "applications_create",
-    ApplicationsUpdate: "applications_update",
-    ApplicationsDelete: "applications_delete",
-    UsersRead: "users_read",
-    UsersUpdate: "users_update",
-    UsersDelete: "users_delete",
-    UsersResetPassword: "users_reset_password",
-    ConsentsRead: "consents_read",
-    ConsentsRevoke: "consents_revoke",
-    KeysRead: "keys_read",
-    KeysRotate: "keys_rotate",
-    KeysRevoke: "keys_revoke",
-    DevicesEnroll: "devices_enroll",
-    DevicesRename: "devices_rename",
-    DevicesRevoke: "devices_revoke",
-    DeviceRestrictionsRead: "device_restrictions_read",
-    DeviceRestrictionsUpdate: "device_restrictions_update",
-    DevicePairingRead: "device_pairing_read",
-    DevicePairingUpdate: "device_pairing_update",
-    ReplicaSignersEnroll: "replica_signers_enroll",
-    ReplicaSignersRotate: "replica_signers_rotate",
-    ReplicaSignersRevoke: "replica_signers_revoke",
-    IdpSecuritySync: "idp_security_sync",
-    ManagementSecuritySync: "management_security_sync",
+	ClientsRead: "clients_read",
+	ClientsCreate: "clients_create",
+	ClientsUpdate: "clients_update",
+	ClientsDelete: "clients_delete",
+	InfrastructureClientsRead: "infrastructure_clients_read",
+	InfrastructureClientsCreate: "infrastructure_clients_create",
+	InfrastructureClientsUpdate: "infrastructure_clients_update",
+	InfrastructureClientsDelete: "infrastructure_clients_delete",
+	ApplicationsRead: "applications_read",
+	ApplicationsCreate: "applications_create",
+	ApplicationsUpdate: "applications_update",
+	ApplicationsDelete: "applications_delete",
+	UsersRead: "users_read",
+	UsersUpdate: "users_update",
+	UsersDelete: "users_delete",
+	UsersResetPassword: "users_reset_password",
+	ConsentsRead: "consents_read",
+	ConsentsRevoke: "consents_revoke",
+	KeysRead: "keys_read",
+	KeysRotate: "keys_rotate",
+	KeysRevoke: "keys_revoke",
+	DevicesEnroll: "devices_enroll",
+	DevicesRename: "devices_rename",
+	DevicesRevoke: "devices_revoke",
+	DevicesTransfer: "devices_transfer",
+	DeviceRestrictionsRead: "device_restrictions_read",
+	DeviceRestrictionsUpdate: "device_restrictions_update",
+	DevicePairingRead: "device_pairing_read",
+	DevicePairingUpdate: "device_pairing_update",
+	ReplicaSignersEnroll: "replica_signers_enroll",
+	ReplicaSignersRotate: "replica_signers_rotate",
+	ReplicaSignersRevoke: "replica_signers_revoke",
+	IdpSecuritySync: "idp_security_sync",
+	ManagementSecuritySync: "management_security_sync",
 } as const;
 export type IdentityAction =
-    (typeof IdentityAction)[keyof typeof IdentityAction];
+	(typeof IdentityAction)[keyof typeof IdentityAction];
 
 export function instanceOfIdentityAction(value: any): boolean {
-    for (const key in IdentityAction) {
-        if (Object.prototype.hasOwnProperty.call(IdentityAction, key)) {
-            if (IdentityAction[key as keyof typeof IdentityAction] === value) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in IdentityAction) {
+		if (Object.prototype.hasOwnProperty.call(IdentityAction, key)) {
+			if (IdentityAction[key as keyof typeof IdentityAction] === value) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function IdentityActionFromJSON(json: any): IdentityAction {
-    return IdentityActionFromJSONTyped(json, false);
+	return IdentityActionFromJSONTyped(json, false);
 }
 
 export function IdentityActionFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): IdentityAction {
-    return json as IdentityAction;
+	return json as IdentityAction;
 }
 
 export function IdentityActionToJSON(value?: IdentityAction | null): any {
-    return value as any;
+	return value as any;
 }
 
 export function IdentityActionToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): IdentityAction {
-    return value as IdentityAction;
+	return value as IdentityAction;
 }

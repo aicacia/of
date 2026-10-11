@@ -15,10 +15,10 @@
 import { mapValues } from "../runtime.js";
 import type { PermissionSubject } from "./PermissionSubject.js";
 import {
-    PermissionSubjectFromJSON,
-    PermissionSubjectFromJSONTyped,
-    PermissionSubjectToJSON,
-    PermissionSubjectToJSONTyped,
+	PermissionSubjectFromJSON,
+	PermissionSubjectFromJSONTyped,
+	PermissionSubjectToJSON,
+	PermissionSubjectToJSONTyped,
 } from "./PermissionSubject.js";
 
 /**
@@ -27,71 +27,71 @@ import {
  * @interface PermissionAuditIdentity
  */
 export interface PermissionAuditIdentity {
-    /**
-     *
-     */
-    actor: PermissionSubject;
-    /**
-     *
-     */
-    serviceClientId: string;
-    /**
-     *
-     */
-    serviceSubject: string;
+	/**
+	 *
+	 */
+	actor: PermissionSubject;
+	/**
+	 *
+	 */
+	serviceClientId: string;
+	/**
+	 *
+	 */
+	serviceSubject: string;
 }
 
 /**
  * Check if a given object implements the PermissionAuditIdentity interface.
  */
 export function instanceOfPermissionAuditIdentity(
-    value: object,
+	value: object,
 ): value is PermissionAuditIdentity {
-    if (!("actor" in value) || value["actor"] === undefined) return false;
-    if (!("serviceClientId" in value) || value["serviceClientId"] === undefined)
-        return false;
-    if (!("serviceSubject" in value) || value["serviceSubject"] === undefined)
-        return false;
-    return true;
+	if (!("actor" in value) || value["actor"] === undefined) return false;
+	if (!("serviceClientId" in value) || value["serviceClientId"] === undefined)
+		return false;
+	if (!("serviceSubject" in value) || value["serviceSubject"] === undefined)
+		return false;
+	return true;
 }
 
 export function PermissionAuditIdentityFromJSON(
-    json: any,
+	json: any,
 ): PermissionAuditIdentity {
-    return PermissionAuditIdentityFromJSONTyped(json, false);
+	return PermissionAuditIdentityFromJSONTyped(json, false);
 }
 
 export function PermissionAuditIdentityFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): PermissionAuditIdentity {
-    if (json == null) {
-        return json;
-    }
-    return {
-        actor: PermissionSubjectFromJSON(json["actor"]),
-        serviceClientId: json["serviceClientId"],
-        serviceSubject: json["serviceSubject"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		actor: PermissionSubjectFromJSON(json["actor"]),
+		serviceClientId: json["serviceClientId"],
+		serviceSubject: json["serviceSubject"],
+	};
 }
 
 export function PermissionAuditIdentityToJSON(
-    json: any,
+	json: any,
 ): PermissionAuditIdentity {
-    return PermissionAuditIdentityToJSONTyped(json, false);
+	return PermissionAuditIdentityToJSONTyped(json, false);
 }
 
 export function PermissionAuditIdentityToJSONTyped(
-    value?: PermissionAuditIdentity | null,
-    ignoreDiscriminator: boolean = false,
+	value?: PermissionAuditIdentity | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        actor: PermissionSubjectToJSON(value["actor"]),
-        serviceClientId: value["serviceClientId"],
-        serviceSubject: value["serviceSubject"],
-    };
+	return {
+		actor: PermissionSubjectToJSON(value["actor"]),
+		serviceClientId: value["serviceClientId"],
+		serviceSubject: value["serviceSubject"],
+	};
 }

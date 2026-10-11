@@ -19,52 +19,51 @@ import { mapValues } from "../runtime.js";
  * @interface HealthStatusOneOf
  */
 export interface HealthStatusOneOf {
-    /**
-     *
-     */
-    unhealthy: string;
+	/**
+	 *
+	 */
+	unhealthy: string;
 }
 
 /**
  * Check if a given object implements the HealthStatusOneOf interface.
  */
 export function instanceOfHealthStatusOneOf(
-    value: object,
+	value: object,
 ): value is HealthStatusOneOf {
-    if (!("unhealthy" in value) || value["unhealthy"] === undefined)
-        return false;
-    return true;
+	if (!("unhealthy" in value) || value["unhealthy"] === undefined) return false;
+	return true;
 }
 
 export function HealthStatusOneOfFromJSON(json: any): HealthStatusOneOf {
-    return HealthStatusOneOfFromJSONTyped(json, false);
+	return HealthStatusOneOfFromJSONTyped(json, false);
 }
 
 export function HealthStatusOneOfFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): HealthStatusOneOf {
-    if (json == null) {
-        return json;
-    }
-    return {
-        unhealthy: json["unhealthy"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		unhealthy: json["unhealthy"],
+	};
 }
 
 export function HealthStatusOneOfToJSON(json: any): HealthStatusOneOf {
-    return HealthStatusOneOfToJSONTyped(json, false);
+	return HealthStatusOneOfToJSONTyped(json, false);
 }
 
 export function HealthStatusOneOfToJSONTyped(
-    value?: HealthStatusOneOf | null,
-    ignoreDiscriminator: boolean = false,
+	value?: HealthStatusOneOf | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        unhealthy: value["unhealthy"],
-    };
+	return {
+		unhealthy: value["unhealthy"],
+	};
 }
