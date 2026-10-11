@@ -24,6 +24,9 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["src/routes/(auth)/layout.test.ts"],
+    include: [
+      "src/routes/(auth)/layout.test.ts",
+      "src/routes/setup/installation/page.test.ts",
+    ],
   },
 });

@@ -78,6 +78,14 @@
 
 <Modal bind:this={configModal} title={m.env_config()}>
     <ConfigForm bind:this={configForm} onSaved={() => configModal?.close()} />
+    {#if isTauri()}
+        <a
+            class="btn secondary"
+            href={resolve("/setup/installation")}
+            onclick={() => configModal?.close()}
+            >Installation setup / reset this local Node</a
+        >
+    {/if}
 </Modal>
 
 <Notifications />

@@ -199,7 +199,21 @@
                 <button onclick={retryRuntime} disabled={busy || loading}
                     >Retry local services</button
                 >
-            {:else}
+            {:else if data.stage === "ready"}
+                <p role="status">
+                    This Node completed local setup and is ready to use offline.
+                    Local completion does not sign you in or grant permissions.
+                </p>
+                <a class="btn" href={resolve("/signin")}>Sign in</a>
+            {:else if data.stage === "device"}
+                <p role="status">
+                    Installation setup is complete. Continue to Device setup to
+                    finish configuring this local Node.
+                </p>
+                <a class="btn" href={resolve("/setup/device")}
+                    >Continue Device setup</a
+                >
+            {:else if data.stage === "installation"}
                 <form onsubmit={provision}>
                     <label>
                         Installation
