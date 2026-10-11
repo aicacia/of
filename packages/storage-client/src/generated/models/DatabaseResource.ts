@@ -19,62 +19,62 @@ import { mapValues } from "../runtime.js";
  * @interface DatabaseResource
  */
 export interface DatabaseResource {
-    /**
-     *
-     */
-    id: string;
-    /**
-     *
-     */
-    name?: string | null;
+	/**
+	 *
+	 */
+	id: string;
+	/**
+	 *
+	 */
+	name?: string | null;
 }
 
 /**
  * Check if a given object implements the DatabaseResource interface.
  */
 export function instanceOfDatabaseResource(
-    value: object,
+	value: object,
 ): value is DatabaseResource {
-    if (!("id" in value) || value["id"] === undefined) return false;
-    return true;
+	if (!("id" in value) || value["id"] === undefined) return false;
+	return true;
 }
 
 export function DatabaseResourceFromJSON(json: any): DatabaseResource {
-    return DatabaseResourceFromJSONTyped(json, false);
+	return DatabaseResourceFromJSONTyped(json, false);
 }
 
 export function DatabaseResourceFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): DatabaseResource {
-    if (json == null) {
-        return json;
-    }
-    return {
-        id: json["id"],
-        name:
-            json["name"] === undefined
-                ? undefined
-                : json["name"] === null
-                  ? null
-                  : json["name"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		id: json["id"],
+		name:
+			json["name"] === undefined
+				? undefined
+				: json["name"] === null
+					? null
+					: json["name"],
+	};
 }
 
 export function DatabaseResourceToJSON(json: any): DatabaseResource {
-    return DatabaseResourceToJSONTyped(json, false);
+	return DatabaseResourceToJSONTyped(json, false);
 }
 
 export function DatabaseResourceToJSONTyped(
-    value?: DatabaseResource | null,
-    ignoreDiscriminator: boolean = false,
+	value?: DatabaseResource | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        id: value["id"],
-        name: value["name"],
-    };
+	return {
+		id: value["id"],
+		name: value["name"],
+	};
 }

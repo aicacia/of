@@ -17,40 +17,40 @@
  * @export
  */
 export const ResidencyMode = {
-    Full: "full",
-    Passthrough: "passthrough",
+	Full: "full",
+	Passthrough: "passthrough",
 } as const;
 export type ResidencyMode = (typeof ResidencyMode)[keyof typeof ResidencyMode];
 
 export function instanceOfResidencyMode(value: any): boolean {
-    for (const key in ResidencyMode) {
-        if (Object.prototype.hasOwnProperty.call(ResidencyMode, key)) {
-            if (ResidencyMode[key as keyof typeof ResidencyMode] === value) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in ResidencyMode) {
+		if (Object.prototype.hasOwnProperty.call(ResidencyMode, key)) {
+			if (ResidencyMode[key as keyof typeof ResidencyMode] === value) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function ResidencyModeFromJSON(json: any): ResidencyMode {
-    return ResidencyModeFromJSONTyped(json, false);
+	return ResidencyModeFromJSONTyped(json, false);
 }
 
 export function ResidencyModeFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): ResidencyMode {
-    return json as ResidencyMode;
+	return json as ResidencyMode;
 }
 
 export function ResidencyModeToJSON(value?: ResidencyMode | null): any {
-    return value as any;
+	return value as any;
 }
 
 export function ResidencyModeToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): ResidencyMode {
-    return value as ResidencyMode;
+	return value as ResidencyMode;
 }

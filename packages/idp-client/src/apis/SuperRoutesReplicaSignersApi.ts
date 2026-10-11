@@ -14,39 +14,39 @@
 
 import * as runtime from "../runtime.js";
 import {
-    type EnrollReplicaSigner,
-    EnrollReplicaSignerFromJSON,
-    EnrollReplicaSignerToJSON,
+	type EnrollReplicaSigner,
+	EnrollReplicaSignerFromJSON,
+	EnrollReplicaSignerToJSON,
 } from "../models/EnrollReplicaSigner.js";
 import {
-    type RotateReplicaSigner,
-    RotateReplicaSignerFromJSON,
-    RotateReplicaSignerToJSON,
+	type RotateReplicaSigner,
+	RotateReplicaSignerFromJSON,
+	RotateReplicaSignerToJSON,
 } from "../models/RotateReplicaSigner.js";
 
 export interface EnrollReplicaSignerRequest {
-    /**
-     *
-     */
-    enrollReplicaSigner: EnrollReplicaSigner;
+	/**
+	 *
+	 */
+	enrollReplicaSigner: EnrollReplicaSigner;
 }
 
 export interface RevokeReplicaSignerRequest {
-    /**
-     *
-     */
-    memberId: string;
+	/**
+	 *
+	 */
+	memberId: string;
 }
 
 export interface RotateReplicaSignerRequest {
-    /**
-     *
-     */
-    memberId: string;
-    /**
-     *
-     */
-    rotateReplicaSigner: RotateReplicaSigner;
+	/**
+	 *
+	 */
+	memberId: string;
+	/**
+	 *
+	 */
+	rotateReplicaSigner: RotateReplicaSigner;
 }
 
 /**
@@ -56,299 +56,295 @@ export interface RotateReplicaSignerRequest {
  * @interface SuperRoutesReplicaSignersApiInterface
  */
 export interface SuperRoutesReplicaSignersApiInterface {
-    /**
-     * Creates request options for enrollReplicaSigner without sending the request
-     * @param {EnrollReplicaSigner} enrollReplicaSigner
-     * @throws {RequiredError}
-     * @memberof SuperRoutesReplicaSignersApiInterface
-     */
-    enrollReplicaSignerRequestOpts(
-        requestParameters: EnrollReplicaSignerRequest,
-    ): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for enrollReplicaSigner without sending the request
+	 * @param {EnrollReplicaSigner} enrollReplicaSigner
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesReplicaSignersApiInterface
+	 */
+	enrollReplicaSignerRequestOpts(
+		requestParameters: EnrollReplicaSignerRequest,
+	): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {EnrollReplicaSigner} enrollReplicaSigner
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof SuperRoutesReplicaSignersApiInterface
-     */
-    enrollReplicaSignerRaw(
-        requestParameters: EnrollReplicaSignerRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<void>>;
+	/**
+	 *
+	 * @param {EnrollReplicaSigner} enrollReplicaSigner
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesReplicaSignersApiInterface
+	 */
+	enrollReplicaSignerRaw(
+		requestParameters: EnrollReplicaSignerRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<void>>;
 
-    /**
-     */
-    enrollReplicaSigner(
-        requestParameters: EnrollReplicaSignerRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<void>;
+	/**
+	 */
+	enrollReplicaSigner(
+		requestParameters: EnrollReplicaSignerRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<void>;
 
-    /**
-     * Creates request options for revokeReplicaSigner without sending the request
-     * @param {string} memberId
-     * @throws {RequiredError}
-     * @memberof SuperRoutesReplicaSignersApiInterface
-     */
-    revokeReplicaSignerRequestOpts(
-        requestParameters: RevokeReplicaSignerRequest,
-    ): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for revokeReplicaSigner without sending the request
+	 * @param {string} memberId
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesReplicaSignersApiInterface
+	 */
+	revokeReplicaSignerRequestOpts(
+		requestParameters: RevokeReplicaSignerRequest,
+	): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {string} memberId
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof SuperRoutesReplicaSignersApiInterface
-     */
-    revokeReplicaSignerRaw(
-        requestParameters: RevokeReplicaSignerRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<void>>;
+	/**
+	 *
+	 * @param {string} memberId
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesReplicaSignersApiInterface
+	 */
+	revokeReplicaSignerRaw(
+		requestParameters: RevokeReplicaSignerRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<void>>;
 
-    /**
-     */
-    revokeReplicaSigner(
-        requestParameters: RevokeReplicaSignerRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<void>;
+	/**
+	 */
+	revokeReplicaSigner(
+		requestParameters: RevokeReplicaSignerRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<void>;
 
-    /**
-     * Creates request options for rotateReplicaSigner without sending the request
-     * @param {string} memberId
-     * @param {RotateReplicaSigner} rotateReplicaSigner
-     * @throws {RequiredError}
-     * @memberof SuperRoutesReplicaSignersApiInterface
-     */
-    rotateReplicaSignerRequestOpts(
-        requestParameters: RotateReplicaSignerRequest,
-    ): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for rotateReplicaSigner without sending the request
+	 * @param {string} memberId
+	 * @param {RotateReplicaSigner} rotateReplicaSigner
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesReplicaSignersApiInterface
+	 */
+	rotateReplicaSignerRequestOpts(
+		requestParameters: RotateReplicaSignerRequest,
+	): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {string} memberId
-     * @param {RotateReplicaSigner} rotateReplicaSigner
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof SuperRoutesReplicaSignersApiInterface
-     */
-    rotateReplicaSignerRaw(
-        requestParameters: RotateReplicaSignerRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<void>>;
+	/**
+	 *
+	 * @param {string} memberId
+	 * @param {RotateReplicaSigner} rotateReplicaSigner
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesReplicaSignersApiInterface
+	 */
+	rotateReplicaSignerRaw(
+		requestParameters: RotateReplicaSignerRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<void>>;
 
-    /**
-     */
-    rotateReplicaSigner(
-        requestParameters: RotateReplicaSignerRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<void>;
+	/**
+	 */
+	rotateReplicaSigner(
+		requestParameters: RotateReplicaSignerRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<void>;
 }
 
 /**
  *
  */
 export class SuperRoutesReplicaSignersApi
-    extends runtime.BaseAPI
-    implements SuperRoutesReplicaSignersApiInterface
+	extends runtime.BaseAPI
+	implements SuperRoutesReplicaSignersApiInterface
 {
-    /**
-     * Creates request options for enrollReplicaSigner without sending the request
-     */
-    async enrollReplicaSignerRequestOpts(
-        requestParameters: EnrollReplicaSignerRequest,
-    ): Promise<runtime.RequestOpts> {
-        if (requestParameters["enrollReplicaSigner"] == null) {
-            throw new runtime.RequiredError(
-                "enrollReplicaSigner",
-                'Required parameter "enrollReplicaSigner" was null or undefined when calling enrollReplicaSigner().',
-            );
-        }
+	/**
+	 * Creates request options for enrollReplicaSigner without sending the request
+	 */
+	async enrollReplicaSignerRequestOpts(
+		requestParameters: EnrollReplicaSignerRequest,
+	): Promise<runtime.RequestOpts> {
+		if (requestParameters["enrollReplicaSigner"] == null) {
+			throw new runtime.RequiredError(
+				"enrollReplicaSigner",
+				'Required parameter "enrollReplicaSigner" was null or undefined when calling enrollReplicaSigner().',
+			);
+		}
 
-        const queryParameters: any = {};
+		const queryParameters: any = {};
 
-        const headerParameters: runtime.HTTPHeaders = {};
+		const headerParameters: runtime.HTTPHeaders = {};
 
-        headerParameters["Content-Type"] = "application/json";
+		headerParameters["Content-Type"] = "application/json";
 
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
 
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
 
-        let urlPath = `/replica-signers`;
+		let urlPath = `/replica-signers`;
 
-        return {
-            path: urlPath,
-            method: "POST",
-            headers: headerParameters,
-            query: queryParameters,
-            body: EnrollReplicaSignerToJSON(
-                requestParameters["enrollReplicaSigner"],
-            ),
-        };
-    }
+		return {
+			path: urlPath,
+			method: "POST",
+			headers: headerParameters,
+			query: queryParameters,
+			body: EnrollReplicaSignerToJSON(requestParameters["enrollReplicaSigner"]),
+		};
+	}
 
-    /**
-     */
-    async enrollReplicaSignerRaw(
-        requestParameters: EnrollReplicaSignerRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<void>> {
-        const requestOptions =
-            await this.enrollReplicaSignerRequestOpts(requestParameters);
-        const response = await this.request(requestOptions, initOverrides);
+	/**
+	 */
+	async enrollReplicaSignerRaw(
+		requestParameters: EnrollReplicaSignerRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<void>> {
+		const requestOptions =
+			await this.enrollReplicaSignerRequestOpts(requestParameters);
+		const response = await this.request(requestOptions, initOverrides);
 
-        return new runtime.VoidApiResponse(response);
-    }
+		return new runtime.VoidApiResponse(response);
+	}
 
-    /**
-     */
-    async enrollReplicaSigner(
-        requestParameters: EnrollReplicaSignerRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<void> {
-        await this.enrollReplicaSignerRaw(requestParameters, initOverrides);
-    }
+	/**
+	 */
+	async enrollReplicaSigner(
+		requestParameters: EnrollReplicaSignerRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<void> {
+		await this.enrollReplicaSignerRaw(requestParameters, initOverrides);
+	}
 
-    /**
-     * Creates request options for revokeReplicaSigner without sending the request
-     */
-    async revokeReplicaSignerRequestOpts(
-        requestParameters: RevokeReplicaSignerRequest,
-    ): Promise<runtime.RequestOpts> {
-        if (requestParameters["memberId"] == null) {
-            throw new runtime.RequiredError(
-                "memberId",
-                'Required parameter "memberId" was null or undefined when calling revokeReplicaSigner().',
-            );
-        }
+	/**
+	 * Creates request options for revokeReplicaSigner without sending the request
+	 */
+	async revokeReplicaSignerRequestOpts(
+		requestParameters: RevokeReplicaSignerRequest,
+	): Promise<runtime.RequestOpts> {
+		if (requestParameters["memberId"] == null) {
+			throw new runtime.RequiredError(
+				"memberId",
+				'Required parameter "memberId" was null or undefined when calling revokeReplicaSigner().',
+			);
+		}
 
-        const queryParameters: any = {};
+		const queryParameters: any = {};
 
-        const headerParameters: runtime.HTTPHeaders = {};
+		const headerParameters: runtime.HTTPHeaders = {};
 
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
 
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
 
-        let urlPath = `/replica-signers/{member_id}`;
-        urlPath = urlPath.replace(
-            "{member_id}",
-            encodeURIComponent(String(requestParameters["memberId"])),
-        );
+		let urlPath = `/replica-signers/{member_id}`;
+		urlPath = urlPath.replace(
+			"{member_id}",
+			encodeURIComponent(String(requestParameters["memberId"])),
+		);
 
-        return {
-            path: urlPath,
-            method: "DELETE",
-            headers: headerParameters,
-            query: queryParameters,
-        };
-    }
+		return {
+			path: urlPath,
+			method: "DELETE",
+			headers: headerParameters,
+			query: queryParameters,
+		};
+	}
 
-    /**
-     */
-    async revokeReplicaSignerRaw(
-        requestParameters: RevokeReplicaSignerRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<void>> {
-        const requestOptions =
-            await this.revokeReplicaSignerRequestOpts(requestParameters);
-        const response = await this.request(requestOptions, initOverrides);
+	/**
+	 */
+	async revokeReplicaSignerRaw(
+		requestParameters: RevokeReplicaSignerRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<void>> {
+		const requestOptions =
+			await this.revokeReplicaSignerRequestOpts(requestParameters);
+		const response = await this.request(requestOptions, initOverrides);
 
-        return new runtime.VoidApiResponse(response);
-    }
+		return new runtime.VoidApiResponse(response);
+	}
 
-    /**
-     */
-    async revokeReplicaSigner(
-        requestParameters: RevokeReplicaSignerRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<void> {
-        await this.revokeReplicaSignerRaw(requestParameters, initOverrides);
-    }
+	/**
+	 */
+	async revokeReplicaSigner(
+		requestParameters: RevokeReplicaSignerRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<void> {
+		await this.revokeReplicaSignerRaw(requestParameters, initOverrides);
+	}
 
-    /**
-     * Creates request options for rotateReplicaSigner without sending the request
-     */
-    async rotateReplicaSignerRequestOpts(
-        requestParameters: RotateReplicaSignerRequest,
-    ): Promise<runtime.RequestOpts> {
-        if (requestParameters["memberId"] == null) {
-            throw new runtime.RequiredError(
-                "memberId",
-                'Required parameter "memberId" was null or undefined when calling rotateReplicaSigner().',
-            );
-        }
+	/**
+	 * Creates request options for rotateReplicaSigner without sending the request
+	 */
+	async rotateReplicaSignerRequestOpts(
+		requestParameters: RotateReplicaSignerRequest,
+	): Promise<runtime.RequestOpts> {
+		if (requestParameters["memberId"] == null) {
+			throw new runtime.RequiredError(
+				"memberId",
+				'Required parameter "memberId" was null or undefined when calling rotateReplicaSigner().',
+			);
+		}
 
-        if (requestParameters["rotateReplicaSigner"] == null) {
-            throw new runtime.RequiredError(
-                "rotateReplicaSigner",
-                'Required parameter "rotateReplicaSigner" was null or undefined when calling rotateReplicaSigner().',
-            );
-        }
+		if (requestParameters["rotateReplicaSigner"] == null) {
+			throw new runtime.RequiredError(
+				"rotateReplicaSigner",
+				'Required parameter "rotateReplicaSigner" was null or undefined when calling rotateReplicaSigner().',
+			);
+		}
 
-        const queryParameters: any = {};
+		const queryParameters: any = {};
 
-        const headerParameters: runtime.HTTPHeaders = {};
+		const headerParameters: runtime.HTTPHeaders = {};
 
-        headerParameters["Content-Type"] = "application/json";
+		headerParameters["Content-Type"] = "application/json";
 
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
 
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
 
-        let urlPath = `/replica-signers/{member_id}`;
-        urlPath = urlPath.replace(
-            "{member_id}",
-            encodeURIComponent(String(requestParameters["memberId"])),
-        );
+		let urlPath = `/replica-signers/{member_id}`;
+		urlPath = urlPath.replace(
+			"{member_id}",
+			encodeURIComponent(String(requestParameters["memberId"])),
+		);
 
-        return {
-            path: urlPath,
-            method: "PUT",
-            headers: headerParameters,
-            query: queryParameters,
-            body: RotateReplicaSignerToJSON(
-                requestParameters["rotateReplicaSigner"],
-            ),
-        };
-    }
+		return {
+			path: urlPath,
+			method: "PUT",
+			headers: headerParameters,
+			query: queryParameters,
+			body: RotateReplicaSignerToJSON(requestParameters["rotateReplicaSigner"]),
+		};
+	}
 
-    /**
-     */
-    async rotateReplicaSignerRaw(
-        requestParameters: RotateReplicaSignerRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<void>> {
-        const requestOptions =
-            await this.rotateReplicaSignerRequestOpts(requestParameters);
-        const response = await this.request(requestOptions, initOverrides);
+	/**
+	 */
+	async rotateReplicaSignerRaw(
+		requestParameters: RotateReplicaSignerRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<void>> {
+		const requestOptions =
+			await this.rotateReplicaSignerRequestOpts(requestParameters);
+		const response = await this.request(requestOptions, initOverrides);
 
-        return new runtime.VoidApiResponse(response);
-    }
+		return new runtime.VoidApiResponse(response);
+	}
 
-    /**
-     */
-    async rotateReplicaSigner(
-        requestParameters: RotateReplicaSignerRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<void> {
-        await this.rotateReplicaSignerRaw(requestParameters, initOverrides);
-    }
+	/**
+	 */
+	async rotateReplicaSigner(
+		requestParameters: RotateReplicaSignerRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<void> {
+		await this.rotateReplicaSignerRaw(requestParameters, initOverrides);
+	}
 }

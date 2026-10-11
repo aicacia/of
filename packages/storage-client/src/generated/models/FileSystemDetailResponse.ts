@@ -19,74 +19,74 @@ import { mapValues } from "../runtime.js";
  * @interface FileSystemDetailResponse
  */
 export interface FileSystemDetailResponse {
-    /**
-     *
-     */
-    applicationId: string;
-    /**
-     *
-     */
-    id: string;
-    /**
-     *
-     */
-    name?: string | null;
+	/**
+	 *
+	 */
+	applicationId: string;
+	/**
+	 *
+	 */
+	id: string;
+	/**
+	 *
+	 */
+	name?: string | null;
 }
 
 /**
  * Check if a given object implements the FileSystemDetailResponse interface.
  */
 export function instanceOfFileSystemDetailResponse(
-    value: object,
+	value: object,
 ): value is FileSystemDetailResponse {
-    if (!("applicationId" in value) || value["applicationId"] === undefined)
-        return false;
-    if (!("id" in value) || value["id"] === undefined) return false;
-    return true;
+	if (!("applicationId" in value) || value["applicationId"] === undefined)
+		return false;
+	if (!("id" in value) || value["id"] === undefined) return false;
+	return true;
 }
 
 export function FileSystemDetailResponseFromJSON(
-    json: any,
+	json: any,
 ): FileSystemDetailResponse {
-    return FileSystemDetailResponseFromJSONTyped(json, false);
+	return FileSystemDetailResponseFromJSONTyped(json, false);
 }
 
 export function FileSystemDetailResponseFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): FileSystemDetailResponse {
-    if (json == null) {
-        return json;
-    }
-    return {
-        applicationId: json["applicationId"],
-        id: json["id"],
-        name:
-            json["name"] === undefined
-                ? undefined
-                : json["name"] === null
-                  ? null
-                  : json["name"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		applicationId: json["applicationId"],
+		id: json["id"],
+		name:
+			json["name"] === undefined
+				? undefined
+				: json["name"] === null
+					? null
+					: json["name"],
+	};
 }
 
 export function FileSystemDetailResponseToJSON(
-    json: any,
+	json: any,
 ): FileSystemDetailResponse {
-    return FileSystemDetailResponseToJSONTyped(json, false);
+	return FileSystemDetailResponseToJSONTyped(json, false);
 }
 
 export function FileSystemDetailResponseToJSONTyped(
-    value?: FileSystemDetailResponse | null,
-    ignoreDiscriminator: boolean = false,
+	value?: FileSystemDetailResponse | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        applicationId: value["applicationId"],
-        id: value["id"],
-        name: value["name"],
-    };
+	return {
+		applicationId: value["applicationId"],
+		id: value["id"],
+		name: value["name"],
+	};
 }

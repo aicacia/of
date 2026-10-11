@@ -15,10 +15,10 @@
 import { mapValues } from "../runtime.js";
 import type { TokenType } from "./TokenType.js";
 import {
-    TokenTypeFromJSON,
-    TokenTypeFromJSONTyped,
-    TokenTypeToJSON,
-    TokenTypeToJSONTyped,
+	TokenTypeFromJSON,
+	TokenTypeFromJSONTyped,
+	TokenTypeToJSON,
+	TokenTypeToJSONTyped,
 } from "./TokenType.js";
 
 /**
@@ -27,134 +27,134 @@ import {
  * @interface TokenResponse
  */
 export interface TokenResponse {
-    /**
-     * The access token issued by the authorization server.
-     */
-    accessToken: string;
-    /**
-     * The lifetime in seconds of the id/access token.
-     */
-    expiresIn?: number | null;
-    /**
-     *
-     */
-    idToken?: string | null;
-    /**
-     * The identifier of the authorization server that issued the token.
-     */
-    iss?: string | null;
-    /**
-     * The refresh token, which can be used to obtain new access tokens using the same authorization grant.
-     */
-    refreshToken?: string | null;
-    /**
-     * The lifetime in seconds of the refresh token.
-     */
-    refreshTokenExpiresIn?: number | null;
-    /**
-     * The scope of the access token as described by the authorization server.
-     */
-    scope?: string | null;
-    /**
-     * The type of the token issued.
-     */
-    tokenType: TokenType;
+	/**
+	 * The access token issued by the authorization server.
+	 */
+	accessToken: string;
+	/**
+	 * The lifetime in seconds of the id/access token.
+	 */
+	expiresIn?: number | null;
+	/**
+	 *
+	 */
+	idToken?: string | null;
+	/**
+	 * The identifier of the authorization server that issued the token.
+	 */
+	iss?: string | null;
+	/**
+	 * The refresh token, which can be used to obtain new access tokens using the same authorization grant.
+	 */
+	refreshToken?: string | null;
+	/**
+	 * The lifetime in seconds of the refresh token.
+	 */
+	refreshTokenExpiresIn?: number | null;
+	/**
+	 * The scope of the access token as described by the authorization server.
+	 */
+	scope?: string | null;
+	/**
+	 * The type of the token issued.
+	 */
+	tokenType: TokenType;
 }
 
 /**
  * Check if a given object implements the TokenResponse interface.
  */
 export function instanceOfTokenResponse(value: object): value is TokenResponse {
-    if (
-        (!("accessToken" in (value as Record<string, any>)) &&
-            !("access_token" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["accessToken"] === undefined &&
-            (value as Record<string, any>)["access_token"] === undefined)
-    )
-        return false;
-    if (
-        (!("tokenType" in (value as Record<string, any>)) &&
-            !("token_type" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["tokenType"] === undefined &&
-            (value as Record<string, any>)["token_type"] === undefined)
-    )
-        return false;
-    return true;
+	if (
+		(!("accessToken" in (value as Record<string, any>)) &&
+			!("access_token" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["accessToken"] === undefined &&
+			(value as Record<string, any>)["access_token"] === undefined)
+	)
+		return false;
+	if (
+		(!("tokenType" in (value as Record<string, any>)) &&
+			!("token_type" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["tokenType"] === undefined &&
+			(value as Record<string, any>)["token_type"] === undefined)
+	)
+		return false;
+	return true;
 }
 
 export function TokenResponseFromJSON(json: any): TokenResponse {
-    return TokenResponseFromJSONTyped(json, false);
+	return TokenResponseFromJSONTyped(json, false);
 }
 
 export function TokenResponseFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): TokenResponse {
-    if (json == null) {
-        return json;
-    }
-    return {
-        accessToken: json["access_token"],
-        expiresIn:
-            json["expires_in"] === undefined
-                ? undefined
-                : json["expires_in"] === null
-                  ? null
-                  : json["expires_in"],
-        idToken:
-            json["id_token"] === undefined
-                ? undefined
-                : json["id_token"] === null
-                  ? null
-                  : json["id_token"],
-        iss:
-            json["iss"] === undefined
-                ? undefined
-                : json["iss"] === null
-                  ? null
-                  : json["iss"],
-        refreshToken:
-            json["refresh_token"] === undefined
-                ? undefined
-                : json["refresh_token"] === null
-                  ? null
-                  : json["refresh_token"],
-        refreshTokenExpiresIn:
-            json["refresh_token_expires_in"] === undefined
-                ? undefined
-                : json["refresh_token_expires_in"] === null
-                  ? null
-                  : json["refresh_token_expires_in"],
-        scope:
-            json["scope"] === undefined
-                ? undefined
-                : json["scope"] === null
-                  ? null
-                  : json["scope"],
-        tokenType: TokenTypeFromJSON(json["token_type"]),
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		accessToken: json["access_token"],
+		expiresIn:
+			json["expires_in"] === undefined
+				? undefined
+				: json["expires_in"] === null
+					? null
+					: json["expires_in"],
+		idToken:
+			json["id_token"] === undefined
+				? undefined
+				: json["id_token"] === null
+					? null
+					: json["id_token"],
+		iss:
+			json["iss"] === undefined
+				? undefined
+				: json["iss"] === null
+					? null
+					: json["iss"],
+		refreshToken:
+			json["refresh_token"] === undefined
+				? undefined
+				: json["refresh_token"] === null
+					? null
+					: json["refresh_token"],
+		refreshTokenExpiresIn:
+			json["refresh_token_expires_in"] === undefined
+				? undefined
+				: json["refresh_token_expires_in"] === null
+					? null
+					: json["refresh_token_expires_in"],
+		scope:
+			json["scope"] === undefined
+				? undefined
+				: json["scope"] === null
+					? null
+					: json["scope"],
+		tokenType: TokenTypeFromJSON(json["token_type"]),
+	};
 }
 
 export function TokenResponseToJSON(json: any): TokenResponse {
-    return TokenResponseToJSONTyped(json, false);
+	return TokenResponseToJSONTyped(json, false);
 }
 
 export function TokenResponseToJSONTyped(
-    value?: TokenResponse | null,
-    ignoreDiscriminator: boolean = false,
+	value?: TokenResponse | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        access_token: value["accessToken"],
-        expires_in: value["expiresIn"],
-        id_token: value["idToken"],
-        iss: value["iss"],
-        refresh_token: value["refreshToken"],
-        refresh_token_expires_in: value["refreshTokenExpiresIn"],
-        scope: value["scope"],
-        token_type: TokenTypeToJSON(value["tokenType"]),
-    };
+	return {
+		access_token: value["accessToken"],
+		expires_in: value["expiresIn"],
+		id_token: value["idToken"],
+		iss: value["iss"],
+		refresh_token: value["refreshToken"],
+		refresh_token_expires_in: value["refreshTokenExpiresIn"],
+		scope: value["scope"],
+		token_type: TokenTypeToJSON(value["tokenType"]),
+	};
 }

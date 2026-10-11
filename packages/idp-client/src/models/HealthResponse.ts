@@ -15,10 +15,10 @@
 import { mapValues } from "../runtime.js";
 import type { HealthStatus } from "./HealthStatus.js";
 import {
-    HealthStatusFromJSON,
-    HealthStatusFromJSONTyped,
-    HealthStatusToJSON,
-    HealthStatusToJSONTyped,
+	HealthStatusFromJSON,
+	HealthStatusFromJSONTyped,
+	HealthStatusToJSON,
+	HealthStatusToJSONTyped,
 } from "./HealthStatus.js";
 
 /**
@@ -27,51 +27,51 @@ import {
  * @interface HealthResponse
  */
 export interface HealthResponse {
-    /**
-     *
-     */
-    database: HealthStatus;
+	/**
+	 *
+	 */
+	database: HealthStatus;
 }
 
 /**
  * Check if a given object implements the HealthResponse interface.
  */
 export function instanceOfHealthResponse(
-    value: object,
+	value: object,
 ): value is HealthResponse {
-    if (!("database" in value) || value["database"] === undefined) return false;
-    return true;
+	if (!("database" in value) || value["database"] === undefined) return false;
+	return true;
 }
 
 export function HealthResponseFromJSON(json: any): HealthResponse {
-    return HealthResponseFromJSONTyped(json, false);
+	return HealthResponseFromJSONTyped(json, false);
 }
 
 export function HealthResponseFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): HealthResponse {
-    if (json == null) {
-        return json;
-    }
-    return {
-        database: HealthStatusFromJSON(json["database"]),
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		database: HealthStatusFromJSON(json["database"]),
+	};
 }
 
 export function HealthResponseToJSON(json: any): HealthResponse {
-    return HealthResponseToJSONTyped(json, false);
+	return HealthResponseToJSONTyped(json, false);
 }
 
 export function HealthResponseToJSONTyped(
-    value?: HealthResponse | null,
-    ignoreDiscriminator: boolean = false,
+	value?: HealthResponse | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        database: HealthStatusToJSON(value["database"]),
-    };
+	return {
+		database: HealthStatusToJSON(value["database"]),
+	};
 }

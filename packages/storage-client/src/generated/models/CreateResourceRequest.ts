@@ -19,57 +19,57 @@ import { mapValues } from "../runtime.js";
  * @interface CreateResourceRequest
  */
 export interface CreateResourceRequest {
-    /**
-     *
-     */
-    name?: string | null;
+	/**
+	 *
+	 */
+	name?: string | null;
 }
 
 /**
  * Check if a given object implements the CreateResourceRequest interface.
  */
 export function instanceOfCreateResourceRequest(
-    value: object,
+	value: object,
 ): value is CreateResourceRequest {
-    return true;
+	return true;
 }
 
 export function CreateResourceRequestFromJSON(
-    json: any,
+	json: any,
 ): CreateResourceRequest {
-    return CreateResourceRequestFromJSONTyped(json, false);
+	return CreateResourceRequestFromJSONTyped(json, false);
 }
 
 export function CreateResourceRequestFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): CreateResourceRequest {
-    if (json == null) {
-        return json;
-    }
-    return {
-        name:
-            json["name"] === undefined
-                ? undefined
-                : json["name"] === null
-                  ? null
-                  : json["name"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		name:
+			json["name"] === undefined
+				? undefined
+				: json["name"] === null
+					? null
+					: json["name"],
+	};
 }
 
 export function CreateResourceRequestToJSON(json: any): CreateResourceRequest {
-    return CreateResourceRequestToJSONTyped(json, false);
+	return CreateResourceRequestToJSONTyped(json, false);
 }
 
 export function CreateResourceRequestToJSONTyped(
-    value?: CreateResourceRequest | null,
-    ignoreDiscriminator: boolean = false,
+	value?: CreateResourceRequest | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        name: value["name"],
-    };
+	return {
+		name: value["name"],
+	};
 }

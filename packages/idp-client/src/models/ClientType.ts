@@ -17,40 +17,40 @@
  * @export
  */
 export const ClientType = {
-    Confidential: "confidential",
-    Public: "public",
+	Confidential: "confidential",
+	Public: "public",
 } as const;
 export type ClientType = (typeof ClientType)[keyof typeof ClientType];
 
 export function instanceOfClientType(value: any): boolean {
-    for (const key in ClientType) {
-        if (Object.prototype.hasOwnProperty.call(ClientType, key)) {
-            if (ClientType[key as keyof typeof ClientType] === value) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in ClientType) {
+		if (Object.prototype.hasOwnProperty.call(ClientType, key)) {
+			if (ClientType[key as keyof typeof ClientType] === value) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function ClientTypeFromJSON(json: any): ClientType {
-    return ClientTypeFromJSONTyped(json, false);
+	return ClientTypeFromJSONTyped(json, false);
 }
 
 export function ClientTypeFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): ClientType {
-    return json as ClientType;
+	return json as ClientType;
 }
 
 export function ClientTypeToJSON(value?: ClientType | null): any {
-    return value as any;
+	return value as any;
 }
 
 export function ClientTypeToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): ClientType {
-    return value as ClientType;
+	return value as ClientType;
 }

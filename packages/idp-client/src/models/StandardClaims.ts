@@ -15,31 +15,31 @@
 import { mapValues } from "../runtime.js";
 import type { TokenUse } from "./TokenUse.js";
 import {
-    TokenUseFromJSON,
-    TokenUseFromJSONTyped,
-    TokenUseToJSON,
-    TokenUseToJSONTyped,
+	TokenUseFromJSON,
+	TokenUseFromJSONTyped,
+	TokenUseToJSON,
+	TokenUseToJSONTyped,
 } from "./TokenUse.js";
 import type { TokenType } from "./TokenType.js";
 import {
-    TokenTypeFromJSON,
-    TokenTypeFromJSONTyped,
-    TokenTypeToJSON,
-    TokenTypeToJSONTyped,
+	TokenTypeFromJSON,
+	TokenTypeFromJSONTyped,
+	TokenTypeToJSON,
+	TokenTypeToJSONTyped,
 } from "./TokenType.js";
 import type { AuthorizationDetail } from "./AuthorizationDetail.js";
 import {
-    AuthorizationDetailFromJSON,
-    AuthorizationDetailFromJSONTyped,
-    AuthorizationDetailToJSON,
-    AuthorizationDetailToJSONTyped,
+	AuthorizationDetailFromJSON,
+	AuthorizationDetailFromJSONTyped,
+	AuthorizationDetailToJSON,
+	AuthorizationDetailToJSONTyped,
 } from "./AuthorizationDetail.js";
 import type { PrincipalType } from "./PrincipalType.js";
 import {
-    PrincipalTypeFromJSON,
-    PrincipalTypeFromJSONTyped,
-    PrincipalTypeToJSON,
-    PrincipalTypeToJSONTyped,
+	PrincipalTypeFromJSON,
+	PrincipalTypeFromJSONTyped,
+	PrincipalTypeToJSON,
+	PrincipalTypeToJSONTyped,
 } from "./PrincipalType.js";
 
 /**
@@ -48,162 +48,162 @@ import {
  * @interface StandardClaims
  */
 export interface StandardClaims {
-    /**
-     *
-     */
-    aud: string;
-    /**
-     *
-     */
-    authorizationDetails?: Array<AuthorizationDetail> | null;
-    /**
-     *
-     */
-    clientId: string;
-    /**
-     *
-     */
-    exp: number;
-    /**
-     *
-     */
-    iat: number;
-    /**
-     *
-     */
-    iss: string;
-    /**
-     *
-     */
-    nbf: number;
-    /**
-     *
-     */
-    principalType: PrincipalType;
-    /**
-     *
-     */
-    resource?: string | null;
-    /**
-     *
-     */
-    scope: Array<string>;
-    /**
-     *
-     */
-    sub: string;
-    /**
-     *
-     */
-    type: TokenType;
-    /**
-     *
-     */
-    use: TokenUse;
+	/**
+	 *
+	 */
+	aud: string;
+	/**
+	 *
+	 */
+	authorizationDetails?: Array<AuthorizationDetail> | null;
+	/**
+	 *
+	 */
+	clientId: string;
+	/**
+	 *
+	 */
+	exp: number;
+	/**
+	 *
+	 */
+	iat: number;
+	/**
+	 *
+	 */
+	iss: string;
+	/**
+	 *
+	 */
+	nbf: number;
+	/**
+	 *
+	 */
+	principalType: PrincipalType;
+	/**
+	 *
+	 */
+	resource?: string | null;
+	/**
+	 *
+	 */
+	scope: Array<string>;
+	/**
+	 *
+	 */
+	sub: string;
+	/**
+	 *
+	 */
+	type: TokenType;
+	/**
+	 *
+	 */
+	use: TokenUse;
 }
 
 /**
  * Check if a given object implements the StandardClaims interface.
  */
 export function instanceOfStandardClaims(
-    value: object,
+	value: object,
 ): value is StandardClaims {
-    if (!("aud" in value) || value["aud"] === undefined) return false;
-    if (
-        (!("clientId" in (value as Record<string, any>)) &&
-            !("client_id" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["clientId"] === undefined &&
-            (value as Record<string, any>)["client_id"] === undefined)
-    )
-        return false;
-    if (!("exp" in value) || value["exp"] === undefined) return false;
-    if (!("iat" in value) || value["iat"] === undefined) return false;
-    if (!("iss" in value) || value["iss"] === undefined) return false;
-    if (!("nbf" in value) || value["nbf"] === undefined) return false;
-    if (
-        (!("principalType" in (value as Record<string, any>)) &&
-            !("principal_type" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["principalType"] === undefined &&
-            (value as Record<string, any>)["principal_type"] === undefined)
-    )
-        return false;
-    if (!("scope" in value) || value["scope"] === undefined) return false;
-    if (!("sub" in value) || value["sub"] === undefined) return false;
-    if (!("type" in value) || value["type"] === undefined) return false;
-    if (!("use" in value) || value["use"] === undefined) return false;
-    return true;
+	if (!("aud" in value) || value["aud"] === undefined) return false;
+	if (
+		(!("clientId" in (value as Record<string, any>)) &&
+			!("client_id" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["clientId"] === undefined &&
+			(value as Record<string, any>)["client_id"] === undefined)
+	)
+		return false;
+	if (!("exp" in value) || value["exp"] === undefined) return false;
+	if (!("iat" in value) || value["iat"] === undefined) return false;
+	if (!("iss" in value) || value["iss"] === undefined) return false;
+	if (!("nbf" in value) || value["nbf"] === undefined) return false;
+	if (
+		(!("principalType" in (value as Record<string, any>)) &&
+			!("principal_type" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["principalType"] === undefined &&
+			(value as Record<string, any>)["principal_type"] === undefined)
+	)
+		return false;
+	if (!("scope" in value) || value["scope"] === undefined) return false;
+	if (!("sub" in value) || value["sub"] === undefined) return false;
+	if (!("type" in value) || value["type"] === undefined) return false;
+	if (!("use" in value) || value["use"] === undefined) return false;
+	return true;
 }
 
 export function StandardClaimsFromJSON(json: any): StandardClaims {
-    return StandardClaimsFromJSONTyped(json, false);
+	return StandardClaimsFromJSONTyped(json, false);
 }
 
 export function StandardClaimsFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): StandardClaims {
-    if (json == null) {
-        return json;
-    }
-    return {
-        aud: json["aud"],
-        authorizationDetails:
-            json["authorization_details"] === undefined
-                ? undefined
-                : json["authorization_details"] === null
-                  ? null
-                  : (json["authorization_details"] as Array<any>).map(
-                        AuthorizationDetailFromJSON,
-                    ),
-        clientId: json["client_id"],
-        exp: json["exp"],
-        iat: json["iat"],
-        iss: json["iss"],
-        nbf: json["nbf"],
-        principalType: PrincipalTypeFromJSON(json["principal_type"]),
-        resource:
-            json["resource"] === undefined
-                ? undefined
-                : json["resource"] === null
-                  ? null
-                  : json["resource"],
-        scope: json["scope"],
-        sub: json["sub"],
-        type: TokenTypeFromJSON(json["type"]),
-        use: TokenUseFromJSON(json["use"]),
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		aud: json["aud"],
+		authorizationDetails:
+			json["authorization_details"] === undefined
+				? undefined
+				: json["authorization_details"] === null
+					? null
+					: (json["authorization_details"] as Array<any>).map(
+							AuthorizationDetailFromJSON,
+						),
+		clientId: json["client_id"],
+		exp: json["exp"],
+		iat: json["iat"],
+		iss: json["iss"],
+		nbf: json["nbf"],
+		principalType: PrincipalTypeFromJSON(json["principal_type"]),
+		resource:
+			json["resource"] === undefined
+				? undefined
+				: json["resource"] === null
+					? null
+					: json["resource"],
+		scope: json["scope"],
+		sub: json["sub"],
+		type: TokenTypeFromJSON(json["type"]),
+		use: TokenUseFromJSON(json["use"]),
+	};
 }
 
 export function StandardClaimsToJSON(json: any): StandardClaims {
-    return StandardClaimsToJSONTyped(json, false);
+	return StandardClaimsToJSONTyped(json, false);
 }
 
 export function StandardClaimsToJSONTyped(
-    value?: StandardClaims | null,
-    ignoreDiscriminator: boolean = false,
+	value?: StandardClaims | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        aud: value["aud"],
-        authorization_details:
-            value["authorizationDetails"] == null
-                ? undefined
-                : (value["authorizationDetails"] as Array<any>).map(
-                      AuthorizationDetailToJSON,
-                  ),
-        client_id: value["clientId"],
-        exp: value["exp"],
-        iat: value["iat"],
-        iss: value["iss"],
-        nbf: value["nbf"],
-        principal_type: PrincipalTypeToJSON(value["principalType"]),
-        resource: value["resource"],
-        scope: value["scope"],
-        sub: value["sub"],
-        type: TokenTypeToJSON(value["type"]),
-        use: TokenUseToJSON(value["use"]),
-    };
+	return {
+		aud: value["aud"],
+		authorization_details:
+			value["authorizationDetails"] == null
+				? undefined
+				: (value["authorizationDetails"] as Array<any>).map(
+						AuthorizationDetailToJSON,
+					),
+		client_id: value["clientId"],
+		exp: value["exp"],
+		iat: value["iat"],
+		iss: value["iss"],
+		nbf: value["nbf"],
+		principal_type: PrincipalTypeToJSON(value["principalType"]),
+		resource: value["resource"],
+		scope: value["scope"],
+		sub: value["sub"],
+		type: TokenTypeToJSON(value["type"]),
+		use: TokenUseToJSON(value["use"]),
+	};
 }

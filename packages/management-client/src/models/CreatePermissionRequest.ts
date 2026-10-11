@@ -19,66 +19,66 @@ import { mapValues } from "../runtime.js";
  * @interface CreatePermissionRequest
  */
 export interface CreatePermissionRequest {
-    /**
-     *
-     */
-    description?: string | null;
-    /**
-     *
-     */
-    name: string;
+	/**
+	 *
+	 */
+	description?: string | null;
+	/**
+	 *
+	 */
+	name: string;
 }
 
 /**
  * Check if a given object implements the CreatePermissionRequest interface.
  */
 export function instanceOfCreatePermissionRequest(
-    value: object,
+	value: object,
 ): value is CreatePermissionRequest {
-    if (!("name" in value) || value["name"] === undefined) return false;
-    return true;
+	if (!("name" in value) || value["name"] === undefined) return false;
+	return true;
 }
 
 export function CreatePermissionRequestFromJSON(
-    json: any,
+	json: any,
 ): CreatePermissionRequest {
-    return CreatePermissionRequestFromJSONTyped(json, false);
+	return CreatePermissionRequestFromJSONTyped(json, false);
 }
 
 export function CreatePermissionRequestFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): CreatePermissionRequest {
-    if (json == null) {
-        return json;
-    }
-    return {
-        description:
-            json["description"] === undefined
-                ? undefined
-                : json["description"] === null
-                  ? null
-                  : json["description"],
-        name: json["name"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		description:
+			json["description"] === undefined
+				? undefined
+				: json["description"] === null
+					? null
+					: json["description"],
+		name: json["name"],
+	};
 }
 
 export function CreatePermissionRequestToJSON(
-    json: any,
+	json: any,
 ): CreatePermissionRequest {
-    return CreatePermissionRequestToJSONTyped(json, false);
+	return CreatePermissionRequestToJSONTyped(json, false);
 }
 
 export function CreatePermissionRequestToJSONTyped(
-    value?: CreatePermissionRequest | null,
-    ignoreDiscriminator: boolean = false,
+	value?: CreatePermissionRequest | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        description: value["description"],
-        name: value["name"],
-    };
+	return {
+		description: value["description"],
+		name: value["name"],
+	};
 }

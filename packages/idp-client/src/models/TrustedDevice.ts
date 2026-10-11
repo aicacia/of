@@ -19,57 +19,56 @@ import { mapValues } from "../runtime.js";
  * @interface TrustedDevice
  */
 export interface TrustedDevice {
-    /**
-     *
-     */
-    address: string;
-    /**
-     *
-     */
-    publicKey: string;
+	/**
+	 *
+	 */
+	address: string;
+	/**
+	 *
+	 */
+	publicKey: string;
 }
 
 /**
  * Check if a given object implements the TrustedDevice interface.
  */
 export function instanceOfTrustedDevice(value: object): value is TrustedDevice {
-    if (!("address" in value) || value["address"] === undefined) return false;
-    if (!("publicKey" in value) || value["publicKey"] === undefined)
-        return false;
-    return true;
+	if (!("address" in value) || value["address"] === undefined) return false;
+	if (!("publicKey" in value) || value["publicKey"] === undefined) return false;
+	return true;
 }
 
 export function TrustedDeviceFromJSON(json: any): TrustedDevice {
-    return TrustedDeviceFromJSONTyped(json, false);
+	return TrustedDeviceFromJSONTyped(json, false);
 }
 
 export function TrustedDeviceFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): TrustedDevice {
-    if (json == null) {
-        return json;
-    }
-    return {
-        address: json["address"],
-        publicKey: json["publicKey"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		address: json["address"],
+		publicKey: json["publicKey"],
+	};
 }
 
 export function TrustedDeviceToJSON(json: any): TrustedDevice {
-    return TrustedDeviceToJSONTyped(json, false);
+	return TrustedDeviceToJSONTyped(json, false);
 }
 
 export function TrustedDeviceToJSONTyped(
-    value?: TrustedDevice | null,
-    ignoreDiscriminator: boolean = false,
+	value?: TrustedDevice | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        address: value["address"],
-        publicKey: value["publicKey"],
-    };
+	return {
+		address: value["address"],
+		publicKey: value["publicKey"],
+	};
 }

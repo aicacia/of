@@ -19,74 +19,74 @@ import { mapValues } from "../runtime.js";
  * @interface DatabaseDetailResponse
  */
 export interface DatabaseDetailResponse {
-    /**
-     *
-     */
-    applicationId: string;
-    /**
-     *
-     */
-    id: string;
-    /**
-     *
-     */
-    name?: string | null;
+	/**
+	 *
+	 */
+	applicationId: string;
+	/**
+	 *
+	 */
+	id: string;
+	/**
+	 *
+	 */
+	name?: string | null;
 }
 
 /**
  * Check if a given object implements the DatabaseDetailResponse interface.
  */
 export function instanceOfDatabaseDetailResponse(
-    value: object,
+	value: object,
 ): value is DatabaseDetailResponse {
-    if (!("applicationId" in value) || value["applicationId"] === undefined)
-        return false;
-    if (!("id" in value) || value["id"] === undefined) return false;
-    return true;
+	if (!("applicationId" in value) || value["applicationId"] === undefined)
+		return false;
+	if (!("id" in value) || value["id"] === undefined) return false;
+	return true;
 }
 
 export function DatabaseDetailResponseFromJSON(
-    json: any,
+	json: any,
 ): DatabaseDetailResponse {
-    return DatabaseDetailResponseFromJSONTyped(json, false);
+	return DatabaseDetailResponseFromJSONTyped(json, false);
 }
 
 export function DatabaseDetailResponseFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): DatabaseDetailResponse {
-    if (json == null) {
-        return json;
-    }
-    return {
-        applicationId: json["applicationId"],
-        id: json["id"],
-        name:
-            json["name"] === undefined
-                ? undefined
-                : json["name"] === null
-                  ? null
-                  : json["name"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		applicationId: json["applicationId"],
+		id: json["id"],
+		name:
+			json["name"] === undefined
+				? undefined
+				: json["name"] === null
+					? null
+					: json["name"],
+	};
 }
 
 export function DatabaseDetailResponseToJSON(
-    json: any,
+	json: any,
 ): DatabaseDetailResponse {
-    return DatabaseDetailResponseToJSONTyped(json, false);
+	return DatabaseDetailResponseToJSONTyped(json, false);
 }
 
 export function DatabaseDetailResponseToJSONTyped(
-    value?: DatabaseDetailResponse | null,
-    ignoreDiscriminator: boolean = false,
+	value?: DatabaseDetailResponse | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        applicationId: value["applicationId"],
-        id: value["id"],
-        name: value["name"],
-    };
+	return {
+		applicationId: value["applicationId"],
+		id: value["id"],
+		name: value["name"],
+	};
 }

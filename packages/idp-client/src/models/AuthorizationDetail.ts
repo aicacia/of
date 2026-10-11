@@ -15,10 +15,10 @@
 import { mapValues } from "../runtime.js";
 import type { StorageAuthorizationAction } from "./StorageAuthorizationAction.js";
 import {
-    StorageAuthorizationActionFromJSON,
-    StorageAuthorizationActionFromJSONTyped,
-    StorageAuthorizationActionToJSON,
-    StorageAuthorizationActionToJSONTyped,
+	StorageAuthorizationActionFromJSON,
+	StorageAuthorizationActionFromJSONTyped,
+	StorageAuthorizationActionToJSON,
+	StorageAuthorizationActionToJSONTyped,
 } from "./StorageAuthorizationAction.js";
 
 /**
@@ -27,73 +27,73 @@ import {
  * @interface AuthorizationDetail
  */
 export interface AuthorizationDetail {
-    /**
-     *
-     */
-    actions: Array<StorageAuthorizationAction>;
-    /**
-     *
-     */
-    type: AuthorizationDetailTypeEnum;
+	/**
+	 *
+	 */
+	actions: Array<StorageAuthorizationAction>;
+	/**
+	 *
+	 */
+	type: AuthorizationDetailTypeEnum;
 }
 
 /**
  * @export
  */
 export const AuthorizationDetailTypeEnum = {
-    Storage: "storage",
+	Storage: "storage",
 } as const;
 export type AuthorizationDetailTypeEnum =
-    (typeof AuthorizationDetailTypeEnum)[keyof typeof AuthorizationDetailTypeEnum];
+	(typeof AuthorizationDetailTypeEnum)[keyof typeof AuthorizationDetailTypeEnum];
 
 /**
  * Check if a given object implements the AuthorizationDetail interface.
  */
 export function instanceOfAuthorizationDetail(
-    value: object,
+	value: object,
 ): value is AuthorizationDetail {
-    if (!("actions" in value) || value["actions"] === undefined) return false;
-    if (!("type" in value) || value["type"] === undefined) return false;
-    if (value["type"] !== "storage") return false;
+	if (!("actions" in value) || value["actions"] === undefined) return false;
+	if (!("type" in value) || value["type"] === undefined) return false;
+	if (value["type"] !== "storage") return false;
 
-    return true;
+	return true;
 }
 
 export function AuthorizationDetailFromJSON(json: any): AuthorizationDetail {
-    return AuthorizationDetailFromJSONTyped(json, false);
+	return AuthorizationDetailFromJSONTyped(json, false);
 }
 
 export function AuthorizationDetailFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): AuthorizationDetail {
-    if (json == null) {
-        return json;
-    }
-    return {
-        actions: (json["actions"] as Array<any>).map(
-            StorageAuthorizationActionFromJSON,
-        ),
-        type: json["type"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		actions: (json["actions"] as Array<any>).map(
+			StorageAuthorizationActionFromJSON,
+		),
+		type: json["type"],
+	};
 }
 
 export function AuthorizationDetailToJSON(json: any): AuthorizationDetail {
-    return AuthorizationDetailToJSONTyped(json, false);
+	return AuthorizationDetailToJSONTyped(json, false);
 }
 
 export function AuthorizationDetailToJSONTyped(
-    value?: AuthorizationDetail | null,
-    ignoreDiscriminator: boolean = false,
+	value?: AuthorizationDetail | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        actions: (value["actions"] as Array<any>).map(
-            StorageAuthorizationActionToJSON,
-        ),
-        type: value["type"],
-    };
+	return {
+		actions: (value["actions"] as Array<any>).map(
+			StorageAuthorizationActionToJSON,
+		),
+		type: value["type"],
+	};
 }

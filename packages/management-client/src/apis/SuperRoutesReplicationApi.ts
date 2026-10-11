@@ -14,28 +14,28 @@
 
 import * as runtime from "../runtime.js";
 import {
-    type ReplicationAdmissionRequest,
-    ReplicationAdmissionRequestFromJSON,
-    ReplicationAdmissionRequestToJSON,
+	type ReplicationAdmissionRequest,
+	ReplicationAdmissionRequestFromJSON,
+	ReplicationAdmissionRequestToJSON,
 } from "../models/ReplicationAdmissionRequest.js";
 import {
-    type SelectedResourcesResponse,
-    SelectedResourcesResponseFromJSON,
-    SelectedResourcesResponseToJSON,
+	type SelectedResourcesResponse,
+	SelectedResourcesResponseFromJSON,
+	SelectedResourcesResponseToJSON,
 } from "../models/SelectedResourcesResponse.js";
 
 export interface ReplicationAdmissionOperationRequest {
-    /**
-     *
-     */
-    replicationAdmissionRequest: ReplicationAdmissionRequest;
+	/**
+	 *
+	 */
+	replicationAdmissionRequest: ReplicationAdmissionRequest;
 }
 
 export interface SelectedResourcesRequest {
-    /**
-     * Iroh endpoint public key
-     */
-    endpointId: string;
+	/**
+	 * Iroh endpoint public key
+	 */
+	endpointId: string;
 }
 
 /**
@@ -45,200 +45,200 @@ export interface SelectedResourcesRequest {
  * @interface SuperRoutesReplicationApiInterface
  */
 export interface SuperRoutesReplicationApiInterface {
-    /**
-     * Creates request options for replicationAdmission without sending the request
-     * @param {ReplicationAdmissionRequest} replicationAdmissionRequest
-     * @throws {RequiredError}
-     * @memberof SuperRoutesReplicationApiInterface
-     */
-    replicationAdmissionRequestOpts(
-        requestParameters: ReplicationAdmissionOperationRequest,
-    ): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for replicationAdmission without sending the request
+	 * @param {ReplicationAdmissionRequest} replicationAdmissionRequest
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesReplicationApiInterface
+	 */
+	replicationAdmissionRequestOpts(
+		requestParameters: ReplicationAdmissionOperationRequest,
+	): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {ReplicationAdmissionRequest} replicationAdmissionRequest
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof SuperRoutesReplicationApiInterface
-     */
-    replicationAdmissionRaw(
-        requestParameters: ReplicationAdmissionOperationRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<void>>;
+	/**
+	 *
+	 * @param {ReplicationAdmissionRequest} replicationAdmissionRequest
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesReplicationApiInterface
+	 */
+	replicationAdmissionRaw(
+		requestParameters: ReplicationAdmissionOperationRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<void>>;
 
-    /**
-     */
-    replicationAdmission(
-        requestParameters: ReplicationAdmissionOperationRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<void>;
+	/**
+	 */
+	replicationAdmission(
+		requestParameters: ReplicationAdmissionOperationRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<void>;
 
-    /**
-     * Creates request options for selectedResources without sending the request
-     * @param {string} endpointId Iroh endpoint public key
-     * @throws {RequiredError}
-     * @memberof SuperRoutesReplicationApiInterface
-     */
-    selectedResourcesRequestOpts(
-        requestParameters: SelectedResourcesRequest,
-    ): Promise<runtime.RequestOpts>;
+	/**
+	 * Creates request options for selectedResources without sending the request
+	 * @param {string} endpointId Iroh endpoint public key
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesReplicationApiInterface
+	 */
+	selectedResourcesRequestOpts(
+		requestParameters: SelectedResourcesRequest,
+	): Promise<runtime.RequestOpts>;
 
-    /**
-     *
-     * @param {string} endpointId Iroh endpoint public key
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof SuperRoutesReplicationApiInterface
-     */
-    selectedResourcesRaw(
-        requestParameters: SelectedResourcesRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<SelectedResourcesResponse>>;
+	/**
+	 *
+	 * @param {string} endpointId Iroh endpoint public key
+	 * @param {*} [options] Override http request option.
+	 * @throws {RequiredError}
+	 * @memberof SuperRoutesReplicationApiInterface
+	 */
+	selectedResourcesRaw(
+		requestParameters: SelectedResourcesRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<SelectedResourcesResponse>>;
 
-    /**
-     */
-    selectedResources(
-        requestParameters: SelectedResourcesRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<SelectedResourcesResponse>;
+	/**
+	 */
+	selectedResources(
+		requestParameters: SelectedResourcesRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<SelectedResourcesResponse>;
 }
 
 /**
  *
  */
 export class SuperRoutesReplicationApi
-    extends runtime.BaseAPI
-    implements SuperRoutesReplicationApiInterface
+	extends runtime.BaseAPI
+	implements SuperRoutesReplicationApiInterface
 {
-    /**
-     * Creates request options for replicationAdmission without sending the request
-     */
-    async replicationAdmissionRequestOpts(
-        requestParameters: ReplicationAdmissionOperationRequest,
-    ): Promise<runtime.RequestOpts> {
-        if (requestParameters["replicationAdmissionRequest"] == null) {
-            throw new runtime.RequiredError(
-                "replicationAdmissionRequest",
-                'Required parameter "replicationAdmissionRequest" was null or undefined when calling replicationAdmission().',
-            );
-        }
+	/**
+	 * Creates request options for replicationAdmission without sending the request
+	 */
+	async replicationAdmissionRequestOpts(
+		requestParameters: ReplicationAdmissionOperationRequest,
+	): Promise<runtime.RequestOpts> {
+		if (requestParameters["replicationAdmissionRequest"] == null) {
+			throw new runtime.RequiredError(
+				"replicationAdmissionRequest",
+				'Required parameter "replicationAdmissionRequest" was null or undefined when calling replicationAdmission().',
+			);
+		}
 
-        const queryParameters: any = {};
+		const queryParameters: any = {};
 
-        const headerParameters: runtime.HTTPHeaders = {};
+		const headerParameters: runtime.HTTPHeaders = {};
 
-        headerParameters["Content-Type"] = "application/json";
+		headerParameters["Content-Type"] = "application/json";
 
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
 
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
 
-        let urlPath = `/replication/admission`;
+		let urlPath = `/replication/admission`;
 
-        return {
-            path: urlPath,
-            method: "POST",
-            headers: headerParameters,
-            query: queryParameters,
-            body: ReplicationAdmissionRequestToJSON(
-                requestParameters["replicationAdmissionRequest"],
-            ),
-        };
-    }
+		return {
+			path: urlPath,
+			method: "POST",
+			headers: headerParameters,
+			query: queryParameters,
+			body: ReplicationAdmissionRequestToJSON(
+				requestParameters["replicationAdmissionRequest"],
+			),
+		};
+	}
 
-    /**
-     */
-    async replicationAdmissionRaw(
-        requestParameters: ReplicationAdmissionOperationRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<void>> {
-        const requestOptions =
-            await this.replicationAdmissionRequestOpts(requestParameters);
-        const response = await this.request(requestOptions, initOverrides);
+	/**
+	 */
+	async replicationAdmissionRaw(
+		requestParameters: ReplicationAdmissionOperationRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<void>> {
+		const requestOptions =
+			await this.replicationAdmissionRequestOpts(requestParameters);
+		const response = await this.request(requestOptions, initOverrides);
 
-        return new runtime.VoidApiResponse(response);
-    }
+		return new runtime.VoidApiResponse(response);
+	}
 
-    /**
-     */
-    async replicationAdmission(
-        requestParameters: ReplicationAdmissionOperationRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<void> {
-        await this.replicationAdmissionRaw(requestParameters, initOverrides);
-    }
+	/**
+	 */
+	async replicationAdmission(
+		requestParameters: ReplicationAdmissionOperationRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<void> {
+		await this.replicationAdmissionRaw(requestParameters, initOverrides);
+	}
 
-    /**
-     * Creates request options for selectedResources without sending the request
-     */
-    async selectedResourcesRequestOpts(
-        requestParameters: SelectedResourcesRequest,
-    ): Promise<runtime.RequestOpts> {
-        if (requestParameters["endpointId"] == null) {
-            throw new runtime.RequiredError(
-                "endpointId",
-                'Required parameter "endpointId" was null or undefined when calling selectedResources().',
-            );
-        }
+	/**
+	 * Creates request options for selectedResources without sending the request
+	 */
+	async selectedResourcesRequestOpts(
+		requestParameters: SelectedResourcesRequest,
+	): Promise<runtime.RequestOpts> {
+		if (requestParameters["endpointId"] == null) {
+			throw new runtime.RequiredError(
+				"endpointId",
+				'Required parameter "endpointId" was null or undefined when calling selectedResources().',
+			);
+		}
 
-        const queryParameters: any = {};
+		const queryParameters: any = {};
 
-        const headerParameters: runtime.HTTPHeaders = {};
+		const headerParameters: runtime.HTTPHeaders = {};
 
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("authorization", []);
+		if (this.configuration && this.configuration.accessToken) {
+			const token = this.configuration.accessToken;
+			const tokenString = await token("authorization", []);
 
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
+			if (tokenString) {
+				headerParameters["Authorization"] = `Bearer ${tokenString}`;
+			}
+		}
 
-        let urlPath = `/replication/devices/{endpoint_id}/selections`;
-        urlPath = urlPath.replace(
-            "{endpoint_id}",
-            encodeURIComponent(String(requestParameters["endpointId"])),
-        );
+		let urlPath = `/replication/devices/{endpoint_id}/selections`;
+		urlPath = urlPath.replace(
+			"{endpoint_id}",
+			encodeURIComponent(String(requestParameters["endpointId"])),
+		);
 
-        return {
-            path: urlPath,
-            method: "GET",
-            headers: headerParameters,
-            query: queryParameters,
-        };
-    }
+		return {
+			path: urlPath,
+			method: "GET",
+			headers: headerParameters,
+			query: queryParameters,
+		};
+	}
 
-    /**
-     */
-    async selectedResourcesRaw(
-        requestParameters: SelectedResourcesRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<runtime.ApiResponse<SelectedResourcesResponse>> {
-        const requestOptions =
-            await this.selectedResourcesRequestOpts(requestParameters);
-        const response = await this.request(requestOptions, initOverrides);
+	/**
+	 */
+	async selectedResourcesRaw(
+		requestParameters: SelectedResourcesRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<runtime.ApiResponse<SelectedResourcesResponse>> {
+		const requestOptions =
+			await this.selectedResourcesRequestOpts(requestParameters);
+		const response = await this.request(requestOptions, initOverrides);
 
-        return new runtime.JSONApiResponse(response, (jsonValue) =>
-            SelectedResourcesResponseFromJSON(jsonValue),
-        );
-    }
+		return new runtime.JSONApiResponse(response, (jsonValue) =>
+			SelectedResourcesResponseFromJSON(jsonValue),
+		);
+	}
 
-    /**
-     */
-    async selectedResources(
-        requestParameters: SelectedResourcesRequest,
-        initOverrides?: RequestInit | runtime.InitOverrideFunction,
-    ): Promise<SelectedResourcesResponse> {
-        const response = await this.selectedResourcesRaw(
-            requestParameters,
-            initOverrides,
-        );
-        return await response.value();
-    }
+	/**
+	 */
+	async selectedResources(
+		requestParameters: SelectedResourcesRequest,
+		initOverrides?: RequestInit | runtime.InitOverrideFunction,
+	): Promise<SelectedResourcesResponse> {
+		const response = await this.selectedResourcesRaw(
+			requestParameters,
+			initOverrides,
+		);
+		return await response.value();
+	}
 }

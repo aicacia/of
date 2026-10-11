@@ -19,52 +19,51 @@ import { mapValues } from "../runtime.js";
  * @interface PairingAcceptance
  */
 export interface PairingAcceptance {
-    /**
-     *
-     */
-    accepting: boolean;
+	/**
+	 *
+	 */
+	accepting: boolean;
 }
 
 /**
  * Check if a given object implements the PairingAcceptance interface.
  */
 export function instanceOfPairingAcceptance(
-    value: object,
+	value: object,
 ): value is PairingAcceptance {
-    if (!("accepting" in value) || value["accepting"] === undefined)
-        return false;
-    return true;
+	if (!("accepting" in value) || value["accepting"] === undefined) return false;
+	return true;
 }
 
 export function PairingAcceptanceFromJSON(json: any): PairingAcceptance {
-    return PairingAcceptanceFromJSONTyped(json, false);
+	return PairingAcceptanceFromJSONTyped(json, false);
 }
 
 export function PairingAcceptanceFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): PairingAcceptance {
-    if (json == null) {
-        return json;
-    }
-    return {
-        accepting: json["accepting"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		accepting: json["accepting"],
+	};
 }
 
 export function PairingAcceptanceToJSON(json: any): PairingAcceptance {
-    return PairingAcceptanceToJSONTyped(json, false);
+	return PairingAcceptanceToJSONTyped(json, false);
 }
 
 export function PairingAcceptanceToJSONTyped(
-    value?: PairingAcceptance | null,
-    ignoreDiscriminator: boolean = false,
+	value?: PairingAcceptance | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        accepting: value["accepting"],
-    };
+	return {
+		accepting: value["accepting"],
+	};
 }

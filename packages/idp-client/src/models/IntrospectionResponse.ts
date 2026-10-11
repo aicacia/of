@@ -15,10 +15,10 @@
 import { mapValues } from "../runtime.js";
 import type { StandardClaims } from "./StandardClaims.js";
 import {
-    StandardClaimsFromJSON,
-    StandardClaimsFromJSONTyped,
-    StandardClaimsToJSON,
-    StandardClaimsToJSONTyped,
+	StandardClaimsFromJSON,
+	StandardClaimsFromJSONTyped,
+	StandardClaimsToJSON,
+	StandardClaimsToJSONTyped,
 } from "./StandardClaims.js";
 
 /**
@@ -27,61 +27,61 @@ import {
  * @interface IntrospectionResponse
  */
 export interface IntrospectionResponse {
-    /**
-     *
-     */
-    applicationId: string;
-    /**
-     *
-     */
-    claims: StandardClaims;
+	/**
+	 *
+	 */
+	applicationId: string;
+	/**
+	 *
+	 */
+	claims: StandardClaims;
 }
 
 /**
  * Check if a given object implements the IntrospectionResponse interface.
  */
 export function instanceOfIntrospectionResponse(
-    value: object,
+	value: object,
 ): value is IntrospectionResponse {
-    if (!("applicationId" in value) || value["applicationId"] === undefined)
-        return false;
-    if (!("claims" in value) || value["claims"] === undefined) return false;
-    return true;
+	if (!("applicationId" in value) || value["applicationId"] === undefined)
+		return false;
+	if (!("claims" in value) || value["claims"] === undefined) return false;
+	return true;
 }
 
 export function IntrospectionResponseFromJSON(
-    json: any,
+	json: any,
 ): IntrospectionResponse {
-    return IntrospectionResponseFromJSONTyped(json, false);
+	return IntrospectionResponseFromJSONTyped(json, false);
 }
 
 export function IntrospectionResponseFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): IntrospectionResponse {
-    if (json == null) {
-        return json;
-    }
-    return {
-        applicationId: json["applicationId"],
-        claims: StandardClaimsFromJSON(json["claims"]),
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		applicationId: json["applicationId"],
+		claims: StandardClaimsFromJSON(json["claims"]),
+	};
 }
 
 export function IntrospectionResponseToJSON(json: any): IntrospectionResponse {
-    return IntrospectionResponseToJSONTyped(json, false);
+	return IntrospectionResponseToJSONTyped(json, false);
 }
 
 export function IntrospectionResponseToJSONTyped(
-    value?: IntrospectionResponse | null,
-    ignoreDiscriminator: boolean = false,
+	value?: IntrospectionResponse | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        applicationId: value["applicationId"],
-        claims: StandardClaimsToJSON(value["claims"]),
-    };
+	return {
+		applicationId: value["applicationId"],
+		claims: StandardClaimsToJSON(value["claims"]),
+	};
 }

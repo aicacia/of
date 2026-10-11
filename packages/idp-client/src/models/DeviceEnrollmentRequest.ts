@@ -19,70 +19,69 @@ import { mapValues } from "../runtime.js";
  * @interface DeviceEnrollmentRequest
  */
 export interface DeviceEnrollmentRequest {
-    /**
-     *
-     */
-    address: string;
-    /**
-     *
-     */
-    name: string;
-    /**
-     *
-     */
-    publicKey: string;
+	/**
+	 *
+	 */
+	address: string;
+	/**
+	 *
+	 */
+	name: string;
+	/**
+	 *
+	 */
+	publicKey: string;
 }
 
 /**
  * Check if a given object implements the DeviceEnrollmentRequest interface.
  */
 export function instanceOfDeviceEnrollmentRequest(
-    value: object,
+	value: object,
 ): value is DeviceEnrollmentRequest {
-    if (!("address" in value) || value["address"] === undefined) return false;
-    if (!("name" in value) || value["name"] === undefined) return false;
-    if (!("publicKey" in value) || value["publicKey"] === undefined)
-        return false;
-    return true;
+	if (!("address" in value) || value["address"] === undefined) return false;
+	if (!("name" in value) || value["name"] === undefined) return false;
+	if (!("publicKey" in value) || value["publicKey"] === undefined) return false;
+	return true;
 }
 
 export function DeviceEnrollmentRequestFromJSON(
-    json: any,
+	json: any,
 ): DeviceEnrollmentRequest {
-    return DeviceEnrollmentRequestFromJSONTyped(json, false);
+	return DeviceEnrollmentRequestFromJSONTyped(json, false);
 }
 
 export function DeviceEnrollmentRequestFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): DeviceEnrollmentRequest {
-    if (json == null) {
-        return json;
-    }
-    return {
-        address: json["address"],
-        name: json["name"],
-        publicKey: json["publicKey"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		address: json["address"],
+		name: json["name"],
+		publicKey: json["publicKey"],
+	};
 }
 
 export function DeviceEnrollmentRequestToJSON(
-    json: any,
+	json: any,
 ): DeviceEnrollmentRequest {
-    return DeviceEnrollmentRequestToJSONTyped(json, false);
+	return DeviceEnrollmentRequestToJSONTyped(json, false);
 }
 
 export function DeviceEnrollmentRequestToJSONTyped(
-    value?: DeviceEnrollmentRequest | null,
-    ignoreDiscriminator: boolean = false,
+	value?: DeviceEnrollmentRequest | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        address: value["address"],
-        name: value["name"],
-        publicKey: value["publicKey"],
-    };
+	return {
+		address: value["address"],
+		name: value["name"],
+		publicKey: value["publicKey"],
+	};
 }

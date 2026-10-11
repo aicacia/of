@@ -17,41 +17,41 @@
  * @export
  */
 export const TokenUse = {
-    Id: "Id",
-    Access: "Access",
-    Refresh: "Refresh",
+	Id: "Id",
+	Access: "Access",
+	Refresh: "Refresh",
 } as const;
 export type TokenUse = (typeof TokenUse)[keyof typeof TokenUse];
 
 export function instanceOfTokenUse(value: any): boolean {
-    for (const key in TokenUse) {
-        if (Object.prototype.hasOwnProperty.call(TokenUse, key)) {
-            if (TokenUse[key as keyof typeof TokenUse] === value) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in TokenUse) {
+		if (Object.prototype.hasOwnProperty.call(TokenUse, key)) {
+			if (TokenUse[key as keyof typeof TokenUse] === value) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function TokenUseFromJSON(json: any): TokenUse {
-    return TokenUseFromJSONTyped(json, false);
+	return TokenUseFromJSONTyped(json, false);
 }
 
 export function TokenUseFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): TokenUse {
-    return json as TokenUse;
+	return json as TokenUse;
 }
 
 export function TokenUseToJSON(value?: TokenUse | null): any {
-    return value as any;
+	return value as any;
 }
 
 export function TokenUseToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): TokenUse {
-    return value as TokenUse;
+	return value as TokenUse;
 }

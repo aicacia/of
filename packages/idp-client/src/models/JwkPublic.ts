@@ -15,17 +15,17 @@
 import { mapValues } from "../runtime.js";
 import type { JwsAlgorithm } from "./JwsAlgorithm.js";
 import {
-    JwsAlgorithmFromJSON,
-    JwsAlgorithmFromJSONTyped,
-    JwsAlgorithmToJSON,
-    JwsAlgorithmToJSONTyped,
+	JwsAlgorithmFromJSON,
+	JwsAlgorithmFromJSONTyped,
+	JwsAlgorithmToJSON,
+	JwsAlgorithmToJSONTyped,
 } from "./JwsAlgorithm.js";
 import type { KeyUse } from "./KeyUse.js";
 import {
-    KeyUseFromJSON,
-    KeyUseFromJSONTyped,
-    KeyUseToJSON,
-    KeyUseToJSONTyped,
+	KeyUseFromJSON,
+	KeyUseFromJSONTyped,
+	KeyUseToJSON,
+	KeyUseToJSONTyped,
 } from "./KeyUse.js";
 
 /**
@@ -34,116 +34,116 @@ import {
  * @interface JwkPublic
  */
 export interface JwkPublic {
-    /**
-     *
-     */
-    e: string;
-    /**
-     *
-     */
-    kty: JwkPublicKtyEnum;
-    /**
-     *
-     */
-    n: string;
-    /**
-     *
-     */
-    crv: string;
-    /**
-     *
-     */
-    x: string;
-    /**
-     *
-     */
-    y: string;
-    /**
-     * Algorithm intended for use
-     */
-    alg: JwsAlgorithm;
-    /**
-     * Key ID
-     */
-    kid: string;
-    /**
-     * Key use (sig, enc)
-     */
-    use: KeyUse;
+	/**
+	 *
+	 */
+	e: string;
+	/**
+	 *
+	 */
+	kty: JwkPublicKtyEnum;
+	/**
+	 *
+	 */
+	n: string;
+	/**
+	 *
+	 */
+	crv: string;
+	/**
+	 *
+	 */
+	x: string;
+	/**
+	 *
+	 */
+	y: string;
+	/**
+	 * Algorithm intended for use
+	 */
+	alg: JwsAlgorithm;
+	/**
+	 * Key ID
+	 */
+	kid: string;
+	/**
+	 * Key use (sig, enc)
+	 */
+	use: KeyUse;
 }
 
 /**
  * @export
  */
 export const JwkPublicKtyEnum = {
-    Opk: "Opk",
+	Opk: "Opk",
 } as const;
 export type JwkPublicKtyEnum =
-    (typeof JwkPublicKtyEnum)[keyof typeof JwkPublicKtyEnum];
+	(typeof JwkPublicKtyEnum)[keyof typeof JwkPublicKtyEnum];
 
 /**
  * Check if a given object implements the JwkPublic interface.
  */
 export function instanceOfJwkPublic(value: object): value is JwkPublic {
-    if (!("e" in value) || value["e"] === undefined) return false;
-    if (!("kty" in value) || value["kty"] === undefined) return false;
-    if (value["kty"] !== "Opk") return false;
+	if (!("e" in value) || value["e"] === undefined) return false;
+	if (!("kty" in value) || value["kty"] === undefined) return false;
+	if (value["kty"] !== "Opk") return false;
 
-    if (!("n" in value) || value["n"] === undefined) return false;
-    if (!("crv" in value) || value["crv"] === undefined) return false;
-    if (!("x" in value) || value["x"] === undefined) return false;
-    if (!("y" in value) || value["y"] === undefined) return false;
-    if (!("alg" in value) || value["alg"] === undefined) return false;
-    if (!("kid" in value) || value["kid"] === undefined) return false;
-    if (!("use" in value) || value["use"] === undefined) return false;
-    return true;
+	if (!("n" in value) || value["n"] === undefined) return false;
+	if (!("crv" in value) || value["crv"] === undefined) return false;
+	if (!("x" in value) || value["x"] === undefined) return false;
+	if (!("y" in value) || value["y"] === undefined) return false;
+	if (!("alg" in value) || value["alg"] === undefined) return false;
+	if (!("kid" in value) || value["kid"] === undefined) return false;
+	if (!("use" in value) || value["use"] === undefined) return false;
+	return true;
 }
 
 export function JwkPublicFromJSON(json: any): JwkPublic {
-    return JwkPublicFromJSONTyped(json, false);
+	return JwkPublicFromJSONTyped(json, false);
 }
 
 export function JwkPublicFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): JwkPublic {
-    if (json == null) {
-        return json;
-    }
-    return {
-        e: json["e"],
-        kty: json["kty"],
-        n: json["n"],
-        crv: json["crv"],
-        x: json["x"],
-        y: json["y"],
-        alg: JwsAlgorithmFromJSON(json["alg"]),
-        kid: json["kid"],
-        use: KeyUseFromJSON(json["use"]),
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		e: json["e"],
+		kty: json["kty"],
+		n: json["n"],
+		crv: json["crv"],
+		x: json["x"],
+		y: json["y"],
+		alg: JwsAlgorithmFromJSON(json["alg"]),
+		kid: json["kid"],
+		use: KeyUseFromJSON(json["use"]),
+	};
 }
 
 export function JwkPublicToJSON(json: any): JwkPublic {
-    return JwkPublicToJSONTyped(json, false);
+	return JwkPublicToJSONTyped(json, false);
 }
 
 export function JwkPublicToJSONTyped(
-    value?: JwkPublic | null,
-    ignoreDiscriminator: boolean = false,
+	value?: JwkPublic | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        e: value["e"],
-        kty: value["kty"],
-        n: value["n"],
-        crv: value["crv"],
-        x: value["x"],
-        y: value["y"],
-        alg: JwsAlgorithmToJSON(value["alg"]),
-        kid: value["kid"],
-        use: KeyUseToJSON(value["use"]),
-    };
+	return {
+		e: value["e"],
+		kty: value["kty"],
+		n: value["n"],
+		crv: value["crv"],
+		x: value["x"],
+		y: value["y"],
+		alg: JwsAlgorithmToJSON(value["alg"]),
+		kid: value["kid"],
+		use: KeyUseToJSON(value["use"]),
+	};
 }

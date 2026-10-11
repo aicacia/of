@@ -17,49 +17,49 @@
  * @export
  */
 export const JwsAlgorithm = {
-    Rs256: "RS256",
-    Rs384: "RS384",
-    Rs512: "RS512",
-    Es256: "ES256",
-    Es256K: "ES256K",
-    Es384: "ES384",
-    Es512: "ES512",
-    Ps256: "PS256",
-    Ps384: "PS384",
-    Ps512: "PS512",
-    EdDsa: "EdDSA",
+	Rs256: "RS256",
+	Rs384: "RS384",
+	Rs512: "RS512",
+	Es256: "ES256",
+	Es256K: "ES256K",
+	Es384: "ES384",
+	Es512: "ES512",
+	Ps256: "PS256",
+	Ps384: "PS384",
+	Ps512: "PS512",
+	EdDsa: "EdDSA",
 } as const;
 export type JwsAlgorithm = (typeof JwsAlgorithm)[keyof typeof JwsAlgorithm];
 
 export function instanceOfJwsAlgorithm(value: any): boolean {
-    for (const key in JwsAlgorithm) {
-        if (Object.prototype.hasOwnProperty.call(JwsAlgorithm, key)) {
-            if (JwsAlgorithm[key as keyof typeof JwsAlgorithm] === value) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in JwsAlgorithm) {
+		if (Object.prototype.hasOwnProperty.call(JwsAlgorithm, key)) {
+			if (JwsAlgorithm[key as keyof typeof JwsAlgorithm] === value) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function JwsAlgorithmFromJSON(json: any): JwsAlgorithm {
-    return JwsAlgorithmFromJSONTyped(json, false);
+	return JwsAlgorithmFromJSONTyped(json, false);
 }
 
 export function JwsAlgorithmFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): JwsAlgorithm {
-    return json as JwsAlgorithm;
+	return json as JwsAlgorithm;
 }
 
 export function JwsAlgorithmToJSON(value?: JwsAlgorithm | null): any {
-    return value as any;
+	return value as any;
 }
 
 export function JwsAlgorithmToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): JwsAlgorithm {
-    return value as JwsAlgorithm;
+	return value as JwsAlgorithm;
 }

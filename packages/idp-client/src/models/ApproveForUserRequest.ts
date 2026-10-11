@@ -19,79 +19,79 @@ import { mapValues } from "../runtime.js";
  * @interface ApproveForUserRequest
  */
 export interface ApproveForUserRequest {
-    /**
-     *
-     */
-    clientId: string;
-    /**
-     *
-     */
-    redirectUri: string;
-    /**
-     *
-     */
-    scope: string;
+	/**
+	 *
+	 */
+	clientId: string;
+	/**
+	 *
+	 */
+	redirectUri: string;
+	/**
+	 *
+	 */
+	scope: string;
 }
 
 /**
  * Check if a given object implements the ApproveForUserRequest interface.
  */
 export function instanceOfApproveForUserRequest(
-    value: object,
+	value: object,
 ): value is ApproveForUserRequest {
-    if (
-        (!("clientId" in (value as Record<string, any>)) &&
-            !("client_id" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["clientId"] === undefined &&
-            (value as Record<string, any>)["client_id"] === undefined)
-    )
-        return false;
-    if (
-        (!("redirectUri" in (value as Record<string, any>)) &&
-            !("redirect_uri" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["redirectUri"] === undefined &&
-            (value as Record<string, any>)["redirect_uri"] === undefined)
-    )
-        return false;
-    if (!("scope" in value) || value["scope"] === undefined) return false;
-    return true;
+	if (
+		(!("clientId" in (value as Record<string, any>)) &&
+			!("client_id" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["clientId"] === undefined &&
+			(value as Record<string, any>)["client_id"] === undefined)
+	)
+		return false;
+	if (
+		(!("redirectUri" in (value as Record<string, any>)) &&
+			!("redirect_uri" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["redirectUri"] === undefined &&
+			(value as Record<string, any>)["redirect_uri"] === undefined)
+	)
+		return false;
+	if (!("scope" in value) || value["scope"] === undefined) return false;
+	return true;
 }
 
 export function ApproveForUserRequestFromJSON(
-    json: any,
+	json: any,
 ): ApproveForUserRequest {
-    return ApproveForUserRequestFromJSONTyped(json, false);
+	return ApproveForUserRequestFromJSONTyped(json, false);
 }
 
 export function ApproveForUserRequestFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): ApproveForUserRequest {
-    if (json == null) {
-        return json;
-    }
-    return {
-        clientId: json["client_id"],
-        redirectUri: json["redirect_uri"],
-        scope: json["scope"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		clientId: json["client_id"],
+		redirectUri: json["redirect_uri"],
+		scope: json["scope"],
+	};
 }
 
 export function ApproveForUserRequestToJSON(json: any): ApproveForUserRequest {
-    return ApproveForUserRequestToJSONTyped(json, false);
+	return ApproveForUserRequestToJSONTyped(json, false);
 }
 
 export function ApproveForUserRequestToJSONTyped(
-    value?: ApproveForUserRequest | null,
-    ignoreDiscriminator: boolean = false,
+	value?: ApproveForUserRequest | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        client_id: value["clientId"],
-        redirect_uri: value["redirectUri"],
-        scope: value["scope"],
-    };
+	return {
+		client_id: value["clientId"],
+		redirect_uri: value["redirectUri"],
+		scope: value["scope"],
+	};
 }

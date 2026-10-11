@@ -13,11 +13,11 @@
  */
 
 import {
-    mapValues,
-    parseDate,
-    parseDateTime,
-    serializeDate,
-    serializeDateTime,
+	mapValues,
+	parseDate,
+	parseDateTime,
+	serializeDate,
+	serializeDateTime,
 } from "../runtime.js";
 /**
  *
@@ -25,71 +25,68 @@ import {
  * @interface VersionResponse
  */
 export interface VersionResponse {
-    /**
-     *
-     */
-    build: Date;
-    /**
-     *
-     */
-    name: string;
-    /**
-     *
-     */
-    version: string;
+	/**
+	 *
+	 */
+	build: Date;
+	/**
+	 *
+	 */
+	name: string;
+	/**
+	 *
+	 */
+	version: string;
 }
 
 /**
  * Check if a given object implements the VersionResponse interface.
  */
 export function instanceOfVersionResponse(
-    value: object,
+	value: object,
 ): value is VersionResponse {
-    if (!("build" in value) || value["build"] === undefined) return false;
-    if (!("name" in value) || value["name"] === undefined) return false;
-    if (!("version" in value) || value["version"] === undefined) return false;
-    return true;
+	if (!("build" in value) || value["build"] === undefined) return false;
+	if (!("name" in value) || value["name"] === undefined) return false;
+	if (!("version" in value) || value["version"] === undefined) return false;
+	return true;
 }
 
 export function VersionResponseFromJSON(json: any): VersionResponse {
-    return VersionResponseFromJSONTyped(json, false);
+	return VersionResponseFromJSONTyped(json, false);
 }
 
 export function VersionResponseFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): VersionResponse {
-    if (json == null) {
-        return json;
-    }
-    return {
-        build:
-            json["build"] == null
-                ? json["build"]
-                : parseDateTime(json["build"]),
-        name: json["name"],
-        version: json["version"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		build: json["build"] == null ? json["build"] : parseDateTime(json["build"]),
+		name: json["name"],
+		version: json["version"],
+	};
 }
 
 export function VersionResponseToJSON(json: any): VersionResponse {
-    return VersionResponseToJSONTyped(json, false);
+	return VersionResponseToJSONTyped(json, false);
 }
 
 export function VersionResponseToJSONTyped(
-    value?: VersionResponse | null,
-    ignoreDiscriminator: boolean = false,
+	value?: VersionResponse | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        build:
-            value["build"] == null
-                ? value["build"]
-                : serializeDateTime(value["build"]),
-        name: value["name"],
-        version: value["version"],
-    };
+	return {
+		build:
+			value["build"] == null
+				? value["build"]
+				: serializeDateTime(value["build"]),
+		name: value["name"],
+		version: value["version"],
+	};
 }

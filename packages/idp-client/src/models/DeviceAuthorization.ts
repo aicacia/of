@@ -19,110 +19,110 @@ import { mapValues } from "../runtime.js";
  * @interface DeviceAuthorization
  */
 export interface DeviceAuthorization {
-    /**
-     *
-     */
-    deviceCode?: string | null;
-    /**
-     *
-     */
-    expiresIn?: number | null;
-    /**
-     *
-     */
-    interval?: number | null;
-    /**
-     *
-     */
-    userCode?: string | null;
-    /**
-     *
-     */
-    verificationUri?: string | null;
-    /**
-     *
-     */
-    verificationUriComplete?: string | null;
+	/**
+	 *
+	 */
+	deviceCode?: string | null;
+	/**
+	 *
+	 */
+	expiresIn?: number | null;
+	/**
+	 *
+	 */
+	interval?: number | null;
+	/**
+	 *
+	 */
+	userCode?: string | null;
+	/**
+	 *
+	 */
+	verificationUri?: string | null;
+	/**
+	 *
+	 */
+	verificationUriComplete?: string | null;
 }
 
 /**
  * Check if a given object implements the DeviceAuthorization interface.
  */
 export function instanceOfDeviceAuthorization(
-    value: object,
+	value: object,
 ): value is DeviceAuthorization {
-    return true;
+	return true;
 }
 
 export function DeviceAuthorizationFromJSON(json: any): DeviceAuthorization {
-    return DeviceAuthorizationFromJSONTyped(json, false);
+	return DeviceAuthorizationFromJSONTyped(json, false);
 }
 
 export function DeviceAuthorizationFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): DeviceAuthorization {
-    if (json == null) {
-        return json;
-    }
-    return {
-        deviceCode:
-            json["device_code"] === undefined
-                ? undefined
-                : json["device_code"] === null
-                  ? null
-                  : json["device_code"],
-        expiresIn:
-            json["expires_in"] === undefined
-                ? undefined
-                : json["expires_in"] === null
-                  ? null
-                  : json["expires_in"],
-        interval:
-            json["interval"] === undefined
-                ? undefined
-                : json["interval"] === null
-                  ? null
-                  : json["interval"],
-        userCode:
-            json["user_code"] === undefined
-                ? undefined
-                : json["user_code"] === null
-                  ? null
-                  : json["user_code"],
-        verificationUri:
-            json["verification_uri"] === undefined
-                ? undefined
-                : json["verification_uri"] === null
-                  ? null
-                  : json["verification_uri"],
-        verificationUriComplete:
-            json["verification_uri_complete"] === undefined
-                ? undefined
-                : json["verification_uri_complete"] === null
-                  ? null
-                  : json["verification_uri_complete"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		deviceCode:
+			json["device_code"] === undefined
+				? undefined
+				: json["device_code"] === null
+					? null
+					: json["device_code"],
+		expiresIn:
+			json["expires_in"] === undefined
+				? undefined
+				: json["expires_in"] === null
+					? null
+					: json["expires_in"],
+		interval:
+			json["interval"] === undefined
+				? undefined
+				: json["interval"] === null
+					? null
+					: json["interval"],
+		userCode:
+			json["user_code"] === undefined
+				? undefined
+				: json["user_code"] === null
+					? null
+					: json["user_code"],
+		verificationUri:
+			json["verification_uri"] === undefined
+				? undefined
+				: json["verification_uri"] === null
+					? null
+					: json["verification_uri"],
+		verificationUriComplete:
+			json["verification_uri_complete"] === undefined
+				? undefined
+				: json["verification_uri_complete"] === null
+					? null
+					: json["verification_uri_complete"],
+	};
 }
 
 export function DeviceAuthorizationToJSON(json: any): DeviceAuthorization {
-    return DeviceAuthorizationToJSONTyped(json, false);
+	return DeviceAuthorizationToJSONTyped(json, false);
 }
 
 export function DeviceAuthorizationToJSONTyped(
-    value?: DeviceAuthorization | null,
-    ignoreDiscriminator: boolean = false,
+	value?: DeviceAuthorization | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        device_code: value["deviceCode"],
-        expires_in: value["expiresIn"],
-        interval: value["interval"],
-        user_code: value["userCode"],
-        verification_uri: value["verificationUri"],
-        verification_uri_complete: value["verificationUriComplete"],
-    };
+	return {
+		device_code: value["deviceCode"],
+		expires_in: value["expiresIn"],
+		interval: value["interval"],
+		user_code: value["userCode"],
+		verification_uri: value["verificationUri"],
+		verification_uri_complete: value["verificationUriComplete"],
+	};
 }

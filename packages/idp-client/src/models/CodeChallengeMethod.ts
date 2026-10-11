@@ -18,45 +18,44 @@
  * @export
  */
 export const CodeChallengeMethod = {
-    S256: "S256",
+	S256: "S256",
 } as const;
 export type CodeChallengeMethod =
-    (typeof CodeChallengeMethod)[keyof typeof CodeChallengeMethod];
+	(typeof CodeChallengeMethod)[keyof typeof CodeChallengeMethod];
 
 export function instanceOfCodeChallengeMethod(value: any): boolean {
-    for (const key in CodeChallengeMethod) {
-        if (Object.prototype.hasOwnProperty.call(CodeChallengeMethod, key)) {
-            if (
-                CodeChallengeMethod[key as keyof typeof CodeChallengeMethod] ===
-                value
-            ) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in CodeChallengeMethod) {
+		if (Object.prototype.hasOwnProperty.call(CodeChallengeMethod, key)) {
+			if (
+				CodeChallengeMethod[key as keyof typeof CodeChallengeMethod] === value
+			) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function CodeChallengeMethodFromJSON(json: any): CodeChallengeMethod {
-    return CodeChallengeMethodFromJSONTyped(json, false);
+	return CodeChallengeMethodFromJSONTyped(json, false);
 }
 
 export function CodeChallengeMethodFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): CodeChallengeMethod {
-    return json as CodeChallengeMethod;
+	return json as CodeChallengeMethod;
 }
 
 export function CodeChallengeMethodToJSON(
-    value?: CodeChallengeMethod | null,
+	value?: CodeChallengeMethod | null,
 ): any {
-    return value as any;
+	return value as any;
 }
 
 export function CodeChallengeMethodToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): CodeChallengeMethod {
-    return value as CodeChallengeMethod;
+	return value as CodeChallengeMethod;
 }

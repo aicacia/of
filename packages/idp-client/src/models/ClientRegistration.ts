@@ -15,45 +15,45 @@
 import { mapValues } from "../runtime.js";
 import type { ClientType } from "./ClientType.js";
 import {
-    ClientTypeFromJSON,
-    ClientTypeFromJSONTyped,
-    ClientTypeToJSON,
-    ClientTypeToJSONTyped,
+	ClientTypeFromJSON,
+	ClientTypeFromJSONTyped,
+	ClientTypeToJSON,
+	ClientTypeToJSONTyped,
 } from "./ClientType.js";
 import type { ClientProfile } from "./ClientProfile.js";
 import {
-    ClientProfileFromJSON,
-    ClientProfileFromJSONTyped,
-    ClientProfileToJSON,
-    ClientProfileToJSONTyped,
+	ClientProfileFromJSON,
+	ClientProfileFromJSONTyped,
+	ClientProfileToJSON,
+	ClientProfileToJSONTyped,
 } from "./ClientProfile.js";
 import type { TokenEndpointAuthMethod } from "./TokenEndpointAuthMethod.js";
 import {
-    TokenEndpointAuthMethodFromJSON,
-    TokenEndpointAuthMethodFromJSONTyped,
-    TokenEndpointAuthMethodToJSON,
-    TokenEndpointAuthMethodToJSONTyped,
+	TokenEndpointAuthMethodFromJSON,
+	TokenEndpointAuthMethodFromJSONTyped,
+	TokenEndpointAuthMethodToJSON,
+	TokenEndpointAuthMethodToJSONTyped,
 } from "./TokenEndpointAuthMethod.js";
 import type { GrantType } from "./GrantType.js";
 import {
-    GrantTypeFromJSON,
-    GrantTypeFromJSONTyped,
-    GrantTypeToJSON,
-    GrantTypeToJSONTyped,
+	GrantTypeFromJSON,
+	GrantTypeFromJSONTyped,
+	GrantTypeToJSON,
+	GrantTypeToJSONTyped,
 } from "./GrantType.js";
 import type { ApplicationRegistration } from "./ApplicationRegistration.js";
 import {
-    ApplicationRegistrationFromJSON,
-    ApplicationRegistrationFromJSONTyped,
-    ApplicationRegistrationToJSON,
-    ApplicationRegistrationToJSONTyped,
+	ApplicationRegistrationFromJSON,
+	ApplicationRegistrationFromJSONTyped,
+	ApplicationRegistrationToJSON,
+	ApplicationRegistrationToJSONTyped,
 } from "./ApplicationRegistration.js";
 import type { ResponseType } from "./ResponseType.js";
 import {
-    ResponseTypeFromJSON,
-    ResponseTypeFromJSONTyped,
-    ResponseTypeToJSON,
-    ResponseTypeToJSONTyped,
+	ResponseTypeFromJSON,
+	ResponseTypeFromJSONTyped,
+	ResponseTypeToJSON,
+	ResponseTypeToJSONTyped,
 } from "./ResponseType.js";
 
 /**
@@ -62,285 +62,272 @@ import {
  * @interface ClientRegistration
  */
 export interface ClientRegistration {
-    /**
-     *
-     */
-    allowedAudiences?: Array<string>;
-    /**
-     *
-     */
-    allowedGrantTypes?: Array<GrantType>;
-    /**
-     *
-     */
-    allowedScopes?: Array<string>;
-    /**
-     * Unique identifier for the application (assigned by the authorization server).
-     */
-    application: ApplicationRegistration;
-    /**
-     * Unique identifier for the client application (assigned by the authorization server).
-     */
-    clientId?: string | null;
-    /**
-     * Time at which the client identifier was issued (Unix timestamp).
-     */
-    clientIdIssuedAt?: number | null;
-    /**
-     * Human-readable name of the client application.
-     */
-    clientName: string;
-    /**
-     * Optional or required depending on registration type (Public vs Confidential).
-     */
-    clientSecret?: string | null;
-    /**
-     * Time at which the client secret will expire (0 or None for no expiration).
-     */
-    clientSecretExpiresAt?: number | null;
-    /**
-     *
-     */
-    clientType?: ClientType;
-    /**
-     * URL of the home page of the client.
-     */
-    clientUri?: string | null;
-    /**
-     * Array of email addresses for people responsible for this client.
-     */
-    contacts?: Array<string>;
-    /**
-     * URL that references a logo for the client application.
-     */
-    logoUri?: string | null;
-    /**
-     * URL for the application's privacy policy.
-     */
-    policyUri?: string | null;
-    /**
-     *
-     */
-    profile: ClientProfile;
-    /**
-     *
-     */
-    redirectUris?: Array<string>;
-    /**
-     * Standard OAuth 2.0 response types (e.g., `["code"]`, `["token"]`).
-     */
-    responseTypes?: Array<ResponseType>;
-    /**
-     * A unique identifier string assigned by the software issuer.
-     */
-    softwareId?: string | null;
-    /**
-     * A digitally signed JWT assertion containing verifiable client metadata.
-     */
-    softwareStatement?: string | null;
-    /**
-     * A version identifier string string assigned by the software issuer.
-     */
-    softwareVersion?: string | null;
-    /**
-     * Requested authentication method for the token endpoint
-     * (e.g., `client_secret_basic`, `client_secret_post`, `private_key_jwt`).
-     */
-    tokenEndpointAuthMethod: TokenEndpointAuthMethod;
-    /**
-     * URL for the application's terms of service.
-     */
-    tosUri?: string | null;
+	/**
+	 *
+	 */
+	allowedAudiences?: Array<string>;
+	/**
+	 *
+	 */
+	allowedGrantTypes?: Array<GrantType>;
+	/**
+	 *
+	 */
+	allowedScopes?: Array<string>;
+	/**
+	 * Unique identifier for the application (assigned by the authorization server).
+	 */
+	application: ApplicationRegistration;
+	/**
+	 * Unique identifier for the client application (assigned by the authorization server).
+	 */
+	clientId?: string | null;
+	/**
+	 * Time at which the client identifier was issued (Unix timestamp).
+	 */
+	clientIdIssuedAt?: number | null;
+	/**
+	 * Human-readable name of the client application.
+	 */
+	clientName: string;
+	/**
+	 * Optional or required depending on registration type (Public vs Confidential).
+	 */
+	clientSecret?: string | null;
+	/**
+	 * Time at which the client secret will expire (0 or None for no expiration).
+	 */
+	clientSecretExpiresAt?: number | null;
+	/**
+	 *
+	 */
+	clientType?: ClientType;
+	/**
+	 * URL of the home page of the client.
+	 */
+	clientUri?: string | null;
+	/**
+	 * Array of email addresses for people responsible for this client.
+	 */
+	contacts?: Array<string>;
+	/**
+	 * URL that references a logo for the client application.
+	 */
+	logoUri?: string | null;
+	/**
+	 * URL for the application's privacy policy.
+	 */
+	policyUri?: string | null;
+	/**
+	 *
+	 */
+	profile: ClientProfile;
+	/**
+	 *
+	 */
+	redirectUris?: Array<string>;
+	/**
+	 * Standard OAuth 2.0 response types (e.g., `["code"]`, `["token"]`).
+	 */
+	responseTypes?: Array<ResponseType>;
+	/**
+	 * A unique identifier string assigned by the software issuer.
+	 */
+	softwareId?: string | null;
+	/**
+	 * A digitally signed JWT assertion containing verifiable client metadata.
+	 */
+	softwareStatement?: string | null;
+	/**
+	 * A version identifier string string assigned by the software issuer.
+	 */
+	softwareVersion?: string | null;
+	/**
+	 * Requested authentication method for the token endpoint
+	 * (e.g., `client_secret_basic`, `client_secret_post`, `private_key_jwt`).
+	 */
+	tokenEndpointAuthMethod: TokenEndpointAuthMethod;
+	/**
+	 * URL for the application's terms of service.
+	 */
+	tosUri?: string | null;
 }
 
 /**
  * Check if a given object implements the ClientRegistration interface.
  */
 export function instanceOfClientRegistration(
-    value: object,
+	value: object,
 ): value is ClientRegistration {
-    if (!("application" in value) || value["application"] === undefined)
-        return false;
-    if (
-        (!("clientName" in (value as Record<string, any>)) &&
-            !("client_name" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["clientName"] === undefined &&
-            (value as Record<string, any>)["client_name"] === undefined)
-    )
-        return false;
-    if (!("profile" in value) || value["profile"] === undefined) return false;
-    if (
-        (!("tokenEndpointAuthMethod" in (value as Record<string, any>)) &&
-            !(
-                "token_endpoint_auth_method" in (value as Record<string, any>)
-            )) ||
-        ((value as Record<string, any>)["tokenEndpointAuthMethod"] ===
-            undefined &&
-            (value as Record<string, any>)["token_endpoint_auth_method"] ===
-                undefined)
-    )
-        return false;
-    return true;
+	if (!("application" in value) || value["application"] === undefined)
+		return false;
+	if (
+		(!("clientName" in (value as Record<string, any>)) &&
+			!("client_name" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["clientName"] === undefined &&
+			(value as Record<string, any>)["client_name"] === undefined)
+	)
+		return false;
+	if (!("profile" in value) || value["profile"] === undefined) return false;
+	if (
+		(!("tokenEndpointAuthMethod" in (value as Record<string, any>)) &&
+			!("token_endpoint_auth_method" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["tokenEndpointAuthMethod"] === undefined &&
+			(value as Record<string, any>)["token_endpoint_auth_method"] ===
+				undefined)
+	)
+		return false;
+	return true;
 }
 
 export function ClientRegistrationFromJSON(json: any): ClientRegistration {
-    return ClientRegistrationFromJSONTyped(json, false);
+	return ClientRegistrationFromJSONTyped(json, false);
 }
 
 export function ClientRegistrationFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): ClientRegistration {
-    if (json == null) {
-        return json;
-    }
-    return {
-        allowedAudiences:
-            json["allowed_audiences"] == null
-                ? undefined
-                : json["allowed_audiences"],
-        allowedGrantTypes:
-            json["allowed_grant_types"] == null
-                ? undefined
-                : (json["allowed_grant_types"] as Array<any>).map(
-                      GrantTypeFromJSON,
-                  ),
-        allowedScopes:
-            json["allowed_scopes"] == null ? undefined : json["allowed_scopes"],
-        application: ApplicationRegistrationFromJSON(json["application"]),
-        clientId:
-            json["client_id"] === undefined
-                ? undefined
-                : json["client_id"] === null
-                  ? null
-                  : json["client_id"],
-        clientIdIssuedAt:
-            json["client_id_issued_at"] === undefined
-                ? undefined
-                : json["client_id_issued_at"] === null
-                  ? null
-                  : json["client_id_issued_at"],
-        clientName: json["client_name"],
-        clientSecret:
-            json["client_secret"] === undefined
-                ? undefined
-                : json["client_secret"] === null
-                  ? null
-                  : json["client_secret"],
-        clientSecretExpiresAt:
-            json["client_secret_expires_at"] === undefined
-                ? undefined
-                : json["client_secret_expires_at"] === null
-                  ? null
-                  : json["client_secret_expires_at"],
-        clientType:
-            json["client_type"] == null
-                ? undefined
-                : ClientTypeFromJSON(json["client_type"]),
-        clientUri:
-            json["client_uri"] === undefined
-                ? undefined
-                : json["client_uri"] === null
-                  ? null
-                  : json["client_uri"],
-        contacts: json["contacts"] == null ? undefined : json["contacts"],
-        logoUri:
-            json["logo_uri"] === undefined
-                ? undefined
-                : json["logo_uri"] === null
-                  ? null
-                  : json["logo_uri"],
-        policyUri:
-            json["policy_uri"] === undefined
-                ? undefined
-                : json["policy_uri"] === null
-                  ? null
-                  : json["policy_uri"],
-        profile: ClientProfileFromJSON(json["profile"]),
-        redirectUris:
-            json["redirect_uris"] == null ? undefined : json["redirect_uris"],
-        responseTypes:
-            json["response_types"] == null
-                ? undefined
-                : (json["response_types"] as Array<any>).map(
-                      ResponseTypeFromJSON,
-                  ),
-        softwareId:
-            json["software_id"] === undefined
-                ? undefined
-                : json["software_id"] === null
-                  ? null
-                  : json["software_id"],
-        softwareStatement:
-            json["software_statement"] === undefined
-                ? undefined
-                : json["software_statement"] === null
-                  ? null
-                  : json["software_statement"],
-        softwareVersion:
-            json["software_version"] === undefined
-                ? undefined
-                : json["software_version"] === null
-                  ? null
-                  : json["software_version"],
-        tokenEndpointAuthMethod: TokenEndpointAuthMethodFromJSON(
-            json["token_endpoint_auth_method"],
-        ),
-        tosUri:
-            json["tos_uri"] === undefined
-                ? undefined
-                : json["tos_uri"] === null
-                  ? null
-                  : json["tos_uri"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		allowedAudiences:
+			json["allowed_audiences"] == null ? undefined : json["allowed_audiences"],
+		allowedGrantTypes:
+			json["allowed_grant_types"] == null
+				? undefined
+				: (json["allowed_grant_types"] as Array<any>).map(GrantTypeFromJSON),
+		allowedScopes:
+			json["allowed_scopes"] == null ? undefined : json["allowed_scopes"],
+		application: ApplicationRegistrationFromJSON(json["application"]),
+		clientId:
+			json["client_id"] === undefined
+				? undefined
+				: json["client_id"] === null
+					? null
+					: json["client_id"],
+		clientIdIssuedAt:
+			json["client_id_issued_at"] === undefined
+				? undefined
+				: json["client_id_issued_at"] === null
+					? null
+					: json["client_id_issued_at"],
+		clientName: json["client_name"],
+		clientSecret:
+			json["client_secret"] === undefined
+				? undefined
+				: json["client_secret"] === null
+					? null
+					: json["client_secret"],
+		clientSecretExpiresAt:
+			json["client_secret_expires_at"] === undefined
+				? undefined
+				: json["client_secret_expires_at"] === null
+					? null
+					: json["client_secret_expires_at"],
+		clientType:
+			json["client_type"] == null
+				? undefined
+				: ClientTypeFromJSON(json["client_type"]),
+		clientUri:
+			json["client_uri"] === undefined
+				? undefined
+				: json["client_uri"] === null
+					? null
+					: json["client_uri"],
+		contacts: json["contacts"] == null ? undefined : json["contacts"],
+		logoUri:
+			json["logo_uri"] === undefined
+				? undefined
+				: json["logo_uri"] === null
+					? null
+					: json["logo_uri"],
+		policyUri:
+			json["policy_uri"] === undefined
+				? undefined
+				: json["policy_uri"] === null
+					? null
+					: json["policy_uri"],
+		profile: ClientProfileFromJSON(json["profile"]),
+		redirectUris:
+			json["redirect_uris"] == null ? undefined : json["redirect_uris"],
+		responseTypes:
+			json["response_types"] == null
+				? undefined
+				: (json["response_types"] as Array<any>).map(ResponseTypeFromJSON),
+		softwareId:
+			json["software_id"] === undefined
+				? undefined
+				: json["software_id"] === null
+					? null
+					: json["software_id"],
+		softwareStatement:
+			json["software_statement"] === undefined
+				? undefined
+				: json["software_statement"] === null
+					? null
+					: json["software_statement"],
+		softwareVersion:
+			json["software_version"] === undefined
+				? undefined
+				: json["software_version"] === null
+					? null
+					: json["software_version"],
+		tokenEndpointAuthMethod: TokenEndpointAuthMethodFromJSON(
+			json["token_endpoint_auth_method"],
+		),
+		tosUri:
+			json["tos_uri"] === undefined
+				? undefined
+				: json["tos_uri"] === null
+					? null
+					: json["tos_uri"],
+	};
 }
 
 export function ClientRegistrationToJSON(json: any): ClientRegistration {
-    return ClientRegistrationToJSONTyped(json, false);
+	return ClientRegistrationToJSONTyped(json, false);
 }
 
 export function ClientRegistrationToJSONTyped(
-    value?: ClientRegistration | null,
-    ignoreDiscriminator: boolean = false,
+	value?: ClientRegistration | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        allowed_audiences: value["allowedAudiences"],
-        allowed_grant_types:
-            value["allowedGrantTypes"] == null
-                ? undefined
-                : (value["allowedGrantTypes"] as Array<any>).map(
-                      GrantTypeToJSON,
-                  ),
-        allowed_scopes: value["allowedScopes"],
-        application: ApplicationRegistrationToJSON(value["application"]),
-        client_id: value["clientId"],
-        client_id_issued_at: value["clientIdIssuedAt"],
-        client_name: value["clientName"],
-        client_secret: value["clientSecret"],
-        client_secret_expires_at: value["clientSecretExpiresAt"],
-        client_type: ClientTypeToJSON(value["clientType"]),
-        client_uri: value["clientUri"],
-        contacts: value["contacts"],
-        logo_uri: value["logoUri"],
-        policy_uri: value["policyUri"],
-        profile: ClientProfileToJSON(value["profile"]),
-        redirect_uris: value["redirectUris"],
-        response_types:
-            value["responseTypes"] == null
-                ? undefined
-                : (value["responseTypes"] as Array<any>).map(
-                      ResponseTypeToJSON,
-                  ),
-        software_id: value["softwareId"],
-        software_statement: value["softwareStatement"],
-        software_version: value["softwareVersion"],
-        token_endpoint_auth_method: TokenEndpointAuthMethodToJSON(
-            value["tokenEndpointAuthMethod"],
-        ),
-        tos_uri: value["tosUri"],
-    };
+	return {
+		allowed_audiences: value["allowedAudiences"],
+		allowed_grant_types:
+			value["allowedGrantTypes"] == null
+				? undefined
+				: (value["allowedGrantTypes"] as Array<any>).map(GrantTypeToJSON),
+		allowed_scopes: value["allowedScopes"],
+		application: ApplicationRegistrationToJSON(value["application"]),
+		client_id: value["clientId"],
+		client_id_issued_at: value["clientIdIssuedAt"],
+		client_name: value["clientName"],
+		client_secret: value["clientSecret"],
+		client_secret_expires_at: value["clientSecretExpiresAt"],
+		client_type: ClientTypeToJSON(value["clientType"]),
+		client_uri: value["clientUri"],
+		contacts: value["contacts"],
+		logo_uri: value["logoUri"],
+		policy_uri: value["policyUri"],
+		profile: ClientProfileToJSON(value["profile"]),
+		redirect_uris: value["redirectUris"],
+		response_types:
+			value["responseTypes"] == null
+				? undefined
+				: (value["responseTypes"] as Array<any>).map(ResponseTypeToJSON),
+		software_id: value["softwareId"],
+		software_statement: value["softwareStatement"],
+		software_version: value["softwareVersion"],
+		token_endpoint_auth_method: TokenEndpointAuthMethodToJSON(
+			value["tokenEndpointAuthMethod"],
+		),
+		tos_uri: value["tosUri"],
+	};
 }

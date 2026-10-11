@@ -17,54 +17,51 @@
  * @export
  */
 export const TokenEndpointAuthMethod = {
-    ClientSecretBasic: "client_secret_basic",
-    ClientSecretPost: "client_secret_post",
-    PrivateKeyJwt: "private_key_jwt",
-    ClientSecretJwt: "client_secret_jwt",
-    None: "none",
+	ClientSecretBasic: "client_secret_basic",
+	ClientSecretPost: "client_secret_post",
+	PrivateKeyJwt: "private_key_jwt",
+	ClientSecretJwt: "client_secret_jwt",
+	None: "none",
 } as const;
 export type TokenEndpointAuthMethod =
-    (typeof TokenEndpointAuthMethod)[keyof typeof TokenEndpointAuthMethod];
+	(typeof TokenEndpointAuthMethod)[keyof typeof TokenEndpointAuthMethod];
 
 export function instanceOfTokenEndpointAuthMethod(value: any): boolean {
-    for (const key in TokenEndpointAuthMethod) {
-        if (
-            Object.prototype.hasOwnProperty.call(TokenEndpointAuthMethod, key)
-        ) {
-            if (
-                TokenEndpointAuthMethod[
-                    key as keyof typeof TokenEndpointAuthMethod
-                ] === value
-            ) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in TokenEndpointAuthMethod) {
+		if (Object.prototype.hasOwnProperty.call(TokenEndpointAuthMethod, key)) {
+			if (
+				TokenEndpointAuthMethod[key as keyof typeof TokenEndpointAuthMethod] ===
+				value
+			) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function TokenEndpointAuthMethodFromJSON(
-    json: any,
+	json: any,
 ): TokenEndpointAuthMethod {
-    return TokenEndpointAuthMethodFromJSONTyped(json, false);
+	return TokenEndpointAuthMethodFromJSONTyped(json, false);
 }
 
 export function TokenEndpointAuthMethodFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): TokenEndpointAuthMethod {
-    return json as TokenEndpointAuthMethod;
+	return json as TokenEndpointAuthMethod;
 }
 
 export function TokenEndpointAuthMethodToJSON(
-    value?: TokenEndpointAuthMethod | null,
+	value?: TokenEndpointAuthMethod | null,
 ): any {
-    return value as any;
+	return value as any;
 }
 
 export function TokenEndpointAuthMethodToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): TokenEndpointAuthMethod {
-    return value as TokenEndpointAuthMethod;
+	return value as TokenEndpointAuthMethod;
 }

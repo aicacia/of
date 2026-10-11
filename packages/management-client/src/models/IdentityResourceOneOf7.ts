@@ -19,66 +19,66 @@ import { mapValues } from "../runtime.js";
  * @interface IdentityResourceOneOf7
  */
 export interface IdentityResourceOneOf7 {
-    /**
-     *
-     */
-    type: IdentityResourceOneOf7TypeEnum;
+	/**
+	 *
+	 */
+	type: IdentityResourceOneOf7TypeEnum;
 }
 
 /**
  * @export
  */
 export const IdentityResourceOneOf7TypeEnum = {
-    IdpSecurity: "idpSecurity",
+	IdpSecurity: "idpSecurity",
 } as const;
 export type IdentityResourceOneOf7TypeEnum =
-    (typeof IdentityResourceOneOf7TypeEnum)[keyof typeof IdentityResourceOneOf7TypeEnum];
+	(typeof IdentityResourceOneOf7TypeEnum)[keyof typeof IdentityResourceOneOf7TypeEnum];
 
 /**
  * Check if a given object implements the IdentityResourceOneOf7 interface.
  */
 export function instanceOfIdentityResourceOneOf7(
-    value: object,
+	value: object,
 ): value is IdentityResourceOneOf7 {
-    if (!("type" in value) || value["type"] === undefined) return false;
-    if (value["type"] !== "idpSecurity") return false;
+	if (!("type" in value) || value["type"] === undefined) return false;
+	if (value["type"] !== "idpSecurity") return false;
 
-    return true;
+	return true;
 }
 
 export function IdentityResourceOneOf7FromJSON(
-    json: any,
+	json: any,
 ): IdentityResourceOneOf7 {
-    return IdentityResourceOneOf7FromJSONTyped(json, false);
+	return IdentityResourceOneOf7FromJSONTyped(json, false);
 }
 
 export function IdentityResourceOneOf7FromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): IdentityResourceOneOf7 {
-    if (json == null) {
-        return json;
-    }
-    return {
-        type: json["type"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		type: json["type"],
+	};
 }
 
 export function IdentityResourceOneOf7ToJSON(
-    json: any,
+	json: any,
 ): IdentityResourceOneOf7 {
-    return IdentityResourceOneOf7ToJSONTyped(json, false);
+	return IdentityResourceOneOf7ToJSONTyped(json, false);
 }
 
 export function IdentityResourceOneOf7ToJSONTyped(
-    value?: IdentityResourceOneOf7 | null,
-    ignoreDiscriminator: boolean = false,
+	value?: IdentityResourceOneOf7 | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        type: value["type"],
-    };
+	return {
+		type: value["type"],
+	};
 }

@@ -19,55 +19,55 @@ import { mapValues } from "../runtime.js";
  * @interface IsAllowedForUserResponse
  */
 export interface IsAllowedForUserResponse {
-    /**
-     *
-     */
-    allowed: boolean;
+	/**
+	 *
+	 */
+	allowed: boolean;
 }
 
 /**
  * Check if a given object implements the IsAllowedForUserResponse interface.
  */
 export function instanceOfIsAllowedForUserResponse(
-    value: object,
+	value: object,
 ): value is IsAllowedForUserResponse {
-    if (!("allowed" in value) || value["allowed"] === undefined) return false;
-    return true;
+	if (!("allowed" in value) || value["allowed"] === undefined) return false;
+	return true;
 }
 
 export function IsAllowedForUserResponseFromJSON(
-    json: any,
+	json: any,
 ): IsAllowedForUserResponse {
-    return IsAllowedForUserResponseFromJSONTyped(json, false);
+	return IsAllowedForUserResponseFromJSONTyped(json, false);
 }
 
 export function IsAllowedForUserResponseFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): IsAllowedForUserResponse {
-    if (json == null) {
-        return json;
-    }
-    return {
-        allowed: json["allowed"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		allowed: json["allowed"],
+	};
 }
 
 export function IsAllowedForUserResponseToJSON(
-    json: any,
+	json: any,
 ): IsAllowedForUserResponse {
-    return IsAllowedForUserResponseToJSONTyped(json, false);
+	return IsAllowedForUserResponseToJSONTyped(json, false);
 }
 
 export function IsAllowedForUserResponseToJSONTyped(
-    value?: IsAllowedForUserResponse | null,
-    ignoreDiscriminator: boolean = false,
+	value?: IsAllowedForUserResponse | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        allowed: value["allowed"],
-    };
+	return {
+		allowed: value["allowed"],
+	};
 }

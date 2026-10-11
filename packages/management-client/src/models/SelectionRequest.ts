@@ -15,10 +15,10 @@
 import { mapValues } from "../runtime.js";
 import type { SelectionKind } from "./SelectionKind.js";
 import {
-    SelectionKindFromJSON,
-    SelectionKindFromJSONTyped,
-    SelectionKindToJSON,
-    SelectionKindToJSONTyped,
+	SelectionKindFromJSON,
+	SelectionKindFromJSONTyped,
+	SelectionKindToJSON,
+	SelectionKindToJSONTyped,
 } from "./SelectionKind.js";
 
 /**
@@ -27,77 +27,77 @@ import {
  * @interface SelectionRequest
  */
 export interface SelectionRequest {
-    /**
-     *
-     */
-    applicationId: string;
-    /**
-     *
-     */
-    id: string;
-    /**
-     *
-     */
-    kind: SelectionKind;
-    /**
-     *
-     */
-    storageAccessToken: string;
+	/**
+	 *
+	 */
+	applicationId: string;
+	/**
+	 *
+	 */
+	id: string;
+	/**
+	 *
+	 */
+	kind: SelectionKind;
+	/**
+	 *
+	 */
+	storageAccessToken: string;
 }
 
 /**
  * Check if a given object implements the SelectionRequest interface.
  */
 export function instanceOfSelectionRequest(
-    value: object,
+	value: object,
 ): value is SelectionRequest {
-    if (!("applicationId" in value) || value["applicationId"] === undefined)
-        return false;
-    if (!("id" in value) || value["id"] === undefined) return false;
-    if (!("kind" in value) || value["kind"] === undefined) return false;
-    if (
-        !("storageAccessToken" in value) ||
-        value["storageAccessToken"] === undefined
-    )
-        return false;
-    return true;
+	if (!("applicationId" in value) || value["applicationId"] === undefined)
+		return false;
+	if (!("id" in value) || value["id"] === undefined) return false;
+	if (!("kind" in value) || value["kind"] === undefined) return false;
+	if (
+		!("storageAccessToken" in value) ||
+		value["storageAccessToken"] === undefined
+	)
+		return false;
+	return true;
 }
 
 export function SelectionRequestFromJSON(json: any): SelectionRequest {
-    return SelectionRequestFromJSONTyped(json, false);
+	return SelectionRequestFromJSONTyped(json, false);
 }
 
 export function SelectionRequestFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): SelectionRequest {
-    if (json == null) {
-        return json;
-    }
-    return {
-        applicationId: json["applicationId"],
-        id: json["id"],
-        kind: SelectionKindFromJSON(json["kind"]),
-        storageAccessToken: json["storageAccessToken"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		applicationId: json["applicationId"],
+		id: json["id"],
+		kind: SelectionKindFromJSON(json["kind"]),
+		storageAccessToken: json["storageAccessToken"],
+	};
 }
 
 export function SelectionRequestToJSON(json: any): SelectionRequest {
-    return SelectionRequestToJSONTyped(json, false);
+	return SelectionRequestToJSONTyped(json, false);
 }
 
 export function SelectionRequestToJSONTyped(
-    value?: SelectionRequest | null,
-    ignoreDiscriminator: boolean = false,
+	value?: SelectionRequest | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        applicationId: value["applicationId"],
-        id: value["id"],
-        kind: SelectionKindToJSON(value["kind"]),
-        storageAccessToken: value["storageAccessToken"],
-    };
+	return {
+		applicationId: value["applicationId"],
+		id: value["id"],
+		kind: SelectionKindToJSON(value["kind"]),
+		storageAccessToken: value["storageAccessToken"],
+	};
 }

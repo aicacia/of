@@ -19,73 +19,73 @@ import { mapValues } from "../runtime.js";
  * @interface IdentityResourceOneOf2
  */
 export interface IdentityResourceOneOf2 {
-    /**
-     *
-     */
-    id: string;
-    /**
-     *
-     */
-    type: IdentityResourceOneOf2TypeEnum;
+	/**
+	 *
+	 */
+	id: string;
+	/**
+	 *
+	 */
+	type: IdentityResourceOneOf2TypeEnum;
 }
 
 /**
  * @export
  */
 export const IdentityResourceOneOf2TypeEnum = {
-    User: "user",
+	User: "user",
 } as const;
 export type IdentityResourceOneOf2TypeEnum =
-    (typeof IdentityResourceOneOf2TypeEnum)[keyof typeof IdentityResourceOneOf2TypeEnum];
+	(typeof IdentityResourceOneOf2TypeEnum)[keyof typeof IdentityResourceOneOf2TypeEnum];
 
 /**
  * Check if a given object implements the IdentityResourceOneOf2 interface.
  */
 export function instanceOfIdentityResourceOneOf2(
-    value: object,
+	value: object,
 ): value is IdentityResourceOneOf2 {
-    if (!("id" in value) || value["id"] === undefined) return false;
-    if (!("type" in value) || value["type"] === undefined) return false;
-    if (value["type"] !== "user") return false;
+	if (!("id" in value) || value["id"] === undefined) return false;
+	if (!("type" in value) || value["type"] === undefined) return false;
+	if (value["type"] !== "user") return false;
 
-    return true;
+	return true;
 }
 
 export function IdentityResourceOneOf2FromJSON(
-    json: any,
+	json: any,
 ): IdentityResourceOneOf2 {
-    return IdentityResourceOneOf2FromJSONTyped(json, false);
+	return IdentityResourceOneOf2FromJSONTyped(json, false);
 }
 
 export function IdentityResourceOneOf2FromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): IdentityResourceOneOf2 {
-    if (json == null) {
-        return json;
-    }
-    return {
-        id: json["id"],
-        type: json["type"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		id: json["id"],
+		type: json["type"],
+	};
 }
 
 export function IdentityResourceOneOf2ToJSON(
-    json: any,
+	json: any,
 ): IdentityResourceOneOf2 {
-    return IdentityResourceOneOf2ToJSONTyped(json, false);
+	return IdentityResourceOneOf2ToJSONTyped(json, false);
 }
 
 export function IdentityResourceOneOf2ToJSONTyped(
-    value?: IdentityResourceOneOf2 | null,
-    ignoreDiscriminator: boolean = false,
+	value?: IdentityResourceOneOf2 | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        id: value["id"],
-        type: value["type"],
-    };
+	return {
+		id: value["id"],
+		type: value["type"],
+	};
 }

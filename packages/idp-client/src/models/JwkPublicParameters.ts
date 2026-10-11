@@ -13,31 +13,31 @@
  */
 
 import {
-    parseDate,
-    parseDateTime,
-    serializeDate,
-    serializeDateTime,
+	parseDate,
+	parseDateTime,
+	serializeDate,
+	serializeDateTime,
 } from "../runtime.js";
 import type { JwkPublicParametersOneOf } from "./JwkPublicParametersOneOf.js";
 import {
-    instanceOfJwkPublicParametersOneOf,
-    JwkPublicParametersOneOfFromJSON,
-    JwkPublicParametersOneOfFromJSONTyped,
-    JwkPublicParametersOneOfToJSON,
+	instanceOfJwkPublicParametersOneOf,
+	JwkPublicParametersOneOfFromJSON,
+	JwkPublicParametersOneOfFromJSONTyped,
+	JwkPublicParametersOneOfToJSON,
 } from "./JwkPublicParametersOneOf.js";
 import type { JwkPublicParametersOneOf1 } from "./JwkPublicParametersOneOf1.js";
 import {
-    instanceOfJwkPublicParametersOneOf1,
-    JwkPublicParametersOneOf1FromJSON,
-    JwkPublicParametersOneOf1FromJSONTyped,
-    JwkPublicParametersOneOf1ToJSON,
+	instanceOfJwkPublicParametersOneOf1,
+	JwkPublicParametersOneOf1FromJSON,
+	JwkPublicParametersOneOf1FromJSONTyped,
+	JwkPublicParametersOneOf1ToJSON,
 } from "./JwkPublicParametersOneOf1.js";
 import type { JwkPublicParametersOneOf2 } from "./JwkPublicParametersOneOf2.js";
 import {
-    instanceOfJwkPublicParametersOneOf2,
-    JwkPublicParametersOneOf2FromJSON,
-    JwkPublicParametersOneOf2FromJSONTyped,
-    JwkPublicParametersOneOf2ToJSON,
+	instanceOfJwkPublicParametersOneOf2,
+	JwkPublicParametersOneOf2FromJSON,
+	JwkPublicParametersOneOf2FromJSONTyped,
+	JwkPublicParametersOneOf2ToJSON,
 } from "./JwkPublicParametersOneOf2.js";
 
 /**
@@ -46,64 +46,58 @@ import {
  * @export
  */
 export type JwkPublicParameters =
-    | JwkPublicParametersOneOf
-    | JwkPublicParametersOneOf1
-    | JwkPublicParametersOneOf2;
+	| JwkPublicParametersOneOf
+	| JwkPublicParametersOneOf1
+	| JwkPublicParametersOneOf2;
 
 export function JwkPublicParametersFromJSON(json: any): JwkPublicParameters {
-    return JwkPublicParametersFromJSONTyped(json, false);
+	return JwkPublicParametersFromJSONTyped(json, false);
 }
 
 export function JwkPublicParametersFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): JwkPublicParameters {
-    if (json == null) {
-        return json;
-    }
-    if (typeof json !== "object") {
-        return json;
-    }
-    if (instanceOfJwkPublicParametersOneOf(json)) {
-        return JwkPublicParametersOneOfFromJSONTyped(json, true);
-    }
-    if (instanceOfJwkPublicParametersOneOf1(json)) {
-        return JwkPublicParametersOneOf1FromJSONTyped(json, true);
-    }
-    if (instanceOfJwkPublicParametersOneOf2(json)) {
-        return JwkPublicParametersOneOf2FromJSONTyped(json, true);
-    }
-    return {} as any;
+	if (json == null) {
+		return json;
+	}
+	if (typeof json !== "object") {
+		return json;
+	}
+	if (instanceOfJwkPublicParametersOneOf(json)) {
+		return JwkPublicParametersOneOfFromJSONTyped(json, true);
+	}
+	if (instanceOfJwkPublicParametersOneOf1(json)) {
+		return JwkPublicParametersOneOf1FromJSONTyped(json, true);
+	}
+	if (instanceOfJwkPublicParametersOneOf2(json)) {
+		return JwkPublicParametersOneOf2FromJSONTyped(json, true);
+	}
+	return {} as any;
 }
 
 export function JwkPublicParametersToJSON(json: any): any {
-    return JwkPublicParametersToJSONTyped(json, false);
+	return JwkPublicParametersToJSONTyped(json, false);
 }
 
 export function JwkPublicParametersToJSONTyped(
-    value?: JwkPublicParameters | null,
-    ignoreDiscriminator: boolean = false,
+	value?: JwkPublicParameters | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
-    if (typeof value !== "object") {
-        return value;
-    }
-    if (instanceOfJwkPublicParametersOneOf(value)) {
-        return JwkPublicParametersOneOfToJSON(
-            value as JwkPublicParametersOneOf,
-        );
-    }
-    if (instanceOfJwkPublicParametersOneOf1(value)) {
-        return JwkPublicParametersOneOf1ToJSON(
-            value as JwkPublicParametersOneOf1,
-        );
-    }
-    if (instanceOfJwkPublicParametersOneOf2(value)) {
-        return JwkPublicParametersOneOf2ToJSON(
-            value as JwkPublicParametersOneOf2,
-        );
-    }
-    return {};
+	if (value == null) {
+		return value;
+	}
+	if (typeof value !== "object") {
+		return value;
+	}
+	if (instanceOfJwkPublicParametersOneOf(value)) {
+		return JwkPublicParametersOneOfToJSON(value as JwkPublicParametersOneOf);
+	}
+	if (instanceOfJwkPublicParametersOneOf1(value)) {
+		return JwkPublicParametersOneOf1ToJSON(value as JwkPublicParametersOneOf1);
+	}
+	if (instanceOfJwkPublicParametersOneOf2(value)) {
+		return JwkPublicParametersOneOf2ToJSON(value as JwkPublicParametersOneOf2);
+	}
+	return {};
 }

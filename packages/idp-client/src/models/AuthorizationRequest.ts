@@ -15,24 +15,24 @@
 import { mapValues } from "../runtime.js";
 import type { CodeChallengeMethod } from "./CodeChallengeMethod.js";
 import {
-    CodeChallengeMethodFromJSON,
-    CodeChallengeMethodFromJSONTyped,
-    CodeChallengeMethodToJSON,
-    CodeChallengeMethodToJSONTyped,
+	CodeChallengeMethodFromJSON,
+	CodeChallengeMethodFromJSONTyped,
+	CodeChallengeMethodToJSON,
+	CodeChallengeMethodToJSONTyped,
 } from "./CodeChallengeMethod.js";
 import type { ResponseMode } from "./ResponseMode.js";
 import {
-    ResponseModeFromJSON,
-    ResponseModeFromJSONTyped,
-    ResponseModeToJSON,
-    ResponseModeToJSONTyped,
+	ResponseModeFromJSON,
+	ResponseModeFromJSONTyped,
+	ResponseModeToJSON,
+	ResponseModeToJSONTyped,
 } from "./ResponseMode.js";
 import type { ResponseType } from "./ResponseType.js";
 import {
-    ResponseTypeFromJSON,
-    ResponseTypeFromJSONTyped,
-    ResponseTypeToJSON,
-    ResponseTypeToJSONTyped,
+	ResponseTypeFromJSON,
+	ResponseTypeFromJSONTyped,
+	ResponseTypeToJSON,
+	ResponseTypeToJSONTyped,
 } from "./ResponseType.js";
 
 /**
@@ -41,205 +41,205 @@ import {
  * @interface AuthorizationRequest
  */
 export interface AuthorizationRequest {
-    /**
-     *
-     */
-    clientId: string;
-    /**
-     * PKCE parameters (RFC 7636) for public clients and enhanced security
-     */
-    codeChallenge?: string | null;
-    /**
-     * The method used to derive the code challenge (e.g., "S256" or "plain").
-     * only required if `code_challenge` is present. "S256" is strongly recommended in OAuth 2.1 for better security.
-     */
-    codeChallengeMethod?: CodeChallengeMethod | null;
-    /**
-     *
-     */
-    idTokenHint?: string | null;
-    /**
-     *
-     */
-    loginHint?: string | null;
-    /**
-     *
-     */
-    nonce?: string | null;
-    /**
-     *
-     */
-    prompt?: string | null;
-    /**
-     * redirect URI is optional if the client has only one registered redirect URI
-     */
-    redirectUri?: string | null;
-    /**
-     * Audience parameter (RFC 8707) to specify the intended recipients of the token.
-     */
-    resource?: string | null;
-    /**
-     *
-     */
-    responseMode?: ResponseMode | null;
-    /**
-     *
-     */
-    responseType: ResponseType;
-    /**
-     *
-     */
-    scope?: string | null;
-    /**
-     *
-     */
-    state?: string | null;
-    /**
-     *
-     */
-    uiLocales?: string | null;
+	/**
+	 *
+	 */
+	clientId: string;
+	/**
+	 * PKCE parameters (RFC 7636) for public clients and enhanced security
+	 */
+	codeChallenge?: string | null;
+	/**
+	 * The method used to derive the code challenge (e.g., "S256" or "plain").
+	 * only required if `code_challenge` is present. "S256" is strongly recommended in OAuth 2.1 for better security.
+	 */
+	codeChallengeMethod?: CodeChallengeMethod | null;
+	/**
+	 *
+	 */
+	idTokenHint?: string | null;
+	/**
+	 *
+	 */
+	loginHint?: string | null;
+	/**
+	 *
+	 */
+	nonce?: string | null;
+	/**
+	 *
+	 */
+	prompt?: string | null;
+	/**
+	 * redirect URI is optional if the client has only one registered redirect URI
+	 */
+	redirectUri?: string | null;
+	/**
+	 * Audience parameter (RFC 8707) to specify the intended recipients of the token.
+	 */
+	resource?: string | null;
+	/**
+	 *
+	 */
+	responseMode?: ResponseMode | null;
+	/**
+	 *
+	 */
+	responseType: ResponseType;
+	/**
+	 *
+	 */
+	scope?: string | null;
+	/**
+	 *
+	 */
+	state?: string | null;
+	/**
+	 *
+	 */
+	uiLocales?: string | null;
 }
 
 /**
  * Check if a given object implements the AuthorizationRequest interface.
  */
 export function instanceOfAuthorizationRequest(
-    value: object,
+	value: object,
 ): value is AuthorizationRequest {
-    if (
-        (!("clientId" in (value as Record<string, any>)) &&
-            !("client_id" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["clientId"] === undefined &&
-            (value as Record<string, any>)["client_id"] === undefined)
-    )
-        return false;
-    if (
-        (!("responseType" in (value as Record<string, any>)) &&
-            !("response_type" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["responseType"] === undefined &&
-            (value as Record<string, any>)["response_type"] === undefined)
-    )
-        return false;
-    return true;
+	if (
+		(!("clientId" in (value as Record<string, any>)) &&
+			!("client_id" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["clientId"] === undefined &&
+			(value as Record<string, any>)["client_id"] === undefined)
+	)
+		return false;
+	if (
+		(!("responseType" in (value as Record<string, any>)) &&
+			!("response_type" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["responseType"] === undefined &&
+			(value as Record<string, any>)["response_type"] === undefined)
+	)
+		return false;
+	return true;
 }
 
 export function AuthorizationRequestFromJSON(json: any): AuthorizationRequest {
-    return AuthorizationRequestFromJSONTyped(json, false);
+	return AuthorizationRequestFromJSONTyped(json, false);
 }
 
 export function AuthorizationRequestFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): AuthorizationRequest {
-    if (json == null) {
-        return json;
-    }
-    return {
-        clientId: json["client_id"],
-        codeChallenge:
-            json["code_challenge"] === undefined
-                ? undefined
-                : json["code_challenge"] === null
-                  ? null
-                  : json["code_challenge"],
-        codeChallengeMethod:
-            json["code_challenge_method"] === undefined
-                ? undefined
-                : json["code_challenge_method"] === null
-                  ? null
-                  : CodeChallengeMethodFromJSON(json["code_challenge_method"]),
-        idTokenHint:
-            json["id_token_hint"] === undefined
-                ? undefined
-                : json["id_token_hint"] === null
-                  ? null
-                  : json["id_token_hint"],
-        loginHint:
-            json["login_hint"] === undefined
-                ? undefined
-                : json["login_hint"] === null
-                  ? null
-                  : json["login_hint"],
-        nonce:
-            json["nonce"] === undefined
-                ? undefined
-                : json["nonce"] === null
-                  ? null
-                  : json["nonce"],
-        prompt:
-            json["prompt"] === undefined
-                ? undefined
-                : json["prompt"] === null
-                  ? null
-                  : json["prompt"],
-        redirectUri:
-            json["redirect_uri"] === undefined
-                ? undefined
-                : json["redirect_uri"] === null
-                  ? null
-                  : json["redirect_uri"],
-        resource:
-            json["resource"] === undefined
-                ? undefined
-                : json["resource"] === null
-                  ? null
-                  : json["resource"],
-        responseMode:
-            json["response_mode"] === undefined
-                ? undefined
-                : json["response_mode"] === null
-                  ? null
-                  : ResponseModeFromJSON(json["response_mode"]),
-        responseType: ResponseTypeFromJSON(json["response_type"]),
-        scope:
-            json["scope"] === undefined
-                ? undefined
-                : json["scope"] === null
-                  ? null
-                  : json["scope"],
-        state:
-            json["state"] === undefined
-                ? undefined
-                : json["state"] === null
-                  ? null
-                  : json["state"],
-        uiLocales:
-            json["ui_locales"] === undefined
-                ? undefined
-                : json["ui_locales"] === null
-                  ? null
-                  : json["ui_locales"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		clientId: json["client_id"],
+		codeChallenge:
+			json["code_challenge"] === undefined
+				? undefined
+				: json["code_challenge"] === null
+					? null
+					: json["code_challenge"],
+		codeChallengeMethod:
+			json["code_challenge_method"] === undefined
+				? undefined
+				: json["code_challenge_method"] === null
+					? null
+					: CodeChallengeMethodFromJSON(json["code_challenge_method"]),
+		idTokenHint:
+			json["id_token_hint"] === undefined
+				? undefined
+				: json["id_token_hint"] === null
+					? null
+					: json["id_token_hint"],
+		loginHint:
+			json["login_hint"] === undefined
+				? undefined
+				: json["login_hint"] === null
+					? null
+					: json["login_hint"],
+		nonce:
+			json["nonce"] === undefined
+				? undefined
+				: json["nonce"] === null
+					? null
+					: json["nonce"],
+		prompt:
+			json["prompt"] === undefined
+				? undefined
+				: json["prompt"] === null
+					? null
+					: json["prompt"],
+		redirectUri:
+			json["redirect_uri"] === undefined
+				? undefined
+				: json["redirect_uri"] === null
+					? null
+					: json["redirect_uri"],
+		resource:
+			json["resource"] === undefined
+				? undefined
+				: json["resource"] === null
+					? null
+					: json["resource"],
+		responseMode:
+			json["response_mode"] === undefined
+				? undefined
+				: json["response_mode"] === null
+					? null
+					: ResponseModeFromJSON(json["response_mode"]),
+		responseType: ResponseTypeFromJSON(json["response_type"]),
+		scope:
+			json["scope"] === undefined
+				? undefined
+				: json["scope"] === null
+					? null
+					: json["scope"],
+		state:
+			json["state"] === undefined
+				? undefined
+				: json["state"] === null
+					? null
+					: json["state"],
+		uiLocales:
+			json["ui_locales"] === undefined
+				? undefined
+				: json["ui_locales"] === null
+					? null
+					: json["ui_locales"],
+	};
 }
 
 export function AuthorizationRequestToJSON(json: any): AuthorizationRequest {
-    return AuthorizationRequestToJSONTyped(json, false);
+	return AuthorizationRequestToJSONTyped(json, false);
 }
 
 export function AuthorizationRequestToJSONTyped(
-    value?: AuthorizationRequest | null,
-    ignoreDiscriminator: boolean = false,
+	value?: AuthorizationRequest | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        client_id: value["clientId"],
-        code_challenge: value["codeChallenge"],
-        code_challenge_method: CodeChallengeMethodToJSON(
-            value["codeChallengeMethod"],
-        ),
-        id_token_hint: value["idTokenHint"],
-        login_hint: value["loginHint"],
-        nonce: value["nonce"],
-        prompt: value["prompt"],
-        redirect_uri: value["redirectUri"],
-        resource: value["resource"],
-        response_mode: ResponseModeToJSON(value["responseMode"]),
-        response_type: ResponseTypeToJSON(value["responseType"]),
-        scope: value["scope"],
-        state: value["state"],
-        ui_locales: value["uiLocales"],
-    };
+	return {
+		client_id: value["clientId"],
+		code_challenge: value["codeChallenge"],
+		code_challenge_method: CodeChallengeMethodToJSON(
+			value["codeChallengeMethod"],
+		),
+		id_token_hint: value["idTokenHint"],
+		login_hint: value["loginHint"],
+		nonce: value["nonce"],
+		prompt: value["prompt"],
+		redirect_uri: value["redirectUri"],
+		resource: value["resource"],
+		response_mode: ResponseModeToJSON(value["responseMode"]),
+		response_type: ResponseTypeToJSON(value["responseType"]),
+		scope: value["scope"],
+		state: value["state"],
+		ui_locales: value["uiLocales"],
+	};
 }

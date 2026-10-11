@@ -19,108 +19,108 @@ import { mapValues } from "../runtime.js";
  * @interface PermissionResponse
  */
 export interface PermissionResponse {
-    /**
-     *
-     */
-    applicationId: string;
-    /**
-     *
-     */
-    createdAt: number;
-    /**
-     *
-     */
-    description?: string | null;
-    /**
-     *
-     */
-    id: string;
-    /**
-     *
-     */
-    name: string;
-    /**
-     *
-     */
-    updatedAt: number;
+	/**
+	 *
+	 */
+	applicationId: string;
+	/**
+	 *
+	 */
+	createdAt: number;
+	/**
+	 *
+	 */
+	description?: string | null;
+	/**
+	 *
+	 */
+	id: string;
+	/**
+	 *
+	 */
+	name: string;
+	/**
+	 *
+	 */
+	updatedAt: number;
 }
 
 /**
  * Check if a given object implements the PermissionResponse interface.
  */
 export function instanceOfPermissionResponse(
-    value: object,
+	value: object,
 ): value is PermissionResponse {
-    if (
-        (!("applicationId" in (value as Record<string, any>)) &&
-            !("application_id" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["applicationId"] === undefined &&
-            (value as Record<string, any>)["application_id"] === undefined)
-    )
-        return false;
-    if (
-        (!("createdAt" in (value as Record<string, any>)) &&
-            !("created_at" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["createdAt"] === undefined &&
-            (value as Record<string, any>)["created_at"] === undefined)
-    )
-        return false;
-    if (!("id" in value) || value["id"] === undefined) return false;
-    if (!("name" in value) || value["name"] === undefined) return false;
-    if (
-        (!("updatedAt" in (value as Record<string, any>)) &&
-            !("updated_at" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["updatedAt"] === undefined &&
-            (value as Record<string, any>)["updated_at"] === undefined)
-    )
-        return false;
-    return true;
+	if (
+		(!("applicationId" in (value as Record<string, any>)) &&
+			!("application_id" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["applicationId"] === undefined &&
+			(value as Record<string, any>)["application_id"] === undefined)
+	)
+		return false;
+	if (
+		(!("createdAt" in (value as Record<string, any>)) &&
+			!("created_at" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["createdAt"] === undefined &&
+			(value as Record<string, any>)["created_at"] === undefined)
+	)
+		return false;
+	if (!("id" in value) || value["id"] === undefined) return false;
+	if (!("name" in value) || value["name"] === undefined) return false;
+	if (
+		(!("updatedAt" in (value as Record<string, any>)) &&
+			!("updated_at" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["updatedAt"] === undefined &&
+			(value as Record<string, any>)["updated_at"] === undefined)
+	)
+		return false;
+	return true;
 }
 
 export function PermissionResponseFromJSON(json: any): PermissionResponse {
-    return PermissionResponseFromJSONTyped(json, false);
+	return PermissionResponseFromJSONTyped(json, false);
 }
 
 export function PermissionResponseFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): PermissionResponse {
-    if (json == null) {
-        return json;
-    }
-    return {
-        applicationId: json["application_id"],
-        createdAt: json["created_at"],
-        description:
-            json["description"] === undefined
-                ? undefined
-                : json["description"] === null
-                  ? null
-                  : json["description"],
-        id: json["id"],
-        name: json["name"],
-        updatedAt: json["updated_at"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		applicationId: json["application_id"],
+		createdAt: json["created_at"],
+		description:
+			json["description"] === undefined
+				? undefined
+				: json["description"] === null
+					? null
+					: json["description"],
+		id: json["id"],
+		name: json["name"],
+		updatedAt: json["updated_at"],
+	};
 }
 
 export function PermissionResponseToJSON(json: any): PermissionResponse {
-    return PermissionResponseToJSONTyped(json, false);
+	return PermissionResponseToJSONTyped(json, false);
 }
 
 export function PermissionResponseToJSONTyped(
-    value?: PermissionResponse | null,
-    ignoreDiscriminator: boolean = false,
+	value?: PermissionResponse | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        application_id: value["applicationId"],
-        created_at: value["createdAt"],
-        description: value["description"],
-        id: value["id"],
-        name: value["name"],
-        updated_at: value["updatedAt"],
-    };
+	return {
+		application_id: value["applicationId"],
+		created_at: value["createdAt"],
+		description: value["description"],
+		id: value["id"],
+		name: value["name"],
+		updated_at: value["updatedAt"],
+	};
 }

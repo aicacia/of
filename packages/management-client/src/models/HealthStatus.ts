@@ -13,17 +13,17 @@
  */
 
 import {
-    parseDate,
-    parseDateTime,
-    serializeDate,
-    serializeDateTime,
+	parseDate,
+	parseDateTime,
+	serializeDate,
+	serializeDateTime,
 } from "../runtime.js";
 import type { HealthStatusOneOf } from "./HealthStatusOneOf.js";
 import {
-    instanceOfHealthStatusOneOf,
-    HealthStatusOneOfFromJSON,
-    HealthStatusOneOfFromJSONTyped,
-    HealthStatusOneOfToJSON,
+	instanceOfHealthStatusOneOf,
+	HealthStatusOneOfFromJSON,
+	HealthStatusOneOfFromJSONTyped,
+	HealthStatusOneOfToJSON,
 } from "./HealthStatusOneOf.js";
 
 /**
@@ -34,47 +34,47 @@ import {
 export type HealthStatus = HealthStatusOneOf | string;
 
 export function HealthStatusFromJSON(json: any): HealthStatus {
-    return HealthStatusFromJSONTyped(json, false);
+	return HealthStatusFromJSONTyped(json, false);
 }
 
 export function HealthStatusFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): HealthStatus {
-    if (json == null) {
-        return json;
-    }
-    if (typeof json !== "object") {
-        return json;
-    }
-    if (instanceOfHealthStatusOneOf(json)) {
-        return HealthStatusOneOfFromJSONTyped(json, true);
-    }
-    if (typeof json === "string" && json === "healthy") {
-        return json;
-    }
-    return {} as any;
+	if (json == null) {
+		return json;
+	}
+	if (typeof json !== "object") {
+		return json;
+	}
+	if (instanceOfHealthStatusOneOf(json)) {
+		return HealthStatusOneOfFromJSONTyped(json, true);
+	}
+	if (typeof json === "string" && json === "healthy") {
+		return json;
+	}
+	return {} as any;
 }
 
 export function HealthStatusToJSON(json: any): any {
-    return HealthStatusToJSONTyped(json, false);
+	return HealthStatusToJSONTyped(json, false);
 }
 
 export function HealthStatusToJSONTyped(
-    value?: HealthStatus | null,
-    ignoreDiscriminator: boolean = false,
+	value?: HealthStatus | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
-    if (typeof value !== "object") {
-        return value;
-    }
-    if (instanceOfHealthStatusOneOf(value)) {
-        return HealthStatusOneOfToJSON(value as HealthStatusOneOf);
-    }
-    if (typeof value === "string" && value === "healthy") {
-        return value;
-    }
-    return {};
+	if (value == null) {
+		return value;
+	}
+	if (typeof value !== "object") {
+		return value;
+	}
+	if (instanceOfHealthStatusOneOf(value)) {
+		return HealthStatusOneOfToJSON(value as HealthStatusOneOf);
+	}
+	if (typeof value === "string" && value === "healthy") {
+		return value;
+	}
+	return {};
 }

@@ -17,41 +17,41 @@
  * @export
  */
 export const ClientProfile = {
-    WebApplication: "web_application",
-    UserAgentBasedApplication: "user_agent_based_application",
-    NativeApplication: "native_application",
+	WebApplication: "web_application",
+	UserAgentBasedApplication: "user_agent_based_application",
+	NativeApplication: "native_application",
 } as const;
 export type ClientProfile = (typeof ClientProfile)[keyof typeof ClientProfile];
 
 export function instanceOfClientProfile(value: any): boolean {
-    for (const key in ClientProfile) {
-        if (Object.prototype.hasOwnProperty.call(ClientProfile, key)) {
-            if (ClientProfile[key as keyof typeof ClientProfile] === value) {
-                return true;
-            }
-        }
-    }
-    return false;
+	for (const key in ClientProfile) {
+		if (Object.prototype.hasOwnProperty.call(ClientProfile, key)) {
+			if (ClientProfile[key as keyof typeof ClientProfile] === value) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function ClientProfileFromJSON(json: any): ClientProfile {
-    return ClientProfileFromJSONTyped(json, false);
+	return ClientProfileFromJSONTyped(json, false);
 }
 
 export function ClientProfileFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): ClientProfile {
-    return json as ClientProfile;
+	return json as ClientProfile;
 }
 
 export function ClientProfileToJSON(value?: ClientProfile | null): any {
-    return value as any;
+	return value as any;
 }
 
 export function ClientProfileToJSONTyped(
-    value: any,
-    ignoreDiscriminator: boolean,
+	value: any,
+	ignoreDiscriminator: boolean,
 ): ClientProfile {
-    return value as ClientProfile;
+	return value as ClientProfile;
 }

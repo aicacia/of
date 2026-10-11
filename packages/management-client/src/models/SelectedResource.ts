@@ -19,75 +19,75 @@ import { mapValues } from "../runtime.js";
  * @interface SelectedResource
  */
 export interface SelectedResource {
-    /**
-     *
-     */
-    applicationId: string;
-    /**
-     *
-     */
-    kind: string;
-    /**
-     *
-     */
-    ownerSubject: string;
-    /**
-     *
-     */
-    resourceId: string;
+	/**
+	 *
+	 */
+	applicationId: string;
+	/**
+	 *
+	 */
+	kind: string;
+	/**
+	 *
+	 */
+	ownerSubject: string;
+	/**
+	 *
+	 */
+	resourceId: string;
 }
 
 /**
  * Check if a given object implements the SelectedResource interface.
  */
 export function instanceOfSelectedResource(
-    value: object,
+	value: object,
 ): value is SelectedResource {
-    if (!("applicationId" in value) || value["applicationId"] === undefined)
-        return false;
-    if (!("kind" in value) || value["kind"] === undefined) return false;
-    if (!("ownerSubject" in value) || value["ownerSubject"] === undefined)
-        return false;
-    if (!("resourceId" in value) || value["resourceId"] === undefined)
-        return false;
-    return true;
+	if (!("applicationId" in value) || value["applicationId"] === undefined)
+		return false;
+	if (!("kind" in value) || value["kind"] === undefined) return false;
+	if (!("ownerSubject" in value) || value["ownerSubject"] === undefined)
+		return false;
+	if (!("resourceId" in value) || value["resourceId"] === undefined)
+		return false;
+	return true;
 }
 
 export function SelectedResourceFromJSON(json: any): SelectedResource {
-    return SelectedResourceFromJSONTyped(json, false);
+	return SelectedResourceFromJSONTyped(json, false);
 }
 
 export function SelectedResourceFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): SelectedResource {
-    if (json == null) {
-        return json;
-    }
-    return {
-        applicationId: json["applicationId"],
-        kind: json["kind"],
-        ownerSubject: json["ownerSubject"],
-        resourceId: json["resourceId"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		applicationId: json["applicationId"],
+		kind: json["kind"],
+		ownerSubject: json["ownerSubject"],
+		resourceId: json["resourceId"],
+	};
 }
 
 export function SelectedResourceToJSON(json: any): SelectedResource {
-    return SelectedResourceToJSONTyped(json, false);
+	return SelectedResourceToJSONTyped(json, false);
 }
 
 export function SelectedResourceToJSONTyped(
-    value?: SelectedResource | null,
-    ignoreDiscriminator: boolean = false,
+	value?: SelectedResource | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        applicationId: value["applicationId"],
-        kind: value["kind"],
-        ownerSubject: value["ownerSubject"],
-        resourceId: value["resourceId"],
-    };
+	return {
+		applicationId: value["applicationId"],
+		kind: value["kind"],
+		ownerSubject: value["ownerSubject"],
+		resourceId: value["resourceId"],
+	};
 }

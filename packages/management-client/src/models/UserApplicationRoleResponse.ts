@@ -19,124 +19,124 @@ import { mapValues } from "../runtime.js";
  * @interface UserApplicationRoleResponse
  */
 export interface UserApplicationRoleResponse {
-    /**
-     *
-     */
-    applicationId: string;
-    /**
-     *
-     */
-    createdAt: number;
-    /**
-     *
-     */
-    roleDescription?: string | null;
-    /**
-     *
-     */
-    roleId: string;
-    /**
-     *
-     */
-    roleName: string;
-    /**
-     *
-     */
-    updatedAt: number;
+	/**
+	 *
+	 */
+	applicationId: string;
+	/**
+	 *
+	 */
+	createdAt: number;
+	/**
+	 *
+	 */
+	roleDescription?: string | null;
+	/**
+	 *
+	 */
+	roleId: string;
+	/**
+	 *
+	 */
+	roleName: string;
+	/**
+	 *
+	 */
+	updatedAt: number;
 }
 
 /**
  * Check if a given object implements the UserApplicationRoleResponse interface.
  */
 export function instanceOfUserApplicationRoleResponse(
-    value: object,
+	value: object,
 ): value is UserApplicationRoleResponse {
-    if (
-        (!("applicationId" in (value as Record<string, any>)) &&
-            !("application_id" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["applicationId"] === undefined &&
-            (value as Record<string, any>)["application_id"] === undefined)
-    )
-        return false;
-    if (
-        (!("createdAt" in (value as Record<string, any>)) &&
-            !("created_at" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["createdAt"] === undefined &&
-            (value as Record<string, any>)["created_at"] === undefined)
-    )
-        return false;
-    if (
-        (!("roleId" in (value as Record<string, any>)) &&
-            !("role_id" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["roleId"] === undefined &&
-            (value as Record<string, any>)["role_id"] === undefined)
-    )
-        return false;
-    if (
-        (!("roleName" in (value as Record<string, any>)) &&
-            !("role_name" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["roleName"] === undefined &&
-            (value as Record<string, any>)["role_name"] === undefined)
-    )
-        return false;
-    if (
-        (!("updatedAt" in (value as Record<string, any>)) &&
-            !("updated_at" in (value as Record<string, any>))) ||
-        ((value as Record<string, any>)["updatedAt"] === undefined &&
-            (value as Record<string, any>)["updated_at"] === undefined)
-    )
-        return false;
-    return true;
+	if (
+		(!("applicationId" in (value as Record<string, any>)) &&
+			!("application_id" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["applicationId"] === undefined &&
+			(value as Record<string, any>)["application_id"] === undefined)
+	)
+		return false;
+	if (
+		(!("createdAt" in (value as Record<string, any>)) &&
+			!("created_at" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["createdAt"] === undefined &&
+			(value as Record<string, any>)["created_at"] === undefined)
+	)
+		return false;
+	if (
+		(!("roleId" in (value as Record<string, any>)) &&
+			!("role_id" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["roleId"] === undefined &&
+			(value as Record<string, any>)["role_id"] === undefined)
+	)
+		return false;
+	if (
+		(!("roleName" in (value as Record<string, any>)) &&
+			!("role_name" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["roleName"] === undefined &&
+			(value as Record<string, any>)["role_name"] === undefined)
+	)
+		return false;
+	if (
+		(!("updatedAt" in (value as Record<string, any>)) &&
+			!("updated_at" in (value as Record<string, any>))) ||
+		((value as Record<string, any>)["updatedAt"] === undefined &&
+			(value as Record<string, any>)["updated_at"] === undefined)
+	)
+		return false;
+	return true;
 }
 
 export function UserApplicationRoleResponseFromJSON(
-    json: any,
+	json: any,
 ): UserApplicationRoleResponse {
-    return UserApplicationRoleResponseFromJSONTyped(json, false);
+	return UserApplicationRoleResponseFromJSONTyped(json, false);
 }
 
 export function UserApplicationRoleResponseFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): UserApplicationRoleResponse {
-    if (json == null) {
-        return json;
-    }
-    return {
-        applicationId: json["application_id"],
-        createdAt: json["created_at"],
-        roleDescription:
-            json["role_description"] === undefined
-                ? undefined
-                : json["role_description"] === null
-                  ? null
-                  : json["role_description"],
-        roleId: json["role_id"],
-        roleName: json["role_name"],
-        updatedAt: json["updated_at"],
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		applicationId: json["application_id"],
+		createdAt: json["created_at"],
+		roleDescription:
+			json["role_description"] === undefined
+				? undefined
+				: json["role_description"] === null
+					? null
+					: json["role_description"],
+		roleId: json["role_id"],
+		roleName: json["role_name"],
+		updatedAt: json["updated_at"],
+	};
 }
 
 export function UserApplicationRoleResponseToJSON(
-    json: any,
+	json: any,
 ): UserApplicationRoleResponse {
-    return UserApplicationRoleResponseToJSONTyped(json, false);
+	return UserApplicationRoleResponseToJSONTyped(json, false);
 }
 
 export function UserApplicationRoleResponseToJSONTyped(
-    value?: UserApplicationRoleResponse | null,
-    ignoreDiscriminator: boolean = false,
+	value?: UserApplicationRoleResponse | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        application_id: value["applicationId"],
-        created_at: value["createdAt"],
-        role_description: value["roleDescription"],
-        role_id: value["roleId"],
-        role_name: value["roleName"],
-        updated_at: value["updatedAt"],
-    };
+	return {
+		application_id: value["applicationId"],
+		created_at: value["createdAt"],
+		role_description: value["roleDescription"],
+		role_id: value["roleId"],
+		role_name: value["roleName"],
+		updated_at: value["updatedAt"],
+	};
 }

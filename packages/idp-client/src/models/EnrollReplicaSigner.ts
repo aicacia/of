@@ -15,10 +15,10 @@
 import { mapValues } from "../runtime.js";
 import type { JwkPublic } from "./JwkPublic.js";
 import {
-    JwkPublicFromJSON,
-    JwkPublicFromJSONTyped,
-    JwkPublicToJSON,
-    JwkPublicToJSONTyped,
+	JwkPublicFromJSON,
+	JwkPublicFromJSONTyped,
+	JwkPublicToJSON,
+	JwkPublicToJSONTyped,
 } from "./JwkPublic.js";
 
 /**
@@ -27,67 +27,66 @@ import {
  * @interface EnrollReplicaSigner
  */
 export interface EnrollReplicaSigner {
-    /**
-     *
-     */
-    endpointId: string;
-    /**
-     *
-     */
-    memberId: string;
-    /**
-     *
-     */
-    publicJwk: JwkPublic;
+	/**
+	 *
+	 */
+	endpointId: string;
+	/**
+	 *
+	 */
+	memberId: string;
+	/**
+	 *
+	 */
+	publicJwk: JwkPublic;
 }
 
 /**
  * Check if a given object implements the EnrollReplicaSigner interface.
  */
 export function instanceOfEnrollReplicaSigner(
-    value: object,
+	value: object,
 ): value is EnrollReplicaSigner {
-    if (!("endpointId" in value) || value["endpointId"] === undefined)
-        return false;
-    if (!("memberId" in value) || value["memberId"] === undefined) return false;
-    if (!("publicJwk" in value) || value["publicJwk"] === undefined)
-        return false;
-    return true;
+	if (!("endpointId" in value) || value["endpointId"] === undefined)
+		return false;
+	if (!("memberId" in value) || value["memberId"] === undefined) return false;
+	if (!("publicJwk" in value) || value["publicJwk"] === undefined) return false;
+	return true;
 }
 
 export function EnrollReplicaSignerFromJSON(json: any): EnrollReplicaSigner {
-    return EnrollReplicaSignerFromJSONTyped(json, false);
+	return EnrollReplicaSignerFromJSONTyped(json, false);
 }
 
 export function EnrollReplicaSignerFromJSONTyped(
-    json: any,
-    ignoreDiscriminator: boolean,
+	json: any,
+	ignoreDiscriminator: boolean,
 ): EnrollReplicaSigner {
-    if (json == null) {
-        return json;
-    }
-    return {
-        endpointId: json["endpointId"],
-        memberId: json["memberId"],
-        publicJwk: JwkPublicFromJSON(json["publicJwk"]),
-    };
+	if (json == null) {
+		return json;
+	}
+	return {
+		endpointId: json["endpointId"],
+		memberId: json["memberId"],
+		publicJwk: JwkPublicFromJSON(json["publicJwk"]),
+	};
 }
 
 export function EnrollReplicaSignerToJSON(json: any): EnrollReplicaSigner {
-    return EnrollReplicaSignerToJSONTyped(json, false);
+	return EnrollReplicaSignerToJSONTyped(json, false);
 }
 
 export function EnrollReplicaSignerToJSONTyped(
-    value?: EnrollReplicaSigner | null,
-    ignoreDiscriminator: boolean = false,
+	value?: EnrollReplicaSigner | null,
+	ignoreDiscriminator: boolean = false,
 ): any {
-    if (value == null) {
-        return value;
-    }
+	if (value == null) {
+		return value;
+	}
 
-    return {
-        endpointId: value["endpointId"],
-        memberId: value["memberId"],
-        publicJwk: JwkPublicToJSON(value["publicJwk"]),
-    };
+	return {
+		endpointId: value["endpointId"],
+		memberId: value["memberId"],
+		publicJwk: JwkPublicToJSON(value["publicJwk"]),
+	};
 }
