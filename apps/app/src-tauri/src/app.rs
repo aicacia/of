@@ -32,6 +32,8 @@ use crate::localhost_server::{
 };
 use crate::{local_api, service_secrets, service_secrets::ServiceRelationship, setup};
 
+#[path = "setup_peer_revocation.rs"]
+mod peer_revocation;
 #[path = "setup_reset.rs"]
 mod reset;
 
@@ -1346,91 +1348,11 @@ pub async fn revoke_reset_on_peer(
         .path()
         .app_data_dir()
         .map_err(|error| error.to_string())?;
-    if let Ok(references) = reset::recovery_references(&data) {
-        let ids = parse_setup_ids(&references["ids"]).map_err(|error| error.to_string())?;
-        if ids.member_id == member_id {
-            reset::queue_revocation(&data, &references).map_err(|error| error.to_string())?;
-        }
-    }
-    let target = reset::revocations(&data)
-        .map_err(|error| error.to_string())?
-        .into_iter()
-        .find(|target| target["member_id"] == member_id.to_string())
-        .ok_or("no retained public revocation target for this member")?;
-    if peer_api == format!("{}/idp", localhost_server_base_url_for(&app_handle).await) {
-        return Err(
-            "revocation must be acknowledged by a surviving peer, not this local Node".into(),
-        );
-    }
-    let url = reqwest::Url::parse(&peer_api).map_err(|error| error.to_string())?;
-    if url.scheme() != "https"
-        || url.host_str().is_none()
-        || !url.username().is_empty()
-        || url.password().is_some()
-        || url.query().is_some()
-        || url.fragment().is_some()
-        || url.path() != "/idp"
-        || url.as_str() != peer_api
-        || bearer.trim().is_empty()
-    {
-        return Err(
-            "select a trusted HTTPS peer IdP base URL and an authorized User session".into(),
-        );
-    }
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(std::time::Duration::from_secs(15))
+    let local_api = format!("{}/idp", localhost_server_base_url_for(&app_handle).await);
+    let client = peer_revocation::client_builder()
         .build()
         .map_err(|error| error.to_string())?;
-    let metadata: Value = client
-        .get(format!("{peer_api}/.well-known/openid-configuration"))
-        .send()
-        .await
-        .map_err(|error| error.to_string())?
-        .error_for_status()
-        .map_err(|error| error.to_string())?
-        .json()
-        .await
-        .map_err(|error| error.to_string())?;
-    if metadata["issuer"] != target["issuer"] {
-        return Err("peer belongs to a different Installation; no bearer was sent".into());
-    }
-    let token: Value = client
-        .post(format!("{peer_api}/oauth2/token"))
-        .form(&[
-            (
-                "grant_type",
-                "urn:ietf:params:oauth:grant-type:token-exchange",
-            ),
-            (
-                "subject_token_type",
-                "urn:ietf:params:oauth:token-type:access_token",
-            ),
-            ("subject_token", bearer.as_str()),
-            ("resource", peer_api.as_str()),
-        ])
-        .send()
-        .await
-        .map_err(|error| error.to_string())?
-        .error_for_status()
-        .map_err(|error| format!("peer User audience exchange denied; target retained: {error}"))?
-        .json()
-        .await
-        .map_err(|error| error.to_string())?;
-    let access_token = token["access_token"]
-        .as_str()
-        .filter(|token| !token.is_empty())
-        .ok_or("peer did not return an authorized User access token; target retained")?;
-    for path in [
-        format!("replica-signers/{member_id}"),
-        format!("devices/{member_id}"),
-    ] {
-        client.delete(format!("{peer_api}/{path}")).bearer_auth(access_token).send().await
-            .map_err(|error| error.to_string())?.error_for_status().map_err(|error| {
-                format!("peer revocation incomplete; public target retained for later authorized retry: {error}")
-            })?;
-    }
-    reset::acknowledge_revocation(&data, &target).map_err(|error| error.to_string())
+    peer_revocation::revoke(&data, &local_api, &peer_api, &bearer, member_id, &client).await
 }
 
 #[tauri::command]
@@ -1581,6 +1503,10 @@ pub async fn close(app_handle: &AppHandle<Wry>) -> io::Result<()> {
         None => Ok(()),
     }
 }
+
+#[cfg(test)]
+#[path = "setup_peer_revocation_tests.rs"]
+mod peer_revocation_tests;
 
 #[cfg(test)]
 mod tests {
