@@ -2,6 +2,18 @@
 
 These are current operational requirements for the confirmed [offline-first Node design](design.md), with focused local unified provisioning evidence below, not a fully qualified deployment runbook. [Ticket 07](../.scratch/offline-first-nodes/issues/07-node-operations-and-runtime-lifecycle.md) must verify executable procedures, platforms, images and recovery.
 
+## Qualification boundary
+
+Production setup, purpose-bound pairing/bootstrap, retained independent signers and local public-readiness checks are present. Ticket 04 remains incomplete: displaying a join offer is not verified authorized GUI approval, joining-Node completion or two-profile offline restart. The [native checkpoint](../.scratch/offline-first-nodes/evidence/04-native-acceptance/checkpoint.md) preserves exactly what was observed. Do not use listener/status probes, receipts, mode acknowledgements or historical passing fixtures as substitutes for current readiness. See [API contracts](api.md#setup-join-and-readiness) and [security boundaries](security.md).
+
+The [ticket-06 audit](../.scratch/offline-first-nodes/evidence/06-audit.md) checks current contracts/artifacts without qualifying deployment. Docker's retained `idp-unified` defaults and `/app/config.yaml` launch expectation need ticket-07 owner review; deleting old YAML did not make that image a working unified Node. No Docker deployment change is made by the audit.
+
+## Client configuration and distribution
+
+For the password-manager caller delivery, set complete service bases `PUBLIC_LIDP_BASE_URL` (including `/idp`) and **`PUBLIC_STORAGE_BASE_URL`** (including `/storage`). The Storage base is now required; the removed `PUBLIC_STORAGE_AUDIENCE`/origin fallback is not configuration compatibility. Bases locate services, while the filesystem exchange resource/audience remains `storage:filesystems`.
+
+Build the Storage package explicitly before publishing its public `esm`/`types` exports; no automatic `prepack` hook exists. Ship complete build output, including generated dependencies, not just five tracked artifacts. [Owner evidence](../.scratch/offline-first-nodes/evidence/06-audit.md#current-clientcaller-handoff--2026-10-11) records an isolated normal package build and five unaliased consumer checks. Root user-dirty outputs remain unchanged. The caller agent is implementing password-manager's production `kit.alias` to consume the same owned source without stale root outputs; that work is pending, not qualified here. A workspace source alias does not replace the separate distribution build. Ticket04 remains incomplete and 07/08 are unaccepted.
+
 ## Deployment and readiness
 
 Every Node runs IdP, Management and Storage with separate context data roots and one shared host `iroh-chain` endpoint/router with persisted endpoint identity and local trusted membership. There is no Storage-only, designated-authority or privileged-replica deployment mode. Keep Canonical Issuer/audiences separate from transport addresses and mount service prefixes once.
