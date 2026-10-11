@@ -1,77 +1,95 @@
-# Ticket 07: same-Node recovery assessment and deployment availability
+# Ticket 07: stopped same-Node filesystem recovery with retained provider
 
 Date: 2026-10-11. Branch: `offline-first-node07-recovery`.
 Worktree: `of/.worktrees/node07-recovery`.
-Base: integration `80a050a96c4666166b4b1f2092e6af06a5d412e5`.
-Disposition: **documentation/source assessment and read-only tool availability only; no actual recovery qualification. Ticket 07 remains incomplete.** No tracker/map changes.
+Integration base: `80a050a96c4666166b4b1f2092e6af06a5d412e5`.
+Initial documentation/availability delivery: `0cffb5c`.
+Disposition: **actual isolated current-format stopped-filesystem recovery regression passes with the original mock protected provider retained. Not lost-provider or complete deployment recovery. Ticket 07 remains incomplete.**
+
+This supersedes the earlier no-slot/docs-only disposition for this bounded filesystem gate only. The coordinator subsequently authorized this exclusive Rust slot and explicitly confirmed the TDD seams. Prior deployment/rotation evidence and tracker/map remain unchanged.
 
 ## Scope and CRP
 
-Read ticket 07, `docs/operations.md`, prior `07-deployment.md` and `evidence07-rotation.md`, shared glossary, current CLI/config/local provisioner/endpoint code, owner signer verification and private/raw keyring repositories. Read desktop `service_secrets.rs` only to identify its distinct protected-reference contract; no desktop Rust writes. Invoked `ponytail`. No code/test/script added, so no TDD cycle or behavioral red/green is claimed.
+Read ticket 07, operations, deployment/rotation evidence, shared glossary, CLI/config/local provisioner/endpoint, owner signer verification and private/raw keyring code. Desktop `service_secrets.rs` was inspected read-only for its distinct references. Invoked `ponytail` and `tdd`.
 
-Complexity: low for these two documentation files; moderate for a future stopped-store restore test, high for consistent platform/provider-loss recovery. Risk: high (identity loss/cloning, protected references, stale authorization rollback and multi-context consistency). Priority: establish the smallest truthful recovery gate and its blockers before any deployment claim. No numerical CRAP/coverage claim or CRAP/full Cargo hack execution.
+Changed only `crates/unified-server/src/local_provisioning_tests.rs`, `docs/operations.md` and this evidence. No production runtime/API changes, desktop edits, new dependencies, backup command or backup product abstraction. Reused the existing isolated `Fixture`, narrow mock protected provider and authenticated host exercise; two test-only stdlib tree helpers copy and verify stopped state.
 
-## Source findings, not executed recovery
+Complexity: moderate for stopped-store capture/restore and denial controls; low production change complexity (none). Risk: high identity/authorization boundary, mitigated by same paths, retained provider and secret-safe assertions; this is not a deployed-profile recovery tool. Priority: prove this small existing-only seam rather than rebrand restart/static fixtures as recovery. No numerical CRAP/coverage claim, full Cargo hack or CRAP run.
 
-- `cli.rs::run` calls public `LocalProvisioner::open_runtime` for ordinary serving. There are only provision/serve (plus optional completions) commands, not a backup/restore command.
-- A present provisioning directory is authoritative. Completed `build_runtime` requires the configured roots, IdP/Management databases, protected endpoint key and Storage subroots; compares persisted endpoint/public signer; verifies each current infrastructure Client; then requires `node_public_ready`. Completed startup does not replay setup. A missing journal selects a different explicitly retained-host path, not permission to discard one during restore.
-- `OwnerProvisioner::verify_node_signer` calls the existing local `KeyService::load_node_signer` path. Use this public trust/signing check, not private-key extraction, fresh signer production or prepared-signer inventory writes. Owner opening/runtime can write database state; existing-only means no identity/credential repair, not universal filesystem immutability.
-- `PrivateKeyKeyringRepo` uses the Canonical Issuer as keyring service, plus configured key namespace and derivation path as entry name, with the IdP target modifier. Linux default uses D-Bus Secret Service; headless keyutils is not assumed persistent. The repository has load/store/delete, not a complete same-Node platform backup procedure. This audit does not establish that provider-loss recovery is impossible; it remains unqualified.
-- The CLI requires the four named `UNIFIED_*_CLIENT_SECRET` environment injections. Desktop separately uses `local.unified-service-credentials`, Installation ID, Client ID and one of four relationship key names through `RawKeyringRepo`. Its missing-retained-secret path refuses unauthorized replacement. Preserve these bindings/provider entries; mounting a secret file does not implement CLI injection. The desktop OS-provider tests explicitly mutate/delete entries and were not run.
-- `local_provisioning_creates_exact_host_and_reopens_offline` provisions isolated stores, exercises authenticated IdP/Management calls, reopens unchanged state and checks endpoint/provider/journal retention. It then checks missing endpoint denial. Rotation tests restore isolated endpoint bytes; lost-Storage control renames a retained tree back. None snapshots/restores all contexts, journal/references, endpoint and protected signing capability as one recovery gate. Their historical passes are not new recovery acceptance.
+Confirmed public seams: `LocalProvisioner::open_runtime`, `UnifiedRuntime::shutdown`/`serve`/`node_public_ready`/`endpoint_id`, `UnifiedEndpoint::persisted_endpoint_id`, `OwnerProvisioner::verify_node_signer`, authenticated IdP/Management HTTP and consuming `storage_server::IdpClient::approved_storage_endpoints`.
 
-## Smallest safe candidate using existing APIs (not implemented or run)
+## Executed recovery behavior
 
-Use a dedicated isolated current-format fixture and the public CLI startup decision. No backup product abstraction, new owner seam, dependency or production repair path is needed for this narrow candidate. Keep the same paths and one Node identity throughout; the journal embeds normalized absolute roots.
+Test: `local_provisioning_restores_stopped_same_node_filesystem_with_retained_provider`.
 
-1. Explicitly provision the isolated Node once using existing public APIs. Establish current readiness and public endpoint/signer identity. Populate meaningful Storage SQL/KV/filesystem content through existing public APIs if claiming content recovery; an empty Storage tree proves at most startup structure. Retain all four relationship IDs/credentials and the same provider-held private material.
-2. Shut down the runtime, join its serving task, drop every owner/database handle and provisioner guard before capture. Verify exclusion from any competing host. Universal detached-task shutdown remains a separate 07 gap; do not copy an actively held database or call a live file copy crash-consistent.
-3. Capture a protected, stopped, same-format filesystem snapshot of the **whole** IdP, Management, Storage and endpoint roots and the endpoint-adjacent provisioning directory. Include `setup-secret-inventory.json`, `local-client-key-references`, owner lock files and every Storage subtree, not just database filenames or directory markers. Preserve configuration/root mapping, ownership, modes and public identity evidence. Snapshot storage must be outside managed roots, operator-only and local to this isolated Node. Never dump endpoint bytes, signer, credentials or bearer bodies into assertions/logs.
-4. Retain the original provider and its exact protected references in place. Do not export/import/clone the private signer or mutate a real OS provider. Preserve the provisioning `operation.lock` inode in place: restoration must not replace/unlink it. Take no intervening domain/credential/revocation changes, so this test does not silently qualify stale-snapshot rollback.
-5. In only the disposable filesystem fixture, displace the context/endpoint data to demonstrate missing-state existing-only denial with no newly generated identity/roots. Restore the captured trees to their exact original paths with protected permissions; retain the authoritative journal and lock. A second live Node or relocated roots are not equivalent. Preserve invalid material for diagnosis rather than manufacturing freshness.
-6. Reopen through `LocalProvisioner::open_runtime`, compare public endpoint and trusted signer via `UnifiedEndpoint::persisted_endpoint_id`/`OwnerProvisioner::verify_node_signer`, and require current `node_public_ready`. Make real authenticated calls exercising IdP issuance, Management permission decisions and consuming Storage APIs/content. Verify retained trusted endpoint membership through the existing owner boundary. No central authorization/peer setup is involved; an actually network-isolated execution is a separate observation to record, not inferred from the word offline.
-7. Shutdown/reopen once more; check journal, owner references/inventory and provider identity/material unchanged using secret-safe boolean comparisons, not operand-dumping assertions. Include a missing/corrupt endpoint or incomplete/invalid journal refusal control. No setup replay, reset, migration, permission widening or fresh fallback.
+1. Create an operator-only disposable fixture parent and explicitly provision one real composed current-format Node. Derive the retained public signer binding from its public journal/endpoint and verify the original trusted signer using the owner API. Build the original runtime, check readiness/endpoint, then **await consuming shutdown**, drop the owner/runtime/provisioner handles and only then capture state.
+2. Recursively copy **all five** filesystem roots into an operator-only stopped snapshot: full IdP, Management, Storage, endpoint and endpoint-adjacent provisioning directory. This includes IdP DB, owner setup inventory, all `local-client-key-references`, lock files, Management DB, whole Storage tree, protected endpoint bytes and journal. Check tree names/types, modes and file bytes; sensitive byte comparisons are boolean assertions, never operand-dumping assertions.
+3. Displace each entire original root to a separate diagnostic tree inside the disposable parent. Existing-only startup with the original explicit signer binding refuses the missing recovery set. Assert every original root remains absent: no replacement identity/store is initialized.
+4. Restore the same journal directory and move **the original** `operation.lock` inode into it. Copy every snapshot tree back to its exact original configured path, skipping replacement of that retained lock. Before constructing any owner/runtime, compare the full restored tree/modes/bytes to each snapshot and verify the persisted public endpoint identity. Original displaced files do not supply the restored DB/journal/endpoint bytes; those are copied from the snapshot. Only the cooperating lock inode is deliberately retained.
+5. Reopen via actual CLI existing-only startup, compare endpoint and require current local readiness. The existing authenticated host exercise performs four normal Client token requests and actual Management permission evaluations for the retained initial User, including denied subject/application/scope controls. Shutdown joins the serving task; drop the provisioner guard.
+6. Verify the restored trusted public signer via the public owner API with the same protected private capability, dropping the owner afterward. Reopen again, compare endpoint and make an actual authenticated consuming Storage-to-IdP endpoint-membership call; it returns the original Node endpoint. Cancel/join serving and drop the client/guard.
+7. Check original lock device/inode, unchanged journal, owner inventory and all captured local key references. Check the same mock provider material remains unchanged using a secret-safe boolean comparison: no provider export/import, private-signer production/cloning or credential replacement.
+8. After recovered shutdown, individually displace each restored IdP/Management/Storage/endpoint root. Every completed startup refuses, leaves the missing path absent and never initializes replacement state. Put only that isolated exact root back for the next control.
+9. Corrupt the isolated restored endpoint with invalid-format bytes. Existing-only startup refuses and leaves those bytes unchanged; restore the exact endpoint from the protected snapshot. Corrupt the present journal; startup refuses without absent-journal fallback and leaves rejected bytes unchanged. Final provider comparison remains unchanged.
 
-This would qualify **stopped filesystem restore with the original provider retained**, not backup/recovery of a lost provider, actual OS-process/unattended restart, Windows ACLs, crash/torn snapshots, stale authorization reconciliation or all desktop state. Full provider-loss recovery requires an approved same-Node platform procedure; do not assume copying the data parent includes it. This is a test design, not an operator-executable restore recipe.
+No central authorization service/peer configuration is introduced. This proves public local trust/readiness and authenticated owner usability after actual filesystem restoration, not an unchanged-root reopen. It does **not** assert network-level isolation: Iroh networking is not sandboxed as an air-gap test.
 
-## Concrete execution blockers / why no new fixture
+## Qualification limits
 
-No Rust build slot is authorized. The existing artifact tests do not contain a complete restore cycle, so re-running them cannot answer the recovery question. Implementing a new Rust fixture without compiling/executing it would not produce proven recovery work. A stdlib archive/copy fixture only qualifies file handling, not current owner trust or signer usability; no such surrogate script was added. No live profile or provider mutation is authorized, and no operator recovery profile was selected. Source traces show a viable narrow seam, not an API impossibility.
+- **Filesystem recovery with original mock provider retained only.** The private Node signer/private-key capability remains in that same provider throughout. The four fixture Client credentials remain in unchanged in-memory configuration, not newly delivered/stored in the provider; secure credential delivery is not qualified. No real OS provider is reset, unlocked, queried for secrets, backed up or restored. Lost-provider recovery requires a separately approved same-Node platform procedure; copying data roots cannot substitute for it.
+- Storage startup structure and the real consuming IdP call are qualified, but no SQL/KV/filesystem resource payload is created. This is not populated Storage content recovery or full resource/API backup coverage.
+- Snapshot copying is test-only, stopped and same-format; it is not an fsync-backed durable archival product, live/crash-consistent/torn multi-context backup, schema migration, or universal detached-owner-task shutdown qualification.
+- No intervening domain changes occur between capture and restore. Older deployed snapshots can roll back learned revocations, rotation or resources; stale-snapshot reconciliation and restored authorization history are not qualified.
+- No signer cloning across Nodes, authority promotion, profile reset, setup replay, incomplete-journal repair, permission widening or fresh fallback. Missing/invalid restored state is explicitly rejected.
+- No whole desktop/OS-process restart, Windows ACL, unattended keyring, image/TLS/proxy/Iroh deployment qualification. All whole-ticket acceptance checkboxes remain outside this delivery.
 
-Next bounded prerequisite: coordinator authorizes a serial memory-limited Rust slot for a dedicated isolated recovery test and agrees whether acceptance is retained-provider filesystem recovery or actual provider-loss recovery. The latter also needs a reviewed platform-specific procedure and separate explicit authorization; this session did not query any actual credentials.
+## Red / green / final commands and results
 
-## Actual lightweight checks
+Every Cargo invocation used this literal prefix, same shared target, offline/single-job policy and unchanged test timers; `UNIT` below is the literal unit name in the table, not a shell variable:
 
-Executed in the new worktree unless stated otherwise; commands bounded to 10 seconds, no build/pull/run.
-
-- Root read-only status/log/worktree checks confirmed integration `80a050a` and the ten pre-existing Storage output/shim changes. Created this worktree/branch from that integration using `git -c core.hooksPath=/dev/null worktree add -b offline-first-node07-recovery .worktrees/node07-recovery offline-first-nodes-integration`. Root worktree and other worktrees were not edited.
-- `command -v docker podman rustc cargo pkg-config dbus-send secret-tool openssl systemd-run` availability was checked with separate `command -v` invocations: all found except podman. Tool presence does not imply runtime qualification.
-- `docker --version`: Docker 24.0.5, build ced0996. `docker info --format {{.ServerVersion}}`: 24.0.5, exit 0. This establishes current daemon access only; no image inventory/pull/build/run or registry tag check.
-- `rustc --version`: `rustc 1.99.0 (b940084d7 2026-09-28)`; `python3 --version`: 3.12.3; `pkg-config --modversion dbus-1`: 1.14.10; `openssl version`: OpenSSL 3.0.13 (30 Jan 2024). Local Rust is not evidence that `rust:1.99-trixie` exists or that dependencies/linkage work.
-- `df -h .`: 937G total, 493G used, 397G available. `free -m`: 31440 MiB total, 25878 used, 594 free, 5561 available; all 2047 MiB swap used. Point-in-time availability is not build permission. No disk/cache pruning or cleanup.
-- Read-only session bus check below: address configured true, ListNames exit 0, Secret Service already registered true. Only the bus daemon was called; no provider activation, key lookup, collection inspection, unlock or mutation. Registered service presence does not establish authorized/unlocked/unattended access, persistence or post-logout/reboot recovery.
-- `python3 -B scripts/test_container.py`: **exit 0, 3 tests passed, 0.013s**. Existing recipe/static-context checks only, no actual Docker filtering or built image execution.
-- `git --no-pager diff --check`: exit 0 after operations edit. Final whitespace/scope/link checks and commit/integration disposition recorded below.
-
-Exact read-only bus check (captured output is not printed; only booleans/status):
-
-```python
-import os
-import subprocess
-print("Session bus address configured:", bool(os.environ.get("DBUS_SESSION_BUS_ADDRESS")))
-r = subprocess.run([
-    "dbus-send", "--session", "--print-reply", "--reply-timeout=2000",
-    "--dest=org.freedesktop.DBus", "/org/freedesktop/DBus",
-    "org.freedesktop.DBus.ListNames",
-], capture_output=True, text=True, timeout=4)
-print("Session bus ListNames exit:", r.returncode)
-print("Secret Service already registered:", chr(34) + "org.freedesktop.secrets" + chr(34) in r.stdout)
+```sh
+systemd-run --user --wait --pipe --unit=UNIT --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/node07-recovery -p MemoryMax=4G -p MemorySwapMax=0 -p RuntimeMaxSec=900 env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --jobs 1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --lib local_provisioning_tests::local_provisioning_restores_stopped_same_node_filesystem_with_retained_provider -- --exact --test-threads=1
 ```
 
-No Rust build/test/Cargo metadata/Clippy/full hack/CRAP, Docker build/pull/run, GUI, TLS/proxy request, OS-provider mutation/profile reset, credential printing, sibling-repository write, push or root merge. No claim about Rust image tag availability, unattended providers or actual recovery passes. Tools required for a prospective local native/image attempt are present; deployment remains unqualified.
+Tool command bound: 910000 ms. Final regression and existing-host artifact control ran serially in one bounded tool call. No timeout/OOM was reported. Systemd printed tiny memory peaks; these are not credible measurements of compiler/test peak RSS and are not claimed as platform capacity evidence.
 
-## Delivery
+| Unit | Invocation ID | Result |
+| --- | --- | --- |
+| `of-node07-recovery-red` | `d1bb17562b944d47931c82b56bb55e89` | **Behavioral red**, exit 101. Initial test-only restore loop deliberately omitted Storage (index 2); existing-only complete-recovery expectation failed `NotFound`. Compilation 9m51s, test 42.10s, service 10m34.004s. This tests incomplete fixture restoration, not a newly found production defect. |
+| `of-node07-recovery-green` | `af763c4278304580a375a5e6e4971e34` | Restore all five roots and assert full byte/tree/mode equality before reopening. **Exit 0, 1 passed**, compile 1m18s, test 171.64s, service 4m10.860s. |
+| `of-node07-recovery-final` | `0ce852a48a5c4ef8bfc85a611decb64e` | Final source after iterator cleanup: **exit 0, 1 passed**, compile 26.47s, test 131.90s, service 2m38.482s. |
 
-Only `docs/operations.md` and this dedicated evidence file are changed. Tracker/map, desktop/runtime Rust, scripts/tests, Cargo manifests/lockfiles and deployment recipe remain unchanged. Commit hooks are disabled to prevent implicit forbidden builds. The final branch tip, checks and merge of the then-current integration tip into this branch (not into root) are reported in the delivery response.
+The new range-index loop was changed to enumerate the roots after Clippy flagged it. No behavioral/runtime implementation was changed to make the recovery gate pass.
 
-Final precommit checks: `python3 -B scripts/test_container.py` passed again (3 tests, 0.012s); Python stdlib checks confirmed the new operations recovery link resolves and the evidence explicitly labels no code/no recovery qualification/07 incomplete. `git --no-pager diff --cached --check` passed; staged name/scope check showed exactly the two allowed documentation paths. These are static/documentation checks, not recovery tests.
+Existing exact-host control, using the final artifact:
+
+```sh
+systemd-run --user --wait --pipe --unit=of-node07-recovery-exact-host-control --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/node07-recovery -p MemoryMax=4G -p MemorySwapMax=0 -p RuntimeMaxSec=900 env RUST_MIN_STACK=67108864 /home/nathan/code/rust/aicacia/of/target/debug/deps/unified_server-a4bf33735b2f05a3 local_provisioning_tests::local_provisioning_creates_exact_host_and_reopens_offline --exact --test-threads=1
+```
+
+Invocation `accd7d0da2f448cfb36334bf2f00c1f5`: **exit 0, 1 passed**, test 194.79s, service 3m14.797s. This is a separate continuity control, not substituted for the new restore regression.
+
+Final artifact SHA-256: `d92e5f00e922276da73ed40de53c72c6d3d8f5310ae3cf55c8b0587a211136a4`.
+
+Focused Clippy command, same bounded prefix/environment (replace the Cargo portion):
+
+```sh
+cargo clippy --offline --jobs 1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --lib --tests --no-deps
+```
+
+`of-node07-recovery-clippy`, invocation `c4c4dea66e894292ab9ee8026b16fc1a`: exit 0, 23.68s, included the new range-loop warning. Final `of-node07-recovery-final-clippy`, invocation `5a30d731a251417d93db1639b3c67ca9`: **exit 0, 3.16s**, lib-test 9 warnings/lib 1 duplicate, none in the newly added recovery block. Remaining warnings are existing fixture default-field reassignments, runtime collapsible condition, endpoint unnecessary allocation and interruption-fixture non-Drop drops; no unrelated lint cleanup.
+
+`rustfmt --edition 2024 --check crates/unified-server/src/local_provisioning_tests.rs` and `git --no-pager diff --check` passed. Existing `python3 -B scripts/test_container.py` passed again: **3 tests, 0.014s**, static recipe checks only. No full feature-powerset/CRAP run.
+
+## Deployment availability, not deployment acceptance
+
+Initial bounded read-only checks (before the slot authorization) remain valid as availability observations, not runtime qualification:
+
+- Docker client/daemon 24.0.5; `docker info --format` returned server version successfully. No Docker build/pull/run or registry image-tag check.
+- Local `rustc 1.99.0 (b940084d7 2026-09-28)`, Python 3.12.3, `pkg-config --modversion dbus-1` 1.14.10 and OpenSSL 3.0.13. Docker, Rust/Cargo, pkg-config, dbus-send, secret-tool, openssl and systemd-run available; podman absent. Local Rust is not availability evidence for the Dockerfile Rust image tag.
+- Read-only `org.freedesktop.DBus.ListNames` to the session bus daemon returned exit 0, configured-address true and already-registered Secret Service true; output was captured and only booleans/status printed. No provider activation, credential lookup, collection inspection, unlock or mutation. Registration is not unattended authorized/unlocked access or persistence proof.
+- Initial disk check: 397G available; pre-build check: 388G available. Initial RAM observation was tight/full swap. Only the subsequent explicitly authorized 4G/zero-swap slot allowed the bounded compilation; no cache pruning/data deletion/cap increase.
+
+## Delivery boundary
+
+Three allowed files only: the existing unified-server test module, operations and dedicated recovery evidence. No tracker/map, desktop/production Rust, scripts, Cargo manifests/lockfile, Docker recipe or sibling source edits. No provider reset/profile mutation, secret printing, push or root merge. Commit hooks disabled to avoid implicit builds. Merge the then-current integration tip into this branch only; final commit/integration/status verification is reported in the delivery response.

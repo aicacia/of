@@ -743,6 +743,294 @@ async fn exercise_running_host(runtime: crate::UnifiedRuntime, config: &UnifiedC
         .expect("host serve/shutdown");
 }
 
+fn copy_stopped_recovery_tree(source: &Path, destination: &Path) {
+    let metadata = fs::symlink_metadata(source).expect("stopped fixture tree metadata");
+    assert!(
+        !metadata.file_type().is_symlink(),
+        "fixture snapshot excludes symlinks"
+    );
+    if metadata.is_dir() {
+        fs::create_dir_all(destination).expect("protected fixture recovery directory");
+        fs::set_permissions(destination, metadata.permissions()).expect("retain directory modes");
+        for entry in fs::read_dir(source).expect("complete stopped fixture tree") {
+            let entry = entry.expect("fixture recovery entry");
+            copy_stopped_recovery_tree(&entry.path(), &destination.join(entry.file_name()));
+        }
+    } else {
+        assert!(
+            metadata.is_file(),
+            "fixture snapshot contains only regular files"
+        );
+        if source
+            .file_name()
+            .is_some_and(|name| name == "operation.lock")
+            && destination.exists()
+        {
+            assert!(
+                fs::read(source).expect("snapshot lock")
+                    == fs::read(destination).expect("retained lock"),
+                "retain the original cooperating lock rather than replacing it"
+            );
+        } else {
+            fs::copy(source, destination).expect("copy stopped fixture file without logging bytes");
+            fs::set_permissions(destination, metadata.permissions()).expect("retain file modes");
+        }
+    }
+}
+
+fn assert_stopped_recovery_tree(source: &Path, restored: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let source_metadata = fs::symlink_metadata(source).expect("snapshot metadata");
+    let restored_metadata = fs::symlink_metadata(restored).expect("restored metadata");
+    assert_eq!(
+        source_metadata.permissions().mode(),
+        restored_metadata.permissions().mode()
+    );
+    assert_eq!(source_metadata.is_dir(), restored_metadata.is_dir());
+    assert!(!restored_metadata.file_type().is_symlink());
+    if source_metadata.is_dir() {
+        let names = |root: &Path| {
+            let mut names = fs::read_dir(root)
+                .expect("fixture tree entries")
+                .map(|entry| entry.expect("fixture entry").file_name())
+                .collect::<Vec<_>>();
+            names.sort();
+            names
+        };
+        assert_eq!(names(source), names(restored), "complete tree restored");
+        for name in names(source) {
+            assert_stopped_recovery_tree(&source.join(&name), &restored.join(&name));
+        }
+    } else {
+        assert!(
+            fs::read(source).expect("snapshot bytes")
+                == fs::read(restored).expect("restored bytes"),
+            "restored bytes match without disclosing private material"
+        );
+    }
+}
+
+#[tokio::test]
+async fn local_provisioning_restores_stopped_same_node_filesystem_with_retained_provider() {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    let fixture = Fixture::new();
+    fs::set_permissions(&fixture.root, fs::Permissions::from_mode(0o700))
+        .expect("protect the entire disposable recovery fixture");
+    let mut host = LocalProvisioner::create(
+        fixture.config.clone(),
+        "operator",
+        "Local Node",
+        &fixture.password,
+    )
+    .expect("explicit isolated Node provisioning");
+    host.provision(&fixture.password)
+        .await
+        .expect("completed current-format Node");
+    let journal = fixture.journal();
+    let endpoint = crate::UnifiedEndpoint::persisted_endpoint_id(&fixture.config.endpoint_data_dir)
+        .expect("original persisted endpoint");
+    let binding = idp_service::oauth2::NodeSignerBinding {
+        member_id: serde_json::from_value(journal["member"].clone()).expect("retained member"),
+        key_id: serde_json::from_value(journal["key"].clone()).expect("retained signer key"),
+        endpoint_id: endpoint.to_string(),
+    };
+    let mut config = fixture.config.clone();
+    config.idp.oauth2.local_signer = Some(binding.clone());
+    let owner = idp_server::OwnerProvisioner::open(&config.idp)
+        .await
+        .expect("original owner");
+    let signer = owner
+        .verify_node_signer(&binding)
+        .await
+        .expect("original trusted local signer");
+    drop(owner);
+    let runtime = host
+        .build_runtime()
+        .await
+        .expect("original completed runtime");
+    assert!(
+        runtime
+            .node_public_ready()
+            .await
+            .expect("original readiness")
+    );
+    assert_eq!(runtime.endpoint_id(), endpoint);
+    runtime
+        .shutdown()
+        .await
+        .expect("stop runtime before snapshot");
+    drop(host);
+    let secrets = fixture.secrets();
+    let roots = [
+        PathBuf::from(&config.idp.data_dir),
+        PathBuf::from(&config.management.data_dir),
+        PathBuf::from(&config.storage.data_dir),
+        config.endpoint_data_dir.clone(),
+        config.local_provisioning_directory(),
+    ];
+    let snapshot = fixture.root.join("stopped-snapshot");
+    let displaced = fixture.root.join("displaced-state");
+    for directory in [&snapshot, &displaced] {
+        fs::create_dir(directory).expect("isolated recovery parent");
+        fs::set_permissions(directory, fs::Permissions::from_mode(0o700))
+            .expect("protected recovery parent");
+    }
+    for (index, root) in roots.iter().enumerate() {
+        copy_stopped_recovery_tree(root, &snapshot.join(index.to_string()));
+        assert_stopped_recovery_tree(root, &snapshot.join(index.to_string()));
+        fs::rename(root, displaced.join(index.to_string())).expect("displace stopped fixture root");
+    }
+    assert!(
+        LocalProvisioner::open_runtime(config.clone())
+            .await
+            .is_err(),
+        "missing recovery set denies"
+    );
+    assert!(
+        roots.iter().all(|root| !root.exists()),
+        "missing roots are not repaired"
+    );
+    let journal_root = roots.last().expect("journal root");
+    fs::create_dir(journal_root).expect("restore journal directory around retained lock");
+    fs::set_permissions(journal_root, fs::Permissions::from_mode(0o700))
+        .expect("protected journal");
+    let lock = journal_root.join("operation.lock");
+    fs::rename(displaced.join("4/operation.lock"), &lock).expect("retain original lock inode");
+    let lock_identity = fs::metadata(&lock).expect("original lock metadata");
+    for (index, root) in roots.iter().enumerate() {
+        copy_stopped_recovery_tree(&snapshot.join(index.to_string()), root);
+        assert_stopped_recovery_tree(&snapshot.join(index.to_string()), root);
+    }
+    assert_eq!(
+        crate::UnifiedEndpoint::persisted_endpoint_id(&config.endpoint_data_dir)
+            .expect("restored persisted endpoint"),
+        endpoint
+    );
+    let (runtime, guard) = LocalProvisioner::open_runtime(config.clone())
+        .await
+        .expect("complete same-path recovery");
+    assert_eq!(runtime.endpoint_id(), endpoint);
+    assert!(
+        runtime
+            .node_public_ready()
+            .await
+            .expect("restored local readiness")
+    );
+    exercise_running_host(
+        runtime,
+        &config,
+        serde_json::from_value(journal["user"].clone()).expect("retained initial User"),
+    )
+    .await;
+    drop(guard);
+    let owner = idp_server::OwnerProvisioner::open(&config.idp)
+        .await
+        .expect("restored owner");
+    assert!(
+        owner
+            .verify_node_signer(&binding)
+            .await
+            .expect("restored signing capability")
+            == signer,
+        "same trusted public signer"
+    );
+    drop(owner);
+    let (runtime, guard) = LocalProvisioner::open_runtime(config.clone())
+        .await
+        .expect("restored Node reopens again");
+    assert_eq!(runtime.endpoint_id(), endpoint);
+    let base = format!("http://{}/idp", runtime.local_addr());
+    let cancellation = runtime.cancellation_token();
+    let task = tokio::spawn(runtime.serve());
+    let client = storage_server::IdpClient::new(
+        &base,
+        &config.storage_idp_client.client_id,
+        &config.storage_idp_client.client_secret,
+        &config.idp.oauth2.issuer,
+        &config.storage_idp_client.audience,
+    )
+    .expect("real consuming Storage owner client");
+    assert!(
+        client
+            .approved_storage_endpoints()
+            .await
+            .expect("authenticated restored owner trust")
+            .contains(&endpoint.to_string())
+    );
+    cancellation.cancel();
+    tokio::time::timeout(Duration::from_secs(60), task)
+        .await
+        .expect("bounded recovered shutdown")
+        .expect("recovered task")
+        .expect("recovered shutdown");
+    drop(client);
+    drop(guard);
+    let restored_lock = fs::metadata(&lock).expect("restored original lock");
+    assert_eq!(
+        (lock_identity.dev(), lock_identity.ino()),
+        (restored_lock.dev(), restored_lock.ino())
+    );
+    let journal_path = journal_root.join("intent.json");
+    assert!(
+        fs::read(&journal_path).expect("unchanged journal")
+            == fs::read(snapshot.join("4/intent.json")).expect("snapshot journal")
+    );
+    assert_stopped_recovery_tree(
+        &snapshot.join("0/local-client-key-references"),
+        &roots[0].join("local-client-key-references"),
+    );
+    assert!(
+        fs::read(snapshot.join("0/setup-secret-inventory.json")).expect("snapshot inventory")
+            == fs::read(roots[0].join("setup-secret-inventory.json")).expect("retained inventory")
+    );
+    for (index, root) in roots.iter().take(4).enumerate() {
+        let lost = fixture.root.join(format!("missing-restored-{index}"));
+        fs::rename(root, &lost).expect("isolate missing restored context or endpoint");
+        assert!(
+            LocalProvisioner::open_runtime(config.clone())
+                .await
+                .is_err(),
+            "missing restored root denies"
+        );
+        assert!(
+            !root.exists(),
+            "denial must not initialize a replacement root"
+        );
+        fs::rename(lost, root).expect("retain exact restored root");
+    }
+    let endpoint_key = roots[3].join("endpoint.key");
+    fs::write(&endpoint_key, b"invalid-current-format-endpoint")
+        .expect("corrupt only isolated restored endpoint");
+    assert!(
+        LocalProvisioner::open_runtime(config.clone())
+            .await
+            .is_err(),
+        "invalid restored endpoint denies"
+    );
+    assert!(
+        fs::read(&endpoint_key).expect("rejected endpoint retained")
+            == b"invalid-current-format-endpoint"
+    );
+    fs::copy(snapshot.join("3/endpoint.key"), &endpoint_key)
+        .expect("recover exact fixture endpoint");
+    fs::write(&journal_path, b"invalid-current-format-journal")
+        .expect("corrupt only restored journal");
+    assert!(
+        LocalProvisioner::open_runtime(config).await.is_err(),
+        "present invalid journal never falls back"
+    );
+    assert!(
+        fs::read(&journal_path).expect("rejected journal retained")
+            == b"invalid-current-format-journal"
+    );
+    assert!(
+        fixture.secrets() == secrets,
+        "restore and denial never clone or replace protected material"
+    );
+}
+
 #[tokio::test]
 async fn local_provisioning_creates_exact_host_and_reopens_offline() {
     let fixture = Fixture::new();
