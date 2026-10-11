@@ -4,7 +4,7 @@
 
 ### Current checkpoint — 2026-10-11, delivered history consolidated into local main
 
-- User-authorized cross-repository cleanup: delivered of history through`29d6b3b`, ofdb`8b94799`, offs`662f702` and unchanged ofnet`85632a9` consolidated into local main, not pushed. Current tracker and cleanup receipts committed selectively. [Exact cleanup/disposition](../worktree-cleanup/2026-10-11/README.md).
+- User-authorized cross-repository cleanup: delivered of history through`29d6b3b`, ofdb`d6ccbb0`, offs`dd86c58` and unchanged ofnet`85632a9` consolidated into local main, not pushed. Current tracker and cleanup receipts committed selectively. [Exact cleanup/disposition](../worktree-cleanup/2026-10-11/README.md).
 - Removed19completed auxiliary worktrees across repos;4of unfinished worktrees/branches and all stashes remain. Unique review evidence and generated-output snapshots copied/hash-verified; shared targets/privateprofiles/rootuserdirt preserved. Of scratch14folders consolidated to3; [cold archive mapping](../archive/2026-10-11/README.md) preserves historical content and then-current plain paths.
 - 01/02/03/05/06 remain resolved within scope;04 claimed/incomplete,07/08 open. Main consolidation does not qualify unfinished code, native acceptance, lifecycle or fullspec. Root10Storage generated/shim modifications remain uncommitted because they are partial outputs/machine artifacts, not a complete current distribution. No builds/fullCargoHack/CRAP/GUI or remote push.
 

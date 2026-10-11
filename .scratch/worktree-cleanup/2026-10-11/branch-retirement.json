@@ -1,0 +1,123 @@
+{
+  "protected": [
+    "cleanup-review-completion-2026-10-11",
+    "main",
+    "offline-first-auth-unavailability",
+    "offline-first-bounded04-partial-bootstrap",
+    "offline-first-nodes-integration",
+    "offline-first-peer-revocation",
+    "offline-first-setup-early-reset"
+  ],
+  "removed": [
+    {
+      "branch": "implement-spec-debug-log-filter",
+      "tip": "3f91e3e6aa414848f6ad086ace5a484137aa5ec7",
+      "result": "Deleted branch implement-spec-debug-log-filter (was 3f91e3e)."
+    },
+    {
+      "branch": "offline-first-api-contract-cutover",
+      "tip": "6c6b70f8a62847368b67c349aa6caa1f40f18b8d",
+      "result": "Deleted branch offline-first-api-contract-cutover (was 6c6b70f)."
+    },
+    {
+      "branch": "offline-first-api-generator-safety",
+      "tip": "bd5fec48a7995f426d57bdfd6a67c8f6e77edee6",
+      "result": "Deleted branch offline-first-api-generator-safety (was bd5fec4)."
+    },
+    {
+      "branch": "offline-first-bounded04-peer-queue",
+      "tip": "61d11e8e7929dc3fab9274bd4885fceb98642582",
+      "result": "Deleted branch offline-first-bounded04-peer-queue (was 61d11e8)."
+    },
+    {
+      "branch": "offline-first-bounded04-session-unavailability",
+      "tip": "a55ead270bc7dafd3f56c74be178e3e4c0775ed8",
+      "result": "Deleted branch offline-first-bounded04-session-unavailability (was a55ead2)."
+    },
+    {
+      "branch": "offline-first-desktop-residency",
+      "tip": "c25fc30327249f9e21b8ce85e2b73a26394f363a",
+      "result": "Deleted branch offline-first-desktop-residency (was c25fc30)."
+    },
+    {
+      "branch": "offline-first-endpoint-recovery",
+      "tip": "5cded4e9e43a04568f5ce71f2f82cc085524d4c1",
+      "result": "Deleted branch offline-first-endpoint-recovery (was 5cded4e)."
+    },
+    {
+      "branch": "offline-first-execution-completion",
+      "tip": "9e0d7e52b04e0790db0945a16849e4ad7adebff6",
+      "result": "Deleted branch offline-first-execution-completion (was 9e0d7e5)."
+    },
+    {
+      "branch": "offline-first-native-ca-collision",
+      "tip": "fed34ac42da8a7d11d13267ccc3aaf74ea2b048c",
+      "result": "Deleted branch offline-first-native-ca-collision (was fed34ac)."
+    },
+    {
+      "branch": "offline-first-native-reset-reachability",
+      "tip": "c095f724783084b0ac87d6ad346f3d93108dffe3",
+      "result": "Deleted branch offline-first-native-reset-reachability (was c095f72)."
+    },
+    {
+      "branch": "offline-first-policy-cleanup",
+      "tip": "4936146f29f2a761271acfcc4c849fe402f09d52",
+      "result": "Deleted branch offline-first-policy-cleanup (was 4936146)."
+    },
+    {
+      "branch": "offline-first-setup-completion",
+      "tip": "3c97619d81ec368861b86a141d0fce29f86ff8fc",
+      "result": "Deleted branch offline-first-setup-completion (was 3c97619)."
+    },
+    {
+      "branch": "offline-first-setup-intent-recovery",
+      "tip": "2b47bea60e469a570f2c265cc1b9c17b3268dbd4",
+      "result": "Deleted branch offline-first-setup-intent-recovery (was 2b47bea)."
+    },
+    {
+      "branch": "offline-first-setup-owner-cutover",
+      "tip": "e7e9bf12c2f917e37b397f2f2c457c8c232462e4",
+      "result": "Deleted branch offline-first-setup-owner-cutover (was e7e9bf1)."
+    },
+    {
+      "branch": "offline-first-setup-secret-inventory",
+      "tip": "b68924125fdb834404f49a535279735dd64409fc",
+      "result": "Deleted branch offline-first-setup-secret-inventory (was b689241)."
+    },
+    {
+      "branch": "offline-first-ticket06-callers",
+      "tip": "3f7baed0d7b6e61a6ecfc27c5824e0596ed7f143",
+      "result": "Deleted branch offline-first-ticket06-callers (was 3f7baed)."
+    },
+    {
+      "branch": "offline-first-ticket06-clients",
+      "tip": "dcdf8e9e81daec6660d559f303af48fd262935d5",
+      "result": "Deleted branch offline-first-ticket06-clients (was dcdf8e9)."
+    },
+    {
+      "branch": "offline-first-ticket06-docs",
+      "tip": "8f87f8454a67ba57ed86325a963c4b542fd398b1",
+      "result": "Deleted branch offline-first-ticket06-docs (was 8f87f84)."
+    },
+    {
+      "branch": "offline-first-unified-owner-cutover",
+      "tip": "baf8756afdd85a19850d546ff4e264109cbd4017",
+      "result": "Deleted branch offline-first-unified-owner-cutover (was baf8756)."
+    },
+    {
+      "branch": "offline-first-unified-provisioning",
+      "tip": "39725568178e181c8c73954672f7dd5804d86f47",
+      "result": "Deleted branch offline-first-unified-provisioning (was 3972556)."
+    },
+    {
+      "branch": "rootintegrationlatest",
+      "tip": "2c906fd2fc07fb9ed5718d158961a4a1eb21f1ec",
+      "result": "Deleted branch rootintegrationlatest (was 2c906fd)."
+    },
+    {
+      "branch": "unified-server-integration",
+      "tip": "5b22a32b17f88705023e0dc05e16c474e0c4d578",
+      "result": "Deleted branch unified-server-integration (was 5b22a32)."
+    }
+  ]
+}

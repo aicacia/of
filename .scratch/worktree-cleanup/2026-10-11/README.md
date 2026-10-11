@@ -5,8 +5,8 @@ User authorized removal of unused/finished worktrees and scratch clutter, and co
 ## Delivered history
 
 - `of`: delivered offline-first integration `29d6b3b` (103 commits above former main `5b22a32`), followed by this tracker/cleanup checkpoint. Tickets01/02/03/05/06 are resolved within recorded scopes;04 remains claimed/incomplete and07/08 open. The final main consolidation is a fast-forward, not a merge of unfinished auxiliary deltas.
-- `ofdb`: local main fast-forwarded `3c4bf50` to `8b94799`,26existing commits. No new source commit or acceptance claim; integration retained.
-- `offs`: local main fast-forwarded `7501cfe` to `dc91886`,9existing commits; lockfile-only commit `662f702` aligns the current committed public-persistence dependency graph. Integration ref also advanced to662f702.
+- `ofdb`: local main fast-forwarded `3c4bf50` to `8b94799`,26existing commits, then checkpoint `d6ccbb0` persisted the reviewed map/spec/15 tickets. Consumer ticket06 remains open. Integration retained and aligned; no new source acceptance claim.
+- `offs`: local main fast-forwarded `7501cfe` to `dc91886`,9existing commits; lockfile-only commit `662f702` aligns the current committed public-persistence dependency graph. Tracker checkpoint `dd86c58` persists finished filesystem-sync/retirement declarations and limitations. Integration retained and aligned.
 - `ofnet`: already clean on main `85632a9`; nothing to merge or clean.
 
 ## Removed and archived
@@ -41,4 +41,4 @@ Checked Git ancestry, main/integration targets, scoped working-tree diffs, sourc
 
 Offs unfiltered offline locked metadata failed because cached `js-sys v0.3.106` was absent. The narrower `cargo metadata --offline --locked --filter-platform x86_64-unknown-linux-gnu --format-version 1` succeeded,121packages/resolved nodes; only this platform-scoped graph result qualifies lockfile coherence, not compilation or all-platform availability. The exact existing57-line lock delta was committed without regeneration or downloads.
 
-Fully integrated short-lived branches may be deleted only after their worktrees are retired; unfinished checked-out branches and ongoing integration refs are excluded. Cleanup receipts and the current local tracker are committed selectively, not entire scratch trees or node_modules. Nothing is pushed to remotes.
+Deleted25fully integrated short-lived branches across repositories after retiring their worktrees (22of,2ofdb,1offs); [of branch retirement receipt](branch-retirement.json) records their tips. Unfinished checked-out branches, ongoing integration refs and the merge-only review recovery ref are excluded. The `of` repository now ignores `/.worktrees` to prevent accidental staging; each retained worktree still reports its own working state. The duplicate install log was removed only after confirming its preserved copy has identical bytes. Cleanup receipts and the current local tracker are committed selectively, not entire scratch trees or node_modules. Nothing is pushed to remotes.
