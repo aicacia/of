@@ -11,10 +11,23 @@ const host = vi.hoisted(() => ({
     goto: vi.fn(),
     native: true,
     installation: { issuer: "https://installation.test" },
+    stage: "ready" as string,
+    stageError: undefined as Error | undefined,
+    clientId: vi.fn(async () => "client"),
+    invoke: vi.fn(),
 }));
 vi.mock("@tauri-apps/api/core", () => ({
     isTauri: () => host.native,
-    invoke: async () => host.installation,
+    invoke: async (command: string) => {
+        host.invoke(command);
+        if (command === "get_setup_stage") {
+            if (host.stageError) throw host.stageError;
+            return host.stage;
+        }
+        if (command === "get_setup_intent") return host.installation;
+        if (command === "get_localhost_server_base_url") return "https://node.test";
+        throw new Error(`Unexpected IPC command: ${command}`);
+    },
 }));
 vi.mock("$app/navigation", () => ({ goto: host.goto }));
 vi.mock("$app/paths", () => ({ resolve: (path: string) => path }));
@@ -35,7 +48,7 @@ vi.mock("$lib/common/state/afterSigninRedirect.svelte", () => ({
     afterSigninRedirect: { setURL: host.returnTo },
 }));
 vi.mock("$lib/common/state/oidc.svelte", () => ({
-    ensureOidcClientId: async () => "client",
+    ensureOidcClientId: host.clientId,
     getOidcClient: () => ({
         getStoredTokenResponse: () => host.token,
         clearStoredTokenResponse: () => {
@@ -44,18 +57,13 @@ vi.mock("$lib/common/state/oidc.svelte", () => ({
         },
     }),
 }));
-vi.mock("$lib/common/state/managementClient.svelte", () => ({
-    ensureTauriManagementApiUrl: async () => {},
-}));
-vi.mock("$lib/common/state/localhostBaseUrl.svelte", () => ({
-    loadLocalhostBaseUrl: async () => "https://node.test",
-    ensureLocalhostBaseUrl: async () => "https://node.test",
-}));
 
-// Host/session storage is substituted; the IdP state, token exchange and userinfo client are real.
+// Host/session storage is substituted; setup, localhost discovery and owner clients are real.
 const fetchApi = vi.fn();
 vi.stubGlobal("fetch", fetchApi);
 const { load } = await import("./+layout");
+const startupRequests = fetchApi.mock.calls.slice();
+const startupCommands = host.invoke.mock.calls.slice();
 const event = {
     parent: async () => ({}),
     url: new URL("https://app.test/devices?view=local"),
@@ -65,6 +73,8 @@ beforeEach(() => {
     vi.clearAllMocks();
     fetchApi.mockReset();
     host.native = true;
+    host.stage = "ready";
+    host.stageError = undefined;
     host.token = { access_token: "session", iss: "https://installation.test" };
 });
 function respond(failure: () => Promise<Response>, endpoint = "userinfo") {
@@ -82,6 +92,105 @@ function respond(failure: () => Promise<Response>, endpoint = "userinfo") {
         });
     });
 }
+
+it("routes a fresh Installation to setup before owner discovery or credentials", async () => {
+    host.stage = "installation";
+    host.token = undefined;
+    const failure = await load(event).catch((cause: unknown) => cause);
+    expect(isRedirect(failure)).toBe(true);
+    expect(failure).toMatchObject({
+        status: 302,
+        location: "/setup/installation",
+    });
+    expect(host.invoke.mock.calls).toEqual([["get_setup_stage"]]);
+    expect(host.clientId).not.toHaveBeenCalled();
+    expect(fetchApi).not.toHaveBeenCalled();
+    expect(host.clear).not.toHaveBeenCalled();
+    expect(host.returnTo).not.toHaveBeenCalled();
+    expect(startupRequests).toEqual([]);
+    expect(startupCommands).toEqual([]);
+});
+
+it.each([
+    ["device", "/setup/device"],
+    ["unavailable", "/setup/installation"],
+])(
+    "routes %s to its existing setup UI without owner requests or session denial",
+    async (stage, location) => {
+        host.stage = stage;
+        const failure = await load(event).catch((cause: unknown) => cause);
+        expect(isRedirect(failure)).toBe(true);
+        expect(failure).toMatchObject({ status: 302, location });
+        expect(host.invoke.mock.calls).toEqual([["get_setup_stage"]]);
+        expect(host.clientId).not.toHaveBeenCalled();
+        expect(fetchApi).not.toHaveBeenCalled();
+        expect(host.token?.access_token).toBe("session");
+        expect(host.clear).not.toHaveBeenCalled();
+        expect(host.returnTo).not.toHaveBeenCalled();
+        expect(host.goto).not.toHaveBeenCalled();
+    },
+);
+
+it("fails closed with explicit retry when setup IPC fails or returns an unknown stage", async () => {
+    for (const stageError of [new Error("IPC unavailable"), undefined]) {
+        host.stageError = stageError;
+        host.stage = "unknown";
+        const failure = await load(event).catch((cause: unknown) => cause);
+        expect(isHttpError(failure, 503)).toBe(true);
+        expect(failure).toMatchObject({
+            body: { message: expect.stringContaining("Retry") },
+        });
+    }
+    expect(host.clientId).not.toHaveBeenCalled();
+    expect(fetchApi).not.toHaveBeenCalled();
+    expect(host.token?.access_token).toBe("session");
+    expect(host.clear).not.toHaveBeenCalled();
+    expect(host.returnTo).not.toHaveBeenCalled();
+});
+
+it("rechecks local readiness on retry and admits a completed offline Node only after owner verification", async () => {
+    host.stage = "unavailable";
+    expect(await load(event).catch((cause: unknown) => cause)).toMatchObject({
+        location: "/setup/installation",
+    });
+    host.stage = "ready";
+    respond(async () => Response.json({ sub: "local-user", name: "Local User" }));
+    await expect(load(event)).resolves.toMatchObject({
+        userInfo: { sub: "local-user" },
+    });
+    expect(host.invoke.mock.calls.slice(0, 2)).toEqual([
+        ["get_setup_stage"],
+        ["get_setup_stage"],
+    ]);
+    expect(host.clientId).toHaveBeenCalledOnce();
+    expect(
+        fetchApi.mock.calls.every(([url]) =>
+            String(url).startsWith("https://node.test/"),
+        ),
+    ).toBe(true);
+    expect(fetchApi).toHaveBeenCalledWith(
+        "https://node.test/idp/oauth2/token",
+        expect.anything(),
+    );
+    expect(fetchApi).toHaveBeenCalledWith(
+        "https://node.test/idp/userinfo",
+        expect.anything(),
+    );
+    expect(host.clear).not.toHaveBeenCalled();
+});
+
+it("presents the existing unavailable setup UI with explicit local-service retry", async () => {
+    const { default: InstallationSetup } =
+        await import("../setup/installation/+page.svelte");
+    const { body } = render(InstallationSetup, {
+        props: { data: { stage: "unavailable" } },
+    });
+    expect(body).toContain("local services are");
+    expect(body).toContain("Retry local services");
+    expect(body).not.toContain("Create local Node");
+    expect(body).not.toContain("Sign in");
+    expect(fetchApi).not.toHaveBeenCalled();
+});
 
 it("preserves the session during local owner unavailability and verifies it on retry", async () => {
     respond(async () => new Response(null, { status: 503 }));
@@ -229,6 +338,7 @@ it("rechecks authorization after an outage instead of trusting the preserved ses
 });
 
 it("retains the missing-bearer and other-Installation denial guards", async () => {
+    fetchApi.mockResolvedValue(new Response(null, { status: 200 }));
     for (const token of [
         undefined,
         { access_token: "session", iss: "https://other.test" },
@@ -239,7 +349,9 @@ it("retains the missing-bearer and other-Installation denial guards", async () =
         ).toBe(true);
         expect(host.token).toBeUndefined();
     }
-    expect(fetchApi).not.toHaveBeenCalled();
+    expect(
+        fetchApi.mock.calls.every(([url]) => String(url).endsWith("/idp/health")),
+    ).toBe(true);
 });
 
 it("also preserves web sessions during owner unavailability", async () => {
