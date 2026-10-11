@@ -1070,41 +1070,6 @@ mod tests {
                 "{method} {path}: {denied}"
             );
         }
-        let bootstrap_request =
-            serde_json::to_string(&idp_model::contract::SetupBootstrapRequest {
-                device_name: "unauthorized-replica".into(),
-                endpoint_id: secondary_endpoint_id.clone(),
-                endpoint_addr: serde_json::to_string(&iroh::EndpointAddr::new(
-                    secondary_endpoint_id
-                        .parse()
-                        .expect("valid joining endpoint ID"),
-                ))
-                .expect("encode joining endpoint address"),
-            })
-            .expect("encode bootstrap request");
-        let devices_before = devices
-            .list()
-            .await
-            .expect("read device state before denied enrollment");
-        let bootstrap_denied = loopback_http_request(
-            address,
-            "POST",
-            "/setup/bootstrap",
-            "application/json",
-            &bootstrap_request,
-            Some(&user_access_token),
-        );
-        assert!(
-            bootstrap_denied.starts_with("HTTP/1.1 403"),
-            "{bootstrap_denied}"
-        );
-        assert_eq!(
-            devices_before,
-            devices
-                .list()
-                .await
-                .expect("read device state after denied enrollment"),
-        );
         assert!(
             clients
                 .find_client_by_client_id("live-refresh-client")

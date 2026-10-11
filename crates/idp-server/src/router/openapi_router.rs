@@ -48,7 +48,6 @@ use super::routes::oauth2::register::{
 use super::routes::oauth2::revoke::{__path_revoke, revoke};
 use super::routes::oauth2::sessions::{__path_sessions_logout, sessions_logout};
 use super::routes::oauth2::token::{__path_token, token};
-use super::routes::setup::{__path_register_bootstrap, register_bootstrap};
 
 use super::routes::userinfo::{__path_userinfo, userinfo};
 use super::routes::version::{__path_version, version};
@@ -60,7 +59,6 @@ use super::routes::well_known::{
 #[openapi(
     paths(
         super::routes::oauth2::introspect::introspect,
-        super::routes::setup::register_bootstrap,
         super::routes::replica_signers::enroll_replica_signer,
         super::routes::replica_signers::rotate_replica_signer,
         super::routes::replica_signers::revoke_replica_signer,
@@ -98,7 +96,6 @@ pub fn openapi_router(router_state: RouterState, prefix: &str) -> OpenApiRouter 
             .routes(routes!(list_client_keys))
             .routes(routes!(rotate_client_key))
             .routes(routes!(revoke_client_keys))
-            .routes(routes!(register_bootstrap))
             .routes(routes!(device))
             .routes(routes!(revoke_self))
             .routes(routes!(trusted_devices))
@@ -185,11 +182,22 @@ mod tests {
     use super::ApiDoc;
 
     #[test]
-    fn documents_setup_and_excludes_storage_routes() {
+    fn excludes_obsolete_bootstrap_and_keeps_idp_signer_routes() {
         let document = ApiDoc::openapi();
-        for path in ["/setup/bootstrap", "/replica-signers"] {
-            assert!(document.paths.paths.contains_key(path), "missing {path}");
-        }
+        assert!(!document.paths.paths.contains_key("/setup/bootstrap"));
+        let enrollment = document
+            .paths
+            .paths
+            .get("/replica-signers")
+            .expect("IdP must publish signer enrollment");
+        assert!(enrollment.post.is_some());
+        let membership = document
+            .paths
+            .paths
+            .get("/replica-signers/{member_id}")
+            .expect("IdP must publish signer membership operations");
+        assert!(membership.put.is_some());
+        assert!(membership.delete.is_some());
         assert!(
             document
                 .paths

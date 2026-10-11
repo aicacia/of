@@ -22,7 +22,6 @@ const expectedApis = {
         SuperRoutesOauth2IntrospectApi: "introspect",
         SuperRoutesReplicaSignersApi:
             "enrollReplicaSigner revokeReplicaSigner rotateReplicaSigner",
-        SuperRoutesSetupApi: "registerBootstrap",
     },
     management: {
         DefaultApi:

@@ -49,12 +49,6 @@ mod response_mode;
 mod response_type;
 mod revocation_request;
 mod service_scopes;
-mod setup_bootstrap_registration;
-mod setup_bootstrap_request;
-mod setup_join_request;
-mod setup_join_status;
-mod setup_new_request;
-mod setup_residency;
 mod setup_stage;
 mod setup_status;
 mod sex;
@@ -129,12 +123,6 @@ pub use revocation_request::RevocationRequest;
 pub use service_scopes::{
     IDP_DEVICE_LIST_SCOPE, IDP_DEVICE_LOOKUP_SCOPE, IDP_TOKEN_VALIDATE_SCOPE,
 };
-pub use setup_bootstrap_registration::SetupBootstrapRegistration;
-pub use setup_bootstrap_request::SetupBootstrapRequest;
-pub use setup_join_request::SetupJoinRequest;
-pub use setup_join_status::{SetupJoinState, SetupJoinStatus};
-pub use setup_new_request::SetupNewRequest;
-pub use setup_residency::{SetupDeviceRequest, SetupDeviceStatus, SetupResidency};
 pub use setup_stage::SetupStage;
 pub use setup_status::SetupStatus;
 pub use sex::Sex;

@@ -6,7 +6,6 @@ pub(crate) mod health;
 pub(crate) mod replica_signers;
 
 pub(crate) mod oauth2;
-pub(crate) mod setup;
 
 pub(crate) mod userinfo;
 pub(crate) mod version;
