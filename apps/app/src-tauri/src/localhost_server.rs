@@ -410,6 +410,19 @@ pub fn start_unified_localhost_server(
 }
 
 #[cfg(test)]
+pub(crate) async fn prepare_test_tls(data_dir: &Path) -> reqwest::Certificate {
+    fs::create_dir_all(data_dir).expect("isolated TLS directory");
+    let (ca, _) = load_or_create_ca(data_dir).await.expect("fixture CA key");
+    let (pem, _) = ensure_ca_certificate_pem(data_dir, &ca)
+        .await
+        .expect("fixture CA certificate");
+    load_or_create_server_cert(data_dir, &ca)
+        .await
+        .expect("fixture server certificate");
+    reqwest::Certificate::from_pem(pem.as_bytes()).expect("explicit fixture trust")
+}
+
+#[cfg(test)]
 mod tests {
     use std::fs;
 
