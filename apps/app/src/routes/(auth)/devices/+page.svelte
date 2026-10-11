@@ -21,8 +21,11 @@
     let nodeAccepting = $state(false);
     let nodeError = $state<string | null>(null);
     let nodeBusy = $state(false);
+    let nodeLoading = false;
 
     async function loadNodeOffers() {
+        if (nodeLoading) return;
+        nodeLoading = true;
         try {
             const [offers, accepting] = await Promise.all([
                 pendingNodeJoins(),
@@ -33,6 +36,8 @@
             nodeError = null;
         } catch (cause) {
             nodeError = String(cause);
+        } finally {
+            nodeLoading = false;
         }
     }
 
@@ -90,6 +95,7 @@
     }
 
     async function loadDevices() {
+        if (loading) return;
         loading = true;
         error = null;
         try {
@@ -163,6 +169,7 @@
         void loadDevices();
         void loadNodeOffers();
         const timer = setInterval(() => {
+            if (nodeBusy) return;
             void loadDevices();
             void loadNodeOffers();
         }, 5000);

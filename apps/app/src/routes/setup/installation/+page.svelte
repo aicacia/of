@@ -4,6 +4,7 @@
     import { goto } from "$app/navigation";
     import { resolve } from "$app/paths";
     import { getOidcClient } from "$lib/common/state/oidc.svelte";
+    import { resetDevice } from "$lib/common/state/setupClient.svelte";
 
     let { data }: { data: { stage: string } } = $props();
     type Intent = {
@@ -167,8 +168,7 @@
         busy = true;
         error = "";
         try {
-            getOidcClient().clearStoredTokenResponse();
-            await invoke("reset_device");
+            await resetDevice();
         } catch (cause) {
             error = String(cause);
         } finally {

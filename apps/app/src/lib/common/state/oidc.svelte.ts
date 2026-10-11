@@ -5,6 +5,7 @@ import icon256x256Png from "$lib/assets/icon256x256.png";
 import { getIdpApiUrl } from "./idpClient.svelte";
 
 let desktopClientId = $state<string | undefined>(undefined);
+let storedClient: OidcClient | undefined;
 const CLIENT_ID = $derived(isTauri() ? desktopClientId : "idp-web");
 
 export async function ensureOidcClientId(): Promise<string> {
@@ -51,5 +52,26 @@ const oidcClient = $derived.by(
 );
 
 export function getOidcClient() {
-  return oidcClient;
+  storedClient = oidcClient;
+  return storedClient;
+}
+
+export function clearOidcSession(): void {
+  storedClient?.clearStoredTokenResponse();
+  if (isTauri()) {
+    desktopClientId = undefined;
+    if (typeof window === "undefined") return;
+    const storage = window.localStorage;
+    for (let index = storage.length - 1; index >= 0; index--) {
+      const key = storage.key(index);
+      if (key?.startsWith("oidc.token:") || key?.startsWith("oidc.pkce:")) {
+        storage.removeItem(key);
+      }
+    }
+  } else if (!storedClient && typeof window !== "undefined") {
+    const authority = getIdpApiUrl()?.replace(/\/$/, "");
+    if (authority) {
+      window.localStorage.removeItem(`oidc.token:${authority}:response`);
+    }
+  }
 }

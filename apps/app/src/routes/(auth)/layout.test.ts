@@ -51,11 +51,11 @@ vi.mock("$lib/common/state/oidc.svelte", () => ({
     ensureOidcClientId: host.clientId,
     getOidcClient: () => ({
         getStoredTokenResponse: () => host.token,
-        clearStoredTokenResponse: () => {
-            host.clear();
-            host.token = undefined;
-        },
     }),
+    clearOidcSession: () => {
+        host.clear();
+        host.token = undefined;
+    },
 }));
 
 // Host/session storage is substituted; setup, localhost discovery and owner clients are real.

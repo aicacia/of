@@ -1,4 +1,10 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { clearOidcSession } from "./oidc.svelte";
+
+export async function resetDevice(): Promise<void> {
+  clearOidcSession();
+  await invoke("reset_device");
+}
 
 export type SetupStage = "installation" | "device" | "ready" | "unavailable";
 

@@ -6,6 +6,9 @@ export default defineConfig({
   plugins: [sveltekit()],
   resolve: {
     alias: {
+      "@aicacia/oidc-client": fileURLToPath(
+        new URL("../../packages/oidc-client/src/index.ts", import.meta.url),
+      ),
       "@aicacia/idp-client": fileURLToPath(
         new URL("../../packages/idp-client/src/index.ts", import.meta.url),
       ),
@@ -25,6 +28,7 @@ export default defineConfig({
   },
   test: {
     include: [
+      "src/lib/common/state/setupClient.test.ts",
       "src/routes/(auth)/layout.test.ts",
       "src/routes/setup/installation/page.test.ts",
     ],

@@ -9,6 +9,7 @@ import {
 } from "$lib/common/state/idpClient.svelte";
 import { ensureTauriManagementApiUrl } from "$lib/common/state/managementClient.svelte";
 import {
+    clearOidcSession,
     ensureOidcClientId,
     getOidcClient,
 } from "$lib/common/state/oidc.svelte";
@@ -53,7 +54,7 @@ export const load = (async (event) => {
         !token?.access_token ||
         (isTauri() && token.iss && token.iss !== installation?.issuer)
     ) {
-        oidcClient.clearStoredTokenResponse();
+        clearOidcSession();
         afterSigninRedirect.setURL(event.url);
         redirect(302, resolve("/signin"));
     }
@@ -76,7 +77,7 @@ export const load = (async (event) => {
                 status === 403 ||
                 body?.error === "invalid_grant"
             ) {
-                oidcClient.clearStoredTokenResponse();
+                clearOidcSession();
                 afterSigninRedirect.setURL(event.url);
                 redirect(302, resolve("/signin"));
             }
