@@ -210,3 +210,116 @@ git --no-optional-locks status --short --branch
 ```
 
 Delivery results are recorded by amendment of this additional fix commit (not the prior caller checkpoint), followed by another integration-tip merge/status check. No generated source, built output, shim or cache change is staged.
+
+## Packaging review follow-up: isolated exported-package qualification
+
+The previous 66-test source-alias result did not establish that normal package exports were current. User approved source but required a Storage package build and normal **unaliased** consumer qualification, while explicitly deferring built-output commits to protect overlapping root dirty files. Complexity low (existing package workflow and an alias-free test config); risk publishing stale exports or overwriting user artifacts; priority packaging closure blocker.
+
+### Merge and build boundary
+
+```sh
+# cwd worktree root, initially clean at 86178f5
+GIT_EDITOR=true git -c core.hooksPath=/dev/null -c maintenance.auto=false merge --no-edit offline-first-ticket06-clients
+# Merge commit 64eee5c, other parent dcdf8e9e81daec6660d559f303af48fd262935d5.
+# Clean merge, no conflicts; generated clients and owner evidence imported, not hand-edited.
+```
+
+Worktree root `node_modules` was created as a real directory, with only `node_modules/.pnpm` linked to the existing installed root store. No full root `node_modules` symlink was used. Storage package, `esm`, `types` and `browser` were verified to be real worktree-local paths before building. Existing package-local `.bin` tools resolve installed modules from that store. The package scripts are:
+
+- `clean`: `shx rm -rf esm browser types tsconfig.tsbuildinfo` (relative to the isolated Storage package only).
+- `build:esm`: `tsc --project tsconfig.json` (all non-test package source, including fresh generated source; declaration/maps enabled).
+- `build:browser`: `rolldown -c` (existing `src/index.ts` entry → `browser/index.js`).
+
+```sh
+# cwd packages/storage-client
+pnpm run build
+# exit 0: clean, full package tsc and Rolldown succeeded; browser bundle 17.72 kB, Rolldown 81.81ms.
+```
+
+**Constraint deviation, not hidden:** pnpm 12.4.1 unexpectedly performed automatic workspace dependency setup before running `build`, including package prepare and app Svelte sync hooks, and reported `+ @openapitools/openapi-generator-cli 2.41.0`. No explicit install command was issued, but this still breached the requested no-install constraint. Returned output did not show download lines; that is not proof of zero network activity. This setup refreshed six worktree Storage shims and worktree dependency/ignored metadata. The shared installed-store link means cache metadata effects are not claimed absent. Root's original tracked dirty Storage output/shim bytes remained unchanged, verified repeatedly by the identical diff hash below.
+
+Restored only those six self-created **worktree** shim changes with an explicit `git restore -- packages/storage-client/node_modules/.bin/biome packages/storage-client/node_modules/.bin/rolldown packages/storage-client/node_modules/.bin/shx packages/storage-client/node_modules/.bin/tsc packages/storage-client/node_modules/.bin/tsserver packages/storage-client/node_modules/.bin/vitest`. No root restore/clean/build occurred. Subsequent build/test commands used direct existing worktree executables, not pnpm script execution or dependency setup:
+
+```sh
+# cwd packages/storage-client
+node_modules/.bin/tsc --project tsconfig.json && node_modules/.bin/rolldown -c
+# exit 0; package-wide TypeScript build plus browser build passed, Rolldown 31.12ms.
+```
+
+### Normal exported package and real caller tests
+
+Added `apps/app/vitest.package.config.ts`: only SvelteKit test transformation plus the existing password-manager public-boundary test include. **No resolve aliases**, including no Storage source alias. The real password-manager workspace dependency link resolves to this worktree's `packages/storage-client`; package exports then select `esm/index.js`.
+
+The first config attempt could not resolve `vitest/config` because the app does not declare Vitest. A worktree-local `node_modules/vitest` symlink to `../packages/storage-client/node_modules/vitest` exposed the already installed tool; no further install. Then:
+
+```sh
+# cwd apps/app
+../../packages/storage-client/node_modules/.bin/vitest run --no-cache --config vitest.package.config.ts
+# 1 file, 5 passed, 0 failed/skipped; final run 249ms.
+```
+
+These are the actual password-manager `listFileSystems`/`createFileSystem`/`openStorageSocket` exports using the **built package**, not fake Storage classes. Fetch/WebSocket boundaries are intercepted; current User-token provider is mocked, so this is not a whole-app authentication or live-server test. Assertions cover the complete token-exchange body/resource/read or write detail, configured `/idp/oauth2/token`, independent Storage catalog and socket URLs, selected filesystem and missing configuration. Old built options/audience-only logic would not satisfy these assertions.
+
+Additional direct Node package/declaration qualification, cwd worktree root:
+
+```sh
+node --input-type=module -e 'import assert from "node:assert/strict"; import { createRequire } from "node:module"; import { resolve } from "node:path"; import { pathToFileURL } from "node:url"; import { readFileSync } from "node:fs"; const require = createRequire(pathToFileURL(resolve("apps/password-manager/package.json"))); const entry = require.resolve("@aicacia/storage-client"); assert.equal(entry, resolve("packages/storage-client/esm/index.js")); const api = await import(pathToFileURL(entry)); assert.equal(typeof api.StorageClient, "function"); assert.equal(typeof api.ResourcesResidencyApi, "function"); const manifest = require("@aicacia/storage-client/package.json"); assert.equal(manifest.exports["."].types, "./types/index.d.ts"); const types = readFileSync(resolve("packages/storage-client/types/index.d.ts"), "utf8"); assert.match(types, /idpBaseUrl: URL \| string/); assert.match(types, /storageBaseUrl: URL \| string/); assert.doesNotMatch(types, /audience: string/); console.log("Unaliased password-manager package entry:", entry); console.log("Built runtime exports and declared current service-base options: PASS");'
+# PASS, entry /home/nathan/code/rust/aicacia/of/.worktrees/ticket06-callers/packages/storage-client/esm/index.js.
+```
+
+Supplemental old source-alias auth-suite rerun after workspace setup/merge:
+
+```sh
+# cwd apps/app
+../../packages/storage-client/node_modules/.bin/vitest run --no-cache --config vitest.auth.config.ts
+# 55 passed / 11 failed, 6 files, 1.56s.
+# All 11 setupClient tests fail resolving the unbuilt worktree @aicacia/native-fetch package entry.
+# Remaining 55, including all password-manager and owner-client tests, passed.
+```
+
+This does not supersede that dependency failure with the historical 66-pass result. No unrelated native-fetch build, alias patch, whole-password-manager Vite build, Cargo/native execution or GUI was attempted. No generated API source was edited to make package compilation succeed. Historical generated-bootstrap/pagination findings above remain evidence of the initial state; fresh generated-client branch evidence is now merged, with no new pagination patch by this agent.
+
+### Built output inspection and distribution disposition
+
+`git ls-files` shows these five artifacts are already versioned despite package `.gitignore` ignoring `/esm`, `/types`, `/browser`:
+
+| Worktree output                                | Diff (+/-) | SHA-256 after isolated build                                       |
+| ---------------------------------------------- | ---------- | ------------------------------------------------------------------ |
+| `packages/storage-client/browser/index.js`     | 388/14     | `f3e4f75f7237456fb8fd9cb1dc9bead9c2a5cf62bd5e503e1a05a5408fdd1fb9` |
+| `packages/storage-client/esm/index.js`         | 16/10      | `a0e3764c5b9bc0ef1a5f9c2e5a88a4bcf6f48435f567e389bffb4eca91d5f9bc` |
+| `packages/storage-client/esm/index.js.map`     | 1/1        | `e8d24d49a85af834610c5e3b31bd7c51aa46516cc5095d794e21e96b3e39dbf5` |
+| `packages/storage-client/types/index.d.ts`     | 6/3        | `a6a0c6cc485bff9da11902a3d40fc646c3363dbb9bf105d0ff648f33b68470b7` |
+| `packages/storage-client/types/index.d.ts.map` | 1/1        | `d11ebb1f3408e9c4c2a8d3799db4173663315afbe820a7933bfd19c76801df56` |
+
+Inspected JS/declaration diffs confirm new service-base options, exact resource exchange, prefix-preserving URLs and flat socket requests; JS and declarations also reexport compiled generated Residency/runtime code. Build produced **30 ignored files under `esm/generated` and 30 under `types/generated`**, required by those reexports. The browser output bundles the current generated dependencies; no hand-edit of any built file.
+
+**Decision:** isolated build plus alias-free real-caller/Node checks is adequate qualification that the exported package can be built and consumed correctly. It is **not adequate distribution state for a checkout that runs Vite without rebuilding packages**. This repo currently versions five outputs, but committing only their updated bytes would still omit the ignored compiled generated dependency trees. Package distribution must ship the complete build output or enforce package building before normal consumers run. Root script `packages:build` already provides a package-build workflow, but no app-build precondition was established by this review. Coordinator must choose complete-artifact publication/commit versus a verified build-before-consume policy, reconciling the root user's dirty files first. Per explicit instruction, **none of these built outputs is staged or committed**; all five remain intentionally dirty in this isolated worktree, and ignored generated output trees/metadata are retained for inspection. Root is neither rebuilt nor claimed correct.
+
+### Preservation and delivery
+
+Read-only root command before/after merge/build/tests:
+
+```sh
+# cwd root of (not worktree)
+git --no-optional-locks status --short packages/storage-client
+git --no-pager diff --binary -- packages/storage-client | sha256sum
+# Same ten dirty output/shim paths and hash:
+# 667afe03e6a9a7e0e3a4b277b1e1f6ea08082e845cba9591bf7d8b3e03cefe9e
+```
+
+Only the alias-free test configuration and this exact packaging evidence were staged and committed; merge `64eee5c` carries the separately owned client generation. Worktree shims restored, built outputs intentionally left unstaged. Ticket 04 remains incomplete and parent owns closure/integration/distribution reconciliation. The no-install constraint deviation and supplemental dependency failure remain explicit, not counted as successful acceptance.
+
+```sh
+# cwd worktree root
+git add apps/app/vitest.package.config.ts
+git add -f .scratch/offline-first-nodes/evidence/06-callers.md
+git --no-pager diff --cached --check
+# Passed; staged stat contains only evidence and the 9-line alias-free config.
+GIT_EDITOR=true git -c core.hooksPath=/dev/null -c maintenance.auto=false commit -m "Qualify built Storage package through unaliased password-manager imports"
+GIT_EDITOR=true git -c core.hooksPath=/dev/null -c maintenance.auto=false merge --no-edit offline-first-nodes-integration
+# Tip 2e67ed5; Already up to date.
+git --no-optional-locks status --short --branch
+# Only the five explicitly deferred Storage built output files remain modified.
+```
+
+Delivery results recorded by amendment of the packaging evidence commit, not by staging any built artifact; integration-tip merge/status is checked again after amendment.
