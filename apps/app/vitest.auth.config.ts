@@ -18,6 +18,9 @@ export default defineConfig({
           import.meta.url,
         ),
       ),
+      "@aicacia/storage-client": fileURLToPath(
+        new URL("../../packages/storage-client/src/index.ts", import.meta.url),
+      ),
       "@aicacia/svelte-headless": fileURLToPath(
         new URL(
           "../../packages/svelte-headless/src/lib/state/storage.svelte.ts",
@@ -33,6 +36,7 @@ export default defineConfig({
       "src/lib/common/state/ownerClients.test.ts",
       "src/routes/(auth)/layout.test.ts",
       "src/routes/setup/installation/page.test.ts",
+      "../password-manager/src/lib/common/storageSocket.test.ts",
     ],
   },
 });

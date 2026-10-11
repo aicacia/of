@@ -1,7 +1,7 @@
-export { Configuration as StorageOwnerConfiguration } from "./generated/runtime.js";
 export { ResourcesResidencyApi } from "./generated/apis/ResourcesResidencyApi.js";
 export { ResidencyMode } from "./generated/models/ResidencyMode.js";
 export type { ResourceResidency } from "./generated/models/ResourceResidency.js";
+export { Configuration as StorageOwnerConfiguration } from "./generated/runtime.js";
 
 export type StorageRequest =
     | { type: "read"; path: string }
@@ -38,8 +38,8 @@ type FetchFunction = (
 ) => Promise<Response>;
 
 export type StorageClientOptions = {
-    baseUrl: URL | string;
-    audience: string;
+    idpBaseUrl: URL | string;
+    storageBaseUrl: URL | string;
     clientId: string;
     bearerToken: () => string | Promise<string>;
     fetch?: FetchFunction;
@@ -53,7 +53,7 @@ export class StorageSocket {
     request(request: StorageRequest): Promise<StorageResponse> {
         const response = this.#queue.then(async () => {
             const next = receive(this.socket);
-            this.socket.send(JSON.stringify({ type: "request", request }));
+            this.socket.send(JSON.stringify(request));
             return next;
         });
         this.#queue = response.then(
@@ -73,7 +73,7 @@ export class StorageClient {
 
     async listFileSystems(): Promise<FileSystemResource[]> {
         const token = await this.exchangeToken(["read"]);
-        const response = await this.request("/storage/filesystems", token);
+        const response = await this.request("/filesystems", token);
         if (!response.ok) {
             throw new Error(`Filesystem list failed: ${response.status}`);
         }
@@ -82,7 +82,7 @@ export class StorageClient {
 
     async createFileSystem(name?: string): Promise<FileSystemResource> {
         const token = await this.exchangeToken(["write"]);
-        const response = await this.request("/storage/filesystems", token, {
+        const response = await this.request("/filesystems", token, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: name ?? null }),
@@ -97,9 +97,8 @@ export class StorageClient {
         if (!filesystemId) {
             throw new Error("Select a filesystem before opening storage");
         }
-        const baseUrl = parseUrl(this.options.baseUrl);
+        const url = parseUrl(this.options.storageBaseUrl);
         const token = await this.exchangeToken(["read", "write"]);
-        const url = new URL("/storage", baseUrl);
         url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
         url.searchParams.set("access_token", token);
         url.searchParams.set("filesystem_id", filesystemId);
@@ -108,7 +107,9 @@ export class StorageClient {
         return new StorageSocket(socket);
     }
 
-    private async exchangeToken(actions: string[]): Promise<string> {
+    private async exchangeToken(
+        actions: ("read" | "write")[],
+    ): Promise<string> {
         const subjectToken = await this.options.bearerToken();
         if (!subjectToken) {
             throw new Error("Missing OIDC access token");
@@ -117,14 +118,14 @@ export class StorageClient {
             grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
             subject_token: subjectToken,
             subject_token_type: "urn:ietf:params:oauth:token-type:access_token",
-            audience: this.options.audience,
+            resource: "storage:filesystems",
             client_id: this.options.clientId,
             authorization_details: JSON.stringify([
                 { type: "storage", actions },
             ]),
         });
         const response = await (this.options.fetch ?? fetch)(
-            new URL("/oauth2/token", parseUrl(this.options.baseUrl)),
+            parseUrl(this.options.idpBaseUrl, "/oauth2/token"),
             {
                 method: "POST",
                 headers: {
@@ -151,7 +152,7 @@ export class StorageClient {
         init: RequestInit = {},
     ): Promise<Response> {
         return (this.options.fetch ?? fetch)(
-            new URL(path, parseUrl(this.options.baseUrl)),
+            parseUrl(this.options.storageBaseUrl, path),
             {
                 ...init,
                 headers: { ...init.headers, Authorization: `Bearer ${token}` },
@@ -160,11 +161,17 @@ export class StorageClient {
     }
 }
 
-function parseUrl(value: URL | string): URL {
+function parseUrl(value: URL | string, path = ""): URL {
     const url = new URL(value);
     if (url.protocol !== "http:" && url.protocol !== "https:") {
-        throw new Error("LIDP API URL must use HTTP or HTTPS");
+        throw new Error("Service base URL must use HTTP or HTTPS");
     }
+    if (url.username || url.password || url.search || url.hash) {
+        throw new Error(
+            "Service base URL must not contain credentials, query or fragment",
+        );
+    }
+    url.pathname = url.pathname.replace(/\/+$/, "") + path;
     return url;
 }
 

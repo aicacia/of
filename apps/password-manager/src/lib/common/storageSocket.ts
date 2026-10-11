@@ -20,9 +20,13 @@ export type {
 };
 
 function client(): StorageClient {
+    const idpBaseUrl = getIdpApiUrl();
+    if (!idpBaseUrl) throw new Error("LIDP API URL is not configured");
+    const storageBaseUrl = env.PUBLIC_STORAGE_BASE_URL;
+    if (!storageBaseUrl) throw new Error("Storage API URL is not configured");
     return new StorageClient({
-        baseUrl: storageEndpoint(),
-        audience: env.PUBLIC_STORAGE_AUDIENCE || storageEndpoint().origin,
+        idpBaseUrl,
+        storageBaseUrl,
         clientId: "password-manager-web",
         bearerToken: () => getOidcClient().getAccessToken(),
     });
@@ -40,20 +44,4 @@ export function openStorageSocket(
     filesystemId: string,
 ): Promise<StorageSocket> {
     return client().openSocket(filesystemId);
-}
-
-function storageEndpoint(): URL {
-    const configuredUrl = getIdpApiUrl();
-    if (!configuredUrl) {
-        throw new Error("LIDP API URL is not configured");
-    }
-    return parseUrl(configuredUrl);
-}
-
-function parseUrl(value: string): URL {
-    const url = new URL(value);
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-        throw new Error("LIDP API URL must use HTTP or HTTPS");
-    }
-    return url;
 }
