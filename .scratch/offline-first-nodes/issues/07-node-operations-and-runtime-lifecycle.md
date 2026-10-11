@@ -1,8 +1,8 @@
 # 07 Node operations, secure credentials, and runtime lifecycle
 
-Status: ready-for-agent
+Status: claimed
 Type: task
-Work status: open
+Work status: claimed
 Blocked by: 01, 02, 04
 
 ## What to build
@@ -27,8 +27,13 @@ Assess complexity/risk/priority. Record exact deployment/lifecycle/rotation/back
 
 ## Comments
 
-Retains old 07, 16, 17 and operational parts of 04. [Current operations requirements](../../../docs/operations.md), [map](../map.md).
+2026-10-11 — **Scoped 07 work resumed under the recorded user deferral of 04; not resolved.** Reviewed deployment commit `d45fec2` fast-forwarded into `offline-first-nodes-integration`. The root `idp-unified` already forwards the full unified host; its name was not an IdP-only defect. The image recipe now targets the explicit unified CLI with GNU/D-Bus runtime prerequisites, non-root existing-only serving, sibling source layout and build-context exclusions. Independent and merger runs of `python3 -B scripts/test_container.py` pass all three static checks. Image builds, actual filtering/linkage, unattended provider, TLS and restart remain unqualified. [Exact deployment evidence](../evidence/07-deployment.md), [current operations boundary](../../../docs/operations.md#container-deployment-recipe-not-image-qualified).
 
+Shared-runtime lifecycle changes and regression assertions are preserved **uncommitted/unmerged** in `.worktrees/node07-lifecycle` on `offline-first-node07-lifecycle`, based on `fc74d95`. Static review found no concrete blocker, but three single-job offline compilation attempts under **4 GiB / zero swap / 240-second** limits timed out; the latter two reached `unified_server(test)`. No changed-source test ran, no OOM was reported, and no cap/timer/authentication increase was made. Cached baseline passes do not qualify these changes. [Exact commands, timeouts and preserved-source disposition](../evidence/07-lifecycle.md). Owner mesh work remains detached without a public join API; no universal all-task shutdown claim is made. This worktree must not be removed as finished or merged before qualification. The clean integrated deployment worktree is retired.
+
+All nine acceptance checkboxes stay unchecked. 04 remains incomplete; 08 and the owner trackers are unchanged. No full Cargo hack/CRAP, native retries, Docker builds, credential resets, cross-repository writes, pushes or main merge were performed for this slice. The ten pre-existing root Storage outputs/shims are preserved byte-exact.
+
+Retains old 07, 16, 17 and operational parts of 04. [Current operations requirements](../../../docs/operations.md), [map](../map.md).
 
 2026-10-10 — **Explicit local CLI provisioning prerequisite independently reviewed and integrated at `ec14858b30f7af7ddc2b33050e8753982bcf688c`; 07 remains open, formally blocked by04.** Delivery `397255681` consumes `99cc078f`/`2ba2a22`/`9c8d1e2`; [exact independent gate/root merge](../evidence/07-local-provisioning/merger-397255681-merged.md), [current frontier](../evidence/current-frontier.md). Supersedes historical owner-blocked/running/not-delivered and no-merge dispositions only for this prerequisite slice, not full operations acceptance.
 

@@ -2,7 +2,14 @@
 
 ## Notes
 
-### Current checkpoint — 2026-10-11, delivered history consolidated into local main
+### Current checkpoint — 2026-10-11, bounded 07 deployment delivery
+
+- Reviewed `d45fec2` is integrated on `offline-first-nodes-integration`; local main remains at cleanup checkpoint `fc74d95`, not pushed. 07 is claimed/incomplete under the previously recorded 04 deferral; formal dependencies and acceptance checkboxes remain unchanged. 01/02/03/05/06 retain scoped resolution; 04 remains incomplete and 08 open.
+- Full unified container recipe and operations templates now explicitly separate secure-store/TLS/network prerequisites from actual qualification. Three static contract tests pass independently and after merge. No built image or unattended provider success is claimed. [Deployment evidence](evidence/07-deployment.md), [07 comment](issues/07-node-operations-and-runtime-lifecycle.md#comments).
+- Runtime lifecycle source/regression changes are preserved uncommitted and unmerged in `.worktrees/node07-lifecycle`. Three 4 GiB / zero-swap / 240-second build attempts timed out; no changed-source tests ran. [Exact limits and remaining gaps](evidence/07-lifecycle.md). Do not count cached baseline checks as qualification or remove that worktree as finished. The clean integrated deployment worktree is retired; older unfinished worktrees, profiles, stashes and root Storage dirt are preserved.
+- No full Cargo hack/CRAP, GUI retries, image builds, provider resets, cross-repository writes, push or main merge. Next action is bounded changed-source lifecycle qualification, followed by remaining 07 lifecycle/platform/rotation/recovery acceptance, not 08 acceptance.
+
+### Historical checkpoint — 2026-10-11, delivered history consolidated into local main
 
 - User-authorized cross-repository cleanup: delivered of history through`29d6b3b`, ofdb`d6ccbb0`, offs`dd86c58` and unchanged ofnet`85632a9` consolidated into local main, not pushed. Current tracker and cleanup receipts committed selectively. [Exact cleanup/disposition](../worktree-cleanup/2026-10-11/README.md).
 - Removed19completed auxiliary worktrees across repos;4of unfinished worktrees/branches and all stashes remain. Unique review evidence and generated-output snapshots copied/hash-verified; shared targets/privateprofiles/rootuserdirt preserved. Of scratch14folders consolidated to3; [cold archive mapping](../archive/2026-10-11/README.md) preserves historical content and then-current plain paths.

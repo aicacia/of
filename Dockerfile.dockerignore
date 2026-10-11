@@ -1,0 +1,27 @@
+# This Dockerfile uses the workspace parent, not of/, as its context.
+**
+!of/
+!of/**
+!ofdb/
+!ofdb/**
+!offs/
+!offs/**
+!ofnet/
+!ofnet/**
+
+**/.git
+**/.worktrees
+**/.scratch
+**/target
+**/node_modules
+**/__pycache__
+**/.svelte-kit
+**/.env*
+**/.cargo/config.toml
+**/data
+**/unified-data
+**/protected-initial-password
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx

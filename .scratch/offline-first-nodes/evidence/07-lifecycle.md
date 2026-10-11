@@ -2,7 +2,7 @@
 
 Date: 2026-10-11. Branch: `offline-first-node07-lifecycle`.
 Base/integration tip: `fc74d950b4a8f64ebd806c7422982bbc89d3a6d7`.
-Current disposition: **resumed qualification passed on unchanged source: exact lifecycle regression plus membership and two provisioning controls, 4 passed / 0 failed. Ready for own-slice commit and integration of 8b1eb55; ticket 07 remains open, partial lifecycle acceptance only.**
+Current disposition: **resumed qualification passed on unchanged source: exact lifecycle regression plus membership and two provisioning controls, 4 passed / 0 failed. Own slice committed as 2bd2661 and integration 8b1eb55 reconciled; ticket 07 remains open, partial lifecycle acceptance only.**
 
 The three earlier 240-second failures and their then-current stop decisions are
 preserved below. Their incomplete disposition was superseded only by the later
@@ -390,3 +390,27 @@ TLS/port matrix, pairing isolation, full existing-connection revocation matrix,
 and recovery remain unqualified. Exactly-once endpoint close is supported by the
 normal host ownership/owner-router path, not instrumented as a universal fault
 or crash guarantee. Ticket 07 is not resolved by this slice.
+
+## Delivery merge record
+
+Own tested source/evidence commit:
+`2bd2661ee6f601d4733978198113750132d643f7` (`Fix shared Node runtime lifecycle ownership`).
+Requested integration parent:
+`8b1eb55c6c203bb2c789ccd171127595f4d9bf1c`.
+Command `GIT_EDITOR=true git merge --no-ff --no-commit 8b1eb55` produced the
+expected add/add conflict only in this evidence. The incoming evidence was
+verified equal to the previously captured complete three-timeout chronology;
+retaining the full latest local record preserves all of it plus the resumed
+successful build and current-artifact control results. No incoming deployment,
+operations, map, or ticket changes were rewritten by this slice.
+
+Conflict resolution restores the latest local evidence and adds this merge
+record. Runtime source was verified byte-identical to own tested commit and
+SHA-256 `d2f90e723a9916f4ffd7f7263e50050127bbda78428860db0a050b276a2f2253`.
+Integration adds no Rust/Cargo delta, so the current-artifact qualification still
+applies to the final merged runtime source without another build or broader
+qualification. Final format/diff checks are recorded by the delivery command;
+merge is committed with both parents. No root or older-worktree files were edited.
+The merge commit itself identifies the final delivery tip; ticket 07 remains open
+and this is only partial shared-runtime lifecycle qualification, not universal
+owner detached-task/crash/desktop/deployment acceptance.

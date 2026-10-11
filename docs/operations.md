@@ -6,7 +6,7 @@ These are current operational requirements for the confirmed [offline-first Node
 
 Production setup, purpose-bound pairing/bootstrap, retained independent signers and local public-readiness checks are present. Ticket 04 remains incomplete: displaying a join offer is not verified authorized GUI approval, joining-Node completion or two-profile offline restart. The [native checkpoint](../.scratch/offline-first-nodes/evidence/04-native-acceptance/checkpoint.md) preserves exactly what was observed. Do not use listener/status probes, receipts, mode acknowledgements or historical passing fixtures as substitutes for current readiness. See [API contracts](api.md#setup-join-and-readiness) and [security boundaries](security.md).
 
-The [ticket-06 audit](../.scratch/offline-first-nodes/evidence/06-audit.md) checks current contracts/artifacts without qualifying deployment. Docker's retained `idp-unified` defaults and `/app/config.yaml` launch expectation need ticket-07 owner review; deleting old YAML did not make that image a working unified Node. No Docker deployment change is made by the audit.
+The [ticket-06 audit](../.scratch/offline-first-nodes/evidence/06-audit.md) checks current contracts/artifacts without qualifying deployment. The bounded [deployment slice](../.scratch/offline-first-nodes/evidence/07-deployment.md) updates the image recipe and statically checks its launch/build-context contract; it does not qualify a built image, unattended keyring, TLS deployment or restart.
 
 ## Client configuration and distribution
 
@@ -51,6 +51,45 @@ Management initialization is durably marked attempted before calling the initial
 A completed journal is historical evidence, not an authorization lease or sufficient current readiness. Startup verifies retained endpoint/signing capability, exact captured relationships and current local trust/context grants before serving. Failed or ambiguous first-write/store/readback attempts stay incomplete; missing attempted material requires exact recovery rather than regeneration. An interruption before a durable owner operation has actually begun can also conservatively require recovery once the host attempt is consumed. Retained owner-captured pre-enrollment signer material can be verified and reused even if its public return was not yet acknowledged in the host journal; the verifier supplies the exact owner-captured proof, not a new identity. No automatic reset or recovery command is supplied by this slice.
 
 Focused tests cover the public local provisioning seam, actual host listener/background startup and shutdown, four ordinary authenticated Client token requests, explicit initial-User permission evaluation, scope/application/actor denial, exact interruption retry and offline reopen, pre-enrollment post-store readback failure, missing attempted signer/endpoint refusal, absent-journal explicitly provisioned startup/reopen and present-intent denial, lost Management after late bind failure and lost initialized Storage, unacknowledged Management/Storage denial, genuinely never-started Management initialization, protected input and lost/corrupt intent. Credential-store tests use the existing narrow mock provider with real local databases and filesystem; they do not qualify unattended real OS keyrings, universal crash boundaries, Windows, native GUI, images, backup/recovery, or all ticket-07 lifecycle criteria.
+
+## Container deployment recipe (not image-qualified)
+
+The root `idp-unified` binary already forwards to `unified_server::run`; its historical name does **not** mean IdP-only behavior. The Dockerfile now builds the explicit `unified-server` binary with `cli`, composing IdP, Management and Storage. It uses native GNU/Linux build/runtime stages rather than a musl/scratch image: the default Linux private-key provider is D-Bus Secret Service, with `libdbus-1-dev`/`pkg-config` at build time and `libdbus-1-3` plus CA certificates at runtime. No Cargo-chef default-feature cook, cross-compilation target fallback, automatic provisioning, plaintext key store or `headless` kernel-keyring override is supplied. Availability of the Rust 1.99 image tag/toolchain and a successful locked build remain unverified.
+
+**Build context:** stage clean, revision-matched source trees named `of`, `ofdb`, `offs` and `ofnet` in one directory. The relative owner paths must resolve as siblings inside the builder. Do not use `of/` alone or the parent of a nested auxiliary worktree as the context. From that staged parent, after checking disk/memory capacity, the prospective build command is:
+
+```sh
+df -h .
+docker build -f of/Dockerfile -t of-node:local .
+```
+
+This command was **not run** for this slice. `of/Dockerfile.dockerignore` takes precedence over a context-root ignore file and allowlists those four trees while excluding nested Git/worktree/tracker state, target directories, node modules, dotenv files, conventional local data/password/key paths and machine Cargo config. Repository-local `of/.dockerignore` alone does not protect a workspace-parent context. Keep all other operator state and secrets outside source trees; these exclusions are not a general secret scanner. Retain source manifests, lockfiles, build scripts and the workspace member source trees; selected-package builds still parse workspace manifests. Static regression checks run without Cargo/Docker:
+
+```sh
+python3 -B of/scripts/test_container.py
+```
+
+**Network/TLS:** the public CLI and runtime reject non-loopback listeners, including `serve --host 0.0.0.0`. Neither `EXPOSE` nor bridge `-p` forwarding makes the container's `127.0.0.1:3000` reachable. For a Linux host deployment, use `--network host` with the configured stable loopback port and a separately managed host TLS reverse proxy to `http://127.0.0.1:3000`. Alternatively, a proxy can share the Node's network namespace; an ordinary bridge-network proxy cannot reach its loopback. Do not publish plaintext HTTP or claim Docker Desktop host-network/platform equivalence. The proxy must route `/idp`, `/management` and `/storage` without stripping or duplicating prefixes, use a verified certificate and explicit client CA trust, and keep Canonical Issuer/public Application URIs stable. Host networking also shares Iroh networking; firewall/admission and real peer connectivity still need qualification. No proxy image, certificate automation or health probe is presented as readiness evidence.
+
+**State/config/credentials:** the image runs as numeric UID/GID `65532:65532` by default. Override with the deployment's dedicated operator UID/GID when required for protected state and its existing Secret Service session. Precreate only the persistent parent (`/app/data` mount target), owned by that identity with `0700`, leaving fresh context and endpoint roots absent. Edit an operator-owned copy of `config/unified/example.yaml` (never populated repository source) with four distinct Client UUIDs, stable public URIs/issuer/audiences and loopback port. Relative `./data/unified/...` roots resolve under `/app`; persist the **entire** `/app/data` parent, including `endpoint.provisioning`, as well as the secure provider's own retained state. Bind the config read-only at `/app/config.yaml`. Do not share these stores with another Node or silently change identity on recreation.
+
+Supply the four documented `UNIFIED_*_CLIENT_SECRET` environment variables via the deployment's secure injection, not image layers, committed files or argv values. The CLI has no generic secret-file reference option: mounting a Docker secret alone does not populate these variables. Environment injection exposes secrets to sufficiently privileged host/container inspection; it is not an encrypted store for private signers. A conventional Docker volume is not a replacement for the OS provider.
+
+D-Bus libraries do **not** start or unlock Secret Service. Arrange an authenticated, accessible, unlocked, persistent provider for the same operator identity; pass its `DBUS_SESSION_BUS_ADDRESS` and bind its Unix socket at the corresponding path. Authorize only this dedicated identity; do not mount a whole runtime directory, widen socket permissions, run privileged, disable provider protections, or assume a root/anonymous session works. A host session bus may grant access beyond this application's secrets: assess that exposure before use. Session availability across logout, daemon/container restart and offline host restart is untested. Without verified unattended provider access this image is not a qualified unattended Node; failure must remain explicit. Kernel-keyring `headless` behavior is not a durable-secret substitute and was not enabled.
+
+After the above prerequisites are established, the CLI invocation shape for an **existing completed** Node is below. `node-credentials` is the protected delivery file for the four secret environment variables (or names inheriting already injected values), not raw values in this command; `node-provider` contains the session bus address. Replace the mount sources and UID/GID with actual protected deployment paths/identity, and add the exact provider socket bind described above before executing:
+
+```sh
+docker run --rm --network host --user 65532:65532 \
+  --env-file /secure/node-credentials --env-file /secure/node-provider \
+  --mount type=bind,src=/secure/node-config.yaml,dst=/app/config.yaml,readonly \
+  --mount type=bind,src=/secure/node-data,dst=/app/data \
+  of-node:local
+```
+
+These are operator templates, **not executed or acceptance-tested commands**. Protect any environment-delivery files with owner-only permissions and keep them outside source/build context. The entrypoint is `/app/run`; default arguments are `-c /app/config.yaml serve`. To authorize a fresh local Installation, append `-c /app/config.yaml provision --fresh --administrator operator --node "Local Node" --password-file /run/initial-password` and mount an existing `0600` password file read-only at that path. Preserve exactly the same config, four secrets, provider identity/state, roots and password input on retry; exact continuation appends `-c /app/config.yaml provision --password-file /run/initial-password` (no `--fresh`). Provision exits; subsequently run the default existing-only server. No image command joins a peer, rotates credentials, resets or restores a Node.
+
+Actual builds, dependency linkage, TLS/proxy routing, Iroh reachability, secure-store persistence, offline process/container restart and current-format same-Node backup/recovery remain ticket-07 acceptance gaps. Static checks prove recipe assertions and declared path layout only, not Docker's actual context filtering or runtime success. Do not treat this bounded deployment slice as completion of ticket07.
 
 ## Trust, partitions and revocation
 
