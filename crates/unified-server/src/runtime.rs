@@ -184,188 +184,199 @@ impl UnifiedRuntime {
         let cancellation_token = CancellationToken::new();
         let endpoint =
             Arc::new(UnifiedEndpoint::open(&config.endpoint_data_dir, &config.idp).await?);
-        let server = endpoint.server().clone();
-        let pending_joins = Mutex::new(PendingNodeJoins {
-            receiver: server.subscribe_pairing_offers(),
-            offers: BTreeMap::new(),
-            answered: Vec::new(),
-        });
+        let mut pending_storage = None;
+        let result: io::Result<Self> = async {
+            let server = endpoint.server().clone();
+            let pending_joins = Mutex::new(PendingNodeJoins {
+                receiver: server.subscribe_pairing_offers(),
+                offers: BTreeMap::new(),
+                answered: Vec::new(),
+            });
 
-        let management_engine =
-            open_service_engine(&config.management.data_dir, "management.redb")?;
-        management_service::replica::up(&management_engine)
+            let management_engine =
+                open_service_engine(&config.management.data_dir, "management.redb")?;
+            management_service::replica::up(&management_engine)
+                .await
+                .map_err(io::Error::other)?;
+            let local_permissions = LocalPermissions::new(Arc::clone(&management_engine));
+            let idp_engine = open_service_engine(&config.idp.data_dir, "idp.redb")?;
+            let mut idp_config = config.idp;
+            idp_config.server.prefix = Some(IDP_PREFIX.to_owned());
+            idp_config.control_plane_uri = None;
+            let idp_runtime = Arc::new(
+                build_idp_runtime(
+                    &idp_config,
+                    Arc::clone(&idp_engine),
+                    Arc::new(endpoint.identity()?),
+                    server.clone(),
+                    Some(local_permissions),
+                )
+                .await?,
+            );
+
+            let idp_api_base = format!("{api_base}{IDP_PREFIX}/");
+            let management_api_base = format!("{api_base}{MANAGEMENT_PREFIX}/");
+            let storage_api_base = format!("{api_base}{STORAGE_PREFIX}/");
+            let management_control_plane = build_control_plane(
+                &config.management_idp_client,
+                &idp_api_base,
+                &storage_api_base,
+                &idp_config.oauth2.issuer,
+            )?;
+            let management_control_plane = Arc::new(match config.idp_management_client.as_ref() {
+                Some(credentials) => management_control_plane
+                    .with_permission_evaluator(&credentials.client_id)
+                    .map_err(invalid_config)?,
+                None => management_control_plane,
+            });
+
+            let mut management_config = config.management;
+            management_config.server.prefix = Some(MANAGEMENT_PREFIX.to_owned());
+            let management_router = management_server::build_router(
+                Arc::clone(&management_engine),
+                &management_config.api_public_uri,
+                MANAGEMENT_PREFIX,
+                &management_config.storage_audience,
+                management_control_plane,
+            )
             .await
             .map_err(io::Error::other)?;
-        let local_permissions = LocalPermissions::new(Arc::clone(&management_engine));
-        let idp_engine = open_service_engine(&config.idp.data_dir, "idp.redb")?;
-        let mut idp_config = config.idp;
-        idp_config.server.prefix = Some(IDP_PREFIX.to_owned());
-        idp_config.control_plane_uri = None;
-        let idp_runtime = Arc::new(
-            build_idp_runtime(
-                &idp_config,
-                Arc::clone(&idp_engine),
-                Arc::new(endpoint.identity()?),
-                server.clone(),
-                Some(local_permissions),
+
+            let mut storage_config = config.storage;
+            storage_config.server.prefix = Some(STORAGE_PREFIX.to_owned());
+            storage_config.idp_api_base_uri = idp_api_base.clone();
+            storage_config.idp_issuer_uri = idp_config.oauth2.issuer.clone();
+            storage_config.idp_oauth_client_id = Some(config.storage_idp_client.client_id.clone());
+            storage_config.idp_oauth_client_secret =
+                Some(config.storage_idp_client.client_secret.clone());
+            storage_config.idp_service_audience = Some(config.storage_idp_client.audience.clone());
+            storage_config.management_api_base_uri = management_api_base;
+            storage_config.management_oauth_client_id =
+                Some(config.storage_management_client.client_id.clone());
+            storage_config.management_oauth_client_secret =
+                Some(config.storage_management_client.client_secret.clone());
+            storage_config.management_service_audience =
+                Some(config.storage_management_client.audience.clone());
+
+            let idp_client = IdpClient::new(
+                &storage_config.idp_api_base_uri,
+                storage_config
+                    .idp_oauth_client_id
+                    .as_deref()
+                    .expect("unified Storage IdP client ID was set"),
+                storage_config
+                    .idp_oauth_client_secret
+                    .as_deref()
+                    .expect("unified Storage IdP client secret was set"),
+                &storage_config.idp_issuer_uri,
+                storage_config
+                    .idp_service_audience
+                    .as_deref()
+                    .expect("unified Storage IdP audience was set"),
             )
-            .await?,
-        );
-
-        let idp_api_base = format!("{api_base}{IDP_PREFIX}/");
-        let management_api_base = format!("{api_base}{MANAGEMENT_PREFIX}/");
-        let storage_api_base = format!("{api_base}{STORAGE_PREFIX}/");
-        let management_control_plane = build_control_plane(
-            &config.management_idp_client,
-            &idp_api_base,
-            &storage_api_base,
-            &idp_config.oauth2.issuer,
-        )?;
-        let management_control_plane = Arc::new(match config.idp_management_client.as_ref() {
-            Some(credentials) => management_control_plane
-                .with_permission_evaluator(&credentials.client_id)
-                .map_err(invalid_config)?,
-            None => management_control_plane,
-        });
-
-        let mut management_config = config.management;
-        management_config.server.prefix = Some(MANAGEMENT_PREFIX.to_owned());
-        let management_router = management_server::build_router(
-            Arc::clone(&management_engine),
-            &management_config.api_public_uri,
-            MANAGEMENT_PREFIX,
-            &management_config.storage_audience,
-            management_control_plane,
-        )
-        .await
-        .map_err(io::Error::other)?;
-
-        let mut storage_config = config.storage;
-        storage_config.server.prefix = Some(STORAGE_PREFIX.to_owned());
-        storage_config.idp_api_base_uri = idp_api_base.clone();
-        storage_config.idp_issuer_uri = idp_config.oauth2.issuer.clone();
-        storage_config.idp_oauth_client_id = Some(config.storage_idp_client.client_id.clone());
-        storage_config.idp_oauth_client_secret =
-            Some(config.storage_idp_client.client_secret.clone());
-        storage_config.idp_service_audience = Some(config.storage_idp_client.audience.clone());
-        storage_config.management_api_base_uri = management_api_base;
-        storage_config.management_oauth_client_id =
-            Some(config.storage_management_client.client_id.clone());
-        storage_config.management_oauth_client_secret =
-            Some(config.storage_management_client.client_secret.clone());
-        storage_config.management_service_audience =
-            Some(config.storage_management_client.audience.clone());
-
-        let idp_client = IdpClient::new(
-            &storage_config.idp_api_base_uri,
-            storage_config
-                .idp_oauth_client_id
-                .as_deref()
-                .expect("unified Storage IdP client ID was set"),
-            storage_config
-                .idp_oauth_client_secret
-                .as_deref()
-                .expect("unified Storage IdP client secret was set"),
-            &storage_config.idp_issuer_uri,
-            storage_config
-                .idp_service_audience
-                .as_deref()
-                .expect("unified Storage IdP audience was set"),
-        )
-        .map_err(invalid_config)?;
-        let management_client = ManagementClient::new(
-            &storage_config.management_api_base_uri,
-            &storage_config.idp_api_base_uri,
-            storage_config
-                .management_oauth_client_id
-                .as_deref()
-                .expect("unified Storage Management client ID was set"),
-            storage_config
-                .management_oauth_client_secret
-                .as_deref()
-                .expect("unified Storage Management client secret was set"),
-            &storage_config.idp_issuer_uri,
-            storage_config
-                .management_service_audience
-                .as_deref()
-                .expect("unified Storage Management audience was set"),
-        )
-        .map_err(invalid_config)?;
-        let copies = Arc::new(OnceLock::new());
-        let authorizer = owner_replication_authorizer(
-            Arc::clone(&idp_runtime),
-            Arc::clone(&management_engine),
-            server.endpoint().id(),
-            Arc::clone(&copies),
-        );
-        let management_client = management_client.with_local_replication_authorizer(authorizer);
-        let storage_state = StorageRouterState::new(&storage_config.api_public_uri)
-            .with_idp_client(idp_client)
-            .with_management_client(management_client);
-        let storage_runtime = build_storage_runtime(
-            storage_state,
-            Path::new(&storage_config.data_dir),
-            STORAGE_PREFIX,
-            "",
-            Some(server.clone()),
-            cancellation_token.clone(),
-        )?;
-
-        copies
-            .set(
-                storage_runtime
-                    .copy_retirement()
-                    .ok_or_else(|| io::Error::other("local Storage retirement is unavailable"))?,
+            .map_err(invalid_config)?;
+            let management_client = ManagementClient::new(
+                &storage_config.management_api_base_uri,
+                &storage_config.idp_api_base_uri,
+                storage_config
+                    .management_oauth_client_id
+                    .as_deref()
+                    .expect("unified Storage Management client ID was set"),
+                storage_config
+                    .management_oauth_client_secret
+                    .as_deref()
+                    .expect("unified Storage Management client secret was set"),
+                &storage_config.idp_issuer_uri,
+                storage_config
+                    .management_service_audience
+                    .as_deref()
+                    .expect("unified Storage Management audience was set"),
             )
-            .map_err(|_| io::Error::other("Storage retirement was already initialized"))?;
-
-        let owner = OwnerProvisioner::from_database(&idp_config, Arc::clone(&idp_engine))?;
-        let security_protocol = SecurityProtocol::new(
-            server.clone(),
-            idp_engine,
-            Arc::clone(&management_engine),
-            idp_config.oauth2.issuer.clone(),
-            idp_config.oauth2.local_signer.clone(),
-            Path::new(&config.endpoint_data_dir).join("security-sync-staging"),
-            cancellation_token.clone(),
-        );
-        endpoint.refresh_approved_peers(&idp_runtime).await?;
-        let protocol_router =
-            compose_protocol_router(&server, &storage_runtime, &security_protocol).ok_or_else(
-                || {
-                    io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "Storage replication handler is unavailable in unified mode",
-                    )
-                },
+            .map_err(invalid_config)?;
+            let copies = Arc::new(OnceLock::new());
+            let authorizer = owner_replication_authorizer(
+                Arc::clone(&idp_runtime),
+                Arc::clone(&management_engine),
+                server.endpoint().id(),
+                Arc::clone(&copies),
+            );
+            let management_client = management_client.with_local_replication_authorizer(authorizer);
+            let storage_state = StorageRouterState::new(&storage_config.api_public_uri)
+                .with_idp_client(idp_client)
+                .with_management_client(management_client);
+            let storage_runtime = build_storage_runtime(
+                storage_state,
+                Path::new(&storage_config.data_dir),
+                STORAGE_PREFIX,
+                "",
+                Some(server.clone()),
+                cancellation_token.clone(),
             )?;
-        let router = compose_router(
-            idp_runtime.router(),
-            management_router,
-            storage_runtime.router(),
-        )
-        .layer(CorsLayer::very_permissive().allow_private_network(true))
-        .layer(TraceLayer::new_for_http())
-        .layer(CompressionLayer::new().gzip(idp_config.server.gzip));
-        Ok(Self {
-            listener: Some(listener),
-            listener_addr,
-            router,
-            endpoint,
-            idp_runtime,
-            api_base,
-            protocol_router: Some(protocol_router),
-            storage_runtime: Some(storage_runtime),
-            cancellation_token,
-            peer_refresh: None,
-            security_protocol,
-            owner,
-            pending_joins,
-            installation: idp_config.oauth2.issuer.clone(),
-            _managed_copies: copies,
-            #[cfg(test)]
-            management_fixture: management_engine,
-        })
+
+            pending_storage = Some(storage_runtime);
+            let storage_runtime = pending_storage.as_ref().expect("Storage was just built");
+            copies
+                .set(
+                    storage_runtime.copy_retirement().ok_or_else(|| {
+                        io::Error::other("local Storage retirement is unavailable")
+                    })?,
+                )
+                .map_err(|_| io::Error::other("Storage retirement was already initialized"))?;
+
+            let owner = OwnerProvisioner::from_database(&idp_config, Arc::clone(&idp_engine))?;
+            let security_protocol = SecurityProtocol::new(
+                server.clone(),
+                idp_engine,
+                Arc::clone(&management_engine),
+                idp_config.oauth2.issuer.clone(),
+                idp_config.oauth2.local_signer.clone(),
+                Path::new(&config.endpoint_data_dir).join("security-sync-staging"),
+                cancellation_token.clone(),
+            );
+            endpoint.refresh_approved_peers(&idp_runtime).await?;
+            if storage_runtime.data_handler().is_none() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Storage replication handler is unavailable in unified mode",
+                ));
+            }
+            let router = compose_router(
+                idp_runtime.router(),
+                management_router,
+                storage_runtime.router(),
+            )
+            .layer(CorsLayer::very_permissive().allow_private_network(true))
+            .layer(TraceLayer::new_for_http())
+            .layer(CompressionLayer::new().gzip(idp_config.server.gzip));
+            Ok(Self {
+                listener: Some(listener),
+                listener_addr,
+                router,
+                endpoint: Arc::clone(&endpoint),
+                idp_runtime,
+                api_base,
+                protocol_router: None,
+                storage_runtime: pending_storage.take(),
+                cancellation_token: cancellation_token.clone(),
+                peer_refresh: None,
+                security_protocol,
+                owner,
+                pending_joins,
+                installation: idp_config.oauth2.issuer.clone(),
+                _managed_copies: copies,
+                #[cfg(test)]
+                management_fixture: management_engine,
+            })
+        }
+        .await;
+        if result.is_err() {
+            cancellation_token.cancel();
+            if let Some(storage_runtime) = pending_storage.take() {
+                let _ = storage_runtime.shutdown().await;
+            }
+            endpoint.close().await;
+        }
+        result
     }
 
     pub async fn node_public_ready(&self) -> io::Result<bool> {
@@ -529,20 +540,50 @@ impl UnifiedRuntime {
     }
 
     pub async fn start_background_tasks(&mut self) -> io::Result<()> {
+        if self.cancellation_token.is_cancelled() {
+            return Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "unified background startup was cancelled",
+            ));
+        }
         if self.peer_refresh.is_some() {
             return Ok(());
+        }
+        if !self.node_public_ready().await? {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "current local Node readiness is required before background startup",
+            ));
         }
         if let Err(error) = self
             .endpoint
             .refresh_approved_peers(&self.idp_runtime)
             .await
         {
-            log::warn!("initial unified Iroh peer refresh failed: {error}");
             self.endpoint.refresh_admission([]);
+            return Err(error);
         }
-        if let Some(storage_runtime) = self.storage_runtime.as_mut() {
-            storage_runtime.start_background_tasks();
+        if self.cancellation_token.is_cancelled() {
+            return Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "unified background startup was cancelled",
+            ));
         }
+        let storage_runtime = self
+            .storage_runtime
+            .as_mut()
+            .ok_or_else(|| io::Error::other("unified Storage runtime is unavailable"))?;
+        self.protocol_router = Some(
+            compose_protocol_router(
+                self.endpoint.server(),
+                storage_runtime,
+                &self.security_protocol,
+            )
+            .ok_or_else(|| {
+                io::Error::other("unified Storage replication handler is unavailable")
+            })?,
+        );
+        storage_runtime.start_background_tasks();
         self.peer_refresh = Some(spawn_peer_refresh(
             Arc::clone(&self.endpoint),
             Arc::clone(&self.idp_runtime),
@@ -552,7 +593,13 @@ impl UnifiedRuntime {
     }
 
     pub async fn serve(mut self) -> io::Result<()> {
-        let listener = self.take_listener()?;
+        let listener = match self.take_listener() {
+            Ok(listener) => listener,
+            Err(error) => {
+                let _ = self.shutdown().await;
+                return Err(error);
+            }
+        };
         let serve_task = tokio::spawn(serve_listener(
             self.router.clone(),
             listener,
@@ -564,7 +611,12 @@ impl UnifiedRuntime {
             let _ = self.shutdown().await;
             return Err(error);
         }
-        self.start_background_tasks().await?;
+        if let Err(error) = self.start_background_tasks().await {
+            self.cancellation_token.cancel();
+            let _ = serve_task.await;
+            let _ = self.shutdown().await;
+            return Err(error);
+        }
 
         let serve_result = match serve_task.await {
             Ok(result) => result,
@@ -590,8 +642,13 @@ impl UnifiedRuntime {
         {
             shutdown_error.get_or_insert(error);
         }
-        self.protocol_router.take();
-        self.endpoint.close().await;
+        if let Some(protocol_router) = self.protocol_router.take() {
+            if let Err(error) = protocol_router.shutdown().await {
+                shutdown_error.get_or_insert_with(|| io::Error::other(error));
+            }
+        } else {
+            self.endpoint.close().await;
+        }
         match shutdown_error {
             Some(error) => Err(error),
             None => Ok(()),
@@ -1237,6 +1294,32 @@ mod tests {
         }
         endpoint.close().await;
 
+        let mut early_runtime = UnifiedRuntime::build(config.clone())
+            .await
+            .expect("build runtime for taken-listener cleanup");
+        let early_listener = early_runtime
+            .take_listener()
+            .expect("take host listener once");
+        assert!(
+            early_runtime.protocol_router.is_none(),
+            "building must not start the owner router or its mesh background work"
+        );
+        let early_endpoint = early_runtime.endpoint.server().endpoint().clone();
+        assert_eq!(
+            early_runtime
+                .serve()
+                .await
+                .expect_err("taken listener refuses serve")
+                .kind(),
+            std::io::ErrorKind::AlreadyExists
+        );
+        assert!(
+            early_endpoint.is_closed(),
+            "early serve error must close its shared endpoint"
+        );
+        drop(early_endpoint);
+        drop(early_listener);
+
         let listener = TcpListener::bind(config.listen_addr)
             .await
             .expect("bind host-owned unified listener");
@@ -1303,6 +1386,41 @@ mod tests {
             .expect("call normal Management route");
         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
 
+        let policy = runtime.management_fixture.clone();
+        let service = management_service::ManagementService::new(
+            management_service::replica::DbPermissionRepo::new(policy.clone()),
+            management_service::replica::DbRoleRepo::new(policy),
+        );
+        let (role_id, permission_id) = public_context_grant.expect("exact context grant");
+        service
+            .remove_permission_from_role(
+                idp_model::contract::INSTALLATION_POLICY_ID,
+                role_id,
+                permission_id,
+            )
+            .await
+            .expect("remove local readiness grant before background startup");
+        assert!(
+            runtime.start_background_tasks().await.is_err(),
+            "background startup must refuse incomplete current local readiness"
+        );
+        assert!(
+            runtime.endpoint.server().peers().contains(approved_peer_id),
+            "local context denial must not erase independently trusted peer admission"
+        );
+        assert!(
+            runtime.protocol_router.is_none(),
+            "denied startup must not start mesh work"
+        );
+        service
+            .add_permission_to_role(
+                idp_model::contract::INSTALLATION_POLICY_ID,
+                role_id,
+                permission_id,
+            )
+            .await
+            .expect("restore local readiness grant");
+
         let cancellation_token = runtime.cancellation_token();
         let server_address = runtime.local_addr();
         let serve_task = tokio::spawn(api::serve_listener(
@@ -1314,6 +1432,15 @@ mod tests {
             .start_background_tasks()
             .await
             .expect("start composed runtime tasks");
+        let protocol_router = runtime
+            .protocol_router
+            .as_ref()
+            .expect("one host protocol router")
+            .clone();
+        runtime
+            .start_background_tasks()
+            .await
+            .expect("repeated background startup is idempotent");
         let client = reqwest::Client::new();
         for (path, expected_server) in [
             ("/idp/openapi.json", "https://idp.example/idp"),
@@ -1707,12 +1834,25 @@ mod tests {
                 .expect("live restored grant readiness")
         );
 
+        let shared_endpoint = runtime.endpoint.server().endpoint().clone();
         cancellation_token.cancel();
+        assert!(
+            runtime.start_background_tasks().await.is_err(),
+            "cancelled runtime must refuse background restart even after initial startup"
+        );
         serve_task
             .await
             .expect("join unified server")
             .expect("serve and stop unified runtime");
         runtime.shutdown().await.expect("close shared runtime");
+        assert!(
+            protocol_router.is_shutdown(),
+            "shutdown must join the router even with another handle alive"
+        );
+        assert!(
+            shared_endpoint.is_closed(),
+            "shared endpoint must be closed before shutdown returns"
+        );
         let restored_endpoint =
             crate::UnifiedEndpoint::open(&root.join("endpoint"), &persisted_idp_config)
                 .await
