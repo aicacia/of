@@ -4,6 +4,9 @@
 mod cli;
 mod config;
 mod endpoint;
+mod local_provisioning;
+#[cfg(all(test, unix))]
+mod local_provisioning_tests;
 #[cfg(test)]
 mod native_api_tests;
 #[cfg(test)]
@@ -25,6 +28,7 @@ mod security_sync_tests;
 pub use cli::run;
 pub use config::{ServiceClientCredentials, UnifiedConfig};
 pub use endpoint::UnifiedEndpoint;
+pub use local_provisioning::LocalProvisioner;
 pub use protocol::compose_protocol_router;
 pub use router::compose_router;
 pub use runtime::UnifiedRuntime;

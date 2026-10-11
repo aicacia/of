@@ -165,7 +165,7 @@ impl UnifiedRuntime {
     /// identities, call `UnifiedEndpoint::open_fresh` once, and complete the owner's exact
     /// secret inventory before initial private production. Retries use existing opening;
     /// missing endpoint keys or preparation evidence require recovery, not fresh fallback.
-    /// The unified CLI/config currently provides no such fresh provisioning operation.
+    /// The unified CLI uses `LocalProvisioner` for this explicit local boundary.
     pub async fn build_on_listener(
         config: UnifiedConfig,
         listener: TcpListener,
@@ -599,7 +599,7 @@ impl UnifiedRuntime {
     }
 }
 
-fn validate_config(config: &UnifiedConfig) -> io::Result<()> {
+pub(crate) fn validate_config(config: &UnifiedConfig) -> io::Result<()> {
     let idp_service_audience = config
         .idp
         .service_audience
