@@ -14,12 +14,14 @@ function wait(delayMs: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
-async function isLocalhostServerReady(baseUrl: string): Promise<boolean> {
+async function isLocalhostListenerAvailable(baseUrl: string): Promise<boolean> {
   for (const path of ["/idp/health", "/lidp/setup/status"]) {
     try {
       const response = await fetch(`${baseUrl}${path}`);
       if (response.ok) {
-        return true;
+        if (path === "/idp/health") return true;
+        const status = await response.json();
+        return status?.stage === "installation";
       }
     } catch {
       continue;
@@ -46,7 +48,7 @@ export async function loadLocalhostBaseUrl(): Promise<string | null> {
       try {
         const baseUrl = await invoke<string>("get_localhost_server_base_url");
         const normalized = baseUrl?.trim() ?? "";
-        if (normalized && (await isLocalhostServerReady(normalized))) {
+        if (normalized && (await isLocalhostListenerAvailable(normalized))) {
           localhostBaseUrl.item = normalized;
           return normalized;
         }

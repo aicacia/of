@@ -123,6 +123,25 @@ it("propagates a real native reset failure and permits an explicit retry", async
   expect(fetchApi).not.toHaveBeenCalled();
 });
 
+it.each(["installation", "device", "ready", "unavailable"])(
+  "obtains durable native setup stage %s independently of HTTP listener availability",
+  async (stage) => {
+    host.invoke.mockResolvedValue(stage);
+    const { getSetupStage } = await import("./setupClient.svelte");
+    expect(await getSetupStage()).toBe(stage);
+    expect(host.invoke.mock.calls).toEqual([["get_setup_stage"]]);
+    expect(fetchApi).not.toHaveBeenCalled();
+  },
+);
+
+it("does not manufacture readiness when native setup evidence is unavailable", async () => {
+  const failure = new Error("setup manifest is invalid");
+  host.invoke.mockRejectedValue(failure);
+  const { getSetupStage } = await import("./setupClient.svelte");
+  await expect(getSetupStage()).rejects.toBe(failure);
+  expect(fetchApi).not.toHaveBeenCalled();
+});
+
 it("does not swallow native persistent session clearing failures", async () => {
   const failure = new Error("Session storage unavailable");
   vi.stubGlobal("window", {

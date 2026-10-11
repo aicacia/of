@@ -29,6 +29,8 @@ export default defineConfig({
   test: {
     include: [
       "src/lib/common/state/setupClient.test.ts",
+      "src/lib/common/state/localhostBaseUrl.test.ts",
+      "src/lib/common/state/ownerClients.test.ts",
       "src/routes/(auth)/layout.test.ts",
       "src/routes/setup/installation/page.test.ts",
     ],
