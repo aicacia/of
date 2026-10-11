@@ -2,7 +2,14 @@
 
 ## Notes
 
-### Current checkpoint — 2026-10-11, bounded 07 deployment delivery
+### Current checkpoint — 2026-10-11, qualified 07 lifecycle and rotation slices
+
+- Integration `9a9e44f` contains reviewed lifecycle `2bd2661`/`a3edacd` and completed-host credential rotation `8f50fd3`/secret-safe test follow-up `9a9e44f`. Local main remains `fc74d95`; no push. 07 remains claimed/incomplete under recorded 04 deferral; dependencies/checklists unchanged. 01/02/03/05/06 resolved within scope; 04 incomplete; 08 open.
+- Four changed-source lifecycle checks pass after one longer bounded build; three earlier cutoff failures remain recorded. Background readiness/admission independence, cleanup, retained-router shutdown, offline membership/learned revocation and provisioning/reopen are qualified only at the documented seams. [Lifecycle evidence](evidence/07-lifecycle.md).
+- Actual authorized same-ID Storage→IdP rotation and completed startup/retry now pass without rewriting the journal or replaying provisioning. Old credentials, config-only replacement/widened metadata and deleted registration deny; incomplete continuation remains exact. Seven final controls and rebuilt secret-safe assertion regression pass. Independent security review found no production blocker; serial metadata checks do not promise atomic concurrent snapshots. [Rotation evidence](evidence/evidence07-rotation.md), [07 status](issues/07-node-operations-and-runtime-lifecycle.md#comments).
+- Retire only clean integrated lifecycle/rotation worktrees; preserve older unfinished worktrees, profiles, shared targets/stashes and root Storage dirt. Remaining07: desktop/process/TLS/platform/unattended provider, image builds/restart, all owner detached-task joins, peer propagation/interrupted multi-consumer rollout and same-Node recovery. No full Cargo hack/CRAP, GUI/image/provider retry, cross-repository writes, push or main merge.
+
+### Historical checkpoint — 2026-10-11, bounded 07 deployment delivery
 
 - Reviewed `d45fec2` is integrated on `offline-first-nodes-integration`; local main remains at cleanup checkpoint `fc74d95`, not pushed. 07 is claimed/incomplete under the previously recorded 04 deferral; formal dependencies and acceptance checkboxes remain unchanged. 01/02/03/05/06 retain scoped resolution; 04 remains incomplete and 08 open.
 - Full unified container recipe and operations templates now explicitly separate secure-store/TLS/network prerequisites from actual qualification. Three static contract tests pass independently and after merge. No built image or unattended provider success is claimed. [Deployment evidence](evidence/07-deployment.md), [07 comment](issues/07-node-operations-and-runtime-lifecycle.md#comments).
