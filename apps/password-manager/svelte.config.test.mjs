@@ -16,7 +16,11 @@ test("production SvelteKit config maps Storage to the current handwritten entry"
     assert.equal(config.kit.alias?.["@aicacia/storage-client"], source);
 });
 
-test("SvelteKit propagates the production Storage alias into Vite runtime resolution", async () => {
+test("SvelteKit propagates the production Storage alias into Vite runtime resolution", async (t) => {
+    const cwd = process.cwd();
+    t.after(() => process.chdir(cwd));
+    process.chdir(fileURLToPath(new URL(".", import.meta.url)));
+
     const resolved = await resolveConfig(
         { configFile: false, plugins: [sveltekit()] },
         "serve",

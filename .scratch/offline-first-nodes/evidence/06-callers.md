@@ -394,3 +394,42 @@ git --no-optional-locks status --short --ignored --branch
 ```
 
 Delivery result recorded by amendment of the source-alias commit, followed by the same final merge/status check. All validation preceded deliberate cleanup of the isolated build/dependency metadata; no unrun post-cleanup check is asserted.
+
+## Invocation-independent framework test correction
+
+Parent integrated through `66ed7ca` and found that running the framework test from repo root selected root cwd rather than the password-manager app: the direct config assertion passed, but the Vite alias was undefined and SvelteKit wrote root `.svelte-kit/env.d.ts`. The earlier two-pass evidence above was explicitly app-cwd validation, not root-cwd qualification. Parent retains ownership of its root artifact cleanup.
+
+First merged integration `66ed7ca` into this worktree (fast-forward, initially clean with no ignored artifacts). Only `apps/password-manager/svelte.config.test.mjs` changes: the framework-resolution test accepts `t`, snapshots `process.cwd()` before any change, registers `t.after(() => process.chdir(cwd))`, then switches to `fileURLToPath(new URL(".", import.meta.url))` before invoking SvelteKit. Production config, package exports, independent unaliased test config and generated sources are unchanged. This restores the caller cwd even if framework resolution/assertions fail; no server/build or compatibility code added.
+
+Baseline: neither worktree-root `.svelte-kit`, app `.svelte-kit`, nor app `node_modules` existed. Temporarily linked only `apps/password-manager/node_modules` to the existing root app dependency directory; no installs or full root node_modules link. Exact direct validations:
+
+```sh
+# cwd worktree root
+node --test apps/password-manager/svelte.config.test.mjs
+# 2 passed, 0 failed/skipped; 716.07ms.
+# cwd apps/password-manager
+node --test svelte.config.test.mjs
+# 2 passed, 0 failed/skipped; 727.39ms.
+# cwd worktree root
+/home/nathan/code/rust/aicacia/of/node_modules/.bin/biome format --write apps/password-manager/svelte.config.test.mjs
+/home/nathan/code/rust/aicacia/of/node_modules/.bin/biome check apps/password-manager/svelte.config.test.mjs
+# Both passed, no fixes applied.
+git --no-pager diff --check
+# passed.
+```
+
+Only this worktree's app `.svelte-kit/env.d.ts` was created by the tests; worktree-root `.svelte-kit` remained absent. After inspection, removed that self-created file, its now-empty directory and the self-created app dependency link:
+
+```sh
+rm apps/password-manager/.svelte-kit/env.d.ts
+rmdir apps/password-manager/.svelte-kit
+unlink apps/password-manager/node_modules
+git --no-optional-locks status --short --ignored
+# Only the intended test modification before recording evidence; no ignored artifacts.
+test ! -e .svelte-kit
+test ! -e apps/password-manager/.svelte-kit
+git --no-pager diff --exit-code -- apps/password-manager/svelte.config.js apps/app/vitest.package.config.ts packages/storage-client/package.json packages/storage-client/src/generated
+# exit 0: production source mapping and package/generated contracts untouched.
+```
+
+No parent/root artifacts were removed or rewritten, no docs edits, installs, package/native/Rust builds or GUI. Broader auth latest remains 55 passed / 11 failed on the missing built native-fetch prerequisite; it was not rerun for this test-only correction. Committed only the test and this evidence. Post-commit `GIT_EDITOR=true git -c core.hooksPath=/dev/null -c maintenance.auto=false merge --no-edit offline-first-nodes-integration` reported Already up to date at integration `66ed7ca`; `git --no-optional-locks status --short --ignored --branch` confirmed clean tracked/untracked/ignored state. Delivery outcome recorded by amendment, then the merge/status check repeated. Ticket 04 stays incomplete; parent owns closure.
