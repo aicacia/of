@@ -2,7 +2,13 @@
 
 ## Notes
 
-### Current checkpoint — 2026-10-11, qualified 07 lifecycle and rotation slices
+### Current checkpoint — 2026-10-11, desktop cleanup and stopped-store recovery integrated
+
+- Integration `cdf7afee` contains independently reviewed desktop `418dba2`/`cb33e7a` and recovery `257e6ee`; no main merge or push. Five desktop focused regressions and recovery/existing-host controls pass; sensitivity failures are recorded separately from restored-source final passes. [Desktop evidence](evidence/evidence07-desktop.md), [recovery evidence](evidence/07-recovery.md).
+- Ordinary startup cleanup no longer skips owners or masks initiating errors; managed setup/restored-listener errors clean owners and returned window-close errors request exit. Actual stopped filesystem restore preserves same-Node endpoint/signer/trust with retained mock protected provider; no lost-provider/populated-content recovery claim.
+- 07 remains incomplete: actual process/platform/unattended provider/Windows ACL and image qualification, universal detached-task joins, peer propagation/interrupted rollout and complete protected recovery still required. 04 deferral and08 unchanged. Only clean integrated new worktrees are retired; older worktrees and root Storage dirt remain preserved. No full Cargo hack/CRAP or GUI/provider reset.
+
+### Historical checkpoint — 2026-10-11, qualified 07 lifecycle and rotation slices
 
 - Integration `9a9e44f` contains reviewed lifecycle `2bd2661`/`a3edacd` and completed-host credential rotation `8f50fd3`/secret-safe test follow-up `9a9e44f`. Local main remains `fc74d95`; no push. 07 remains claimed/incomplete under recorded 04 deferral; dependencies/checklists unchanged. 01/02/03/05/06 resolved within scope; 04 incomplete; 08 open.
 - Four changed-source lifecycle checks pass after one longer bounded build; three earlier cutoff failures remain recorded. Background readiness/admission independence, cleanup, retained-router shutdown, offline membership/learned revocation and provisioning/reopen are qualified only at the documented seams. [Lifecycle evidence](evidence/07-lifecycle.md).
