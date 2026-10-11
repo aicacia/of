@@ -323,3 +323,74 @@ git --no-optional-locks status --short --branch
 ```
 
 Delivery results recorded by amendment of the packaging evidence commit, not by staging any built artifact; integration-tip merge/status is checked again after amendment.
+
+## Production-framework alias and final worktree cleanup
+
+Reviewer approved the minimal production SvelteKit mapping. `apps/password-manager/svelte.config.js` now imports `fileURLToPath` from `node:url` and sets `kit.alias["@aicacia/storage-client"]` to `fileURLToPath(new URL("../../packages/storage-client/src/index.ts", import.meta.url))`. This is a framework source-entry mapping shared by runtime/type resolution, not a compatibility/auth wrapper. The handwritten entry and merged generated source remain the current contract. Dependency declarations, Storage package export map, `apps/app/vitest.package.config.ts` and its existing independent unaliased consumer tests are unchanged.
+
+Added `apps/password-manager/svelte.config.test.mjs`, using Node's built-in test/assert APIs and the already installed Vite/SvelteKit tools. It loads the actual production config, verifies the source entry, resolves framework Vite configuration without starting a server and verifies the real runtime alias/file target. Initial script placement at repo `scripts` could not use CommonJS resolution of SvelteKit's import-only `/vite` export; moved the test into the app and used ordinary ESM imports, with no dependency addition. The meaningful red run then failed both assertions (`undefined` alias before implementation); both passed after the production mapping.
+
+Validation used **direct tools only** in this follow-up: no pnpm execution, dependency installation, package rebuild, Cargo/native build or GUI. Commands from `apps/password-manager`:
+
+```sh
+node --test svelte.config.test.mjs
+# Final formatted run: 2 passed, 0 failed/skipped; 744.89ms.
+node_modules/.bin/svelte-kit sync
+# exit 0; only worktree-local generated Svelte metadata.
+node --input-type=module -e 'import assert from "node:assert/strict"; import { readFileSync } from "node:fs"; import { resolve, dirname } from "node:path"; const file = resolve(".svelte-kit/tsconfig.json"); const tsconfig = JSON.parse(readFileSync(file, "utf8")); const paths = tsconfig.compilerOptions.paths["@aicacia/storage-client"]; assert.equal(paths.length, 1); assert.equal(resolve(dirname(file), paths[0]), resolve("../../packages/storage-client/src/index.ts")); console.log("SvelteKit generated type resolver uses handwritten Storage source: PASS");'
+# PASS: framework generated tsconfig selects the same source entry.
+node_modules/.bin/biome check svelte.config.js svelte.config.test.mjs
+# 2 files, passed, no fixes.
+
+# cwd apps/app, before restoring isolated package outputs
+../../packages/storage-client/node_modules/.bin/vitest run --no-cache --config vitest.package.config.ts
+# Unchanged independent unaliased package harness: 5 passed, 0 failed/skipped; 347ms.
+```
+
+Formatting used direct worktree `node_modules/.bin/biome format --write apps/password-manager/svelte.config.js apps/password-manager/svelte.config.test.mjs` from worktree root, followed by the final Node test above. No tests/config were changed to turn the independent package harness into a source-alias check. Its application root remains `apps/app`, with no Storage alias there.
+
+**Current broader auth prerequisite:** the latest full auth suite remains **55 passed / 11 failed**, with all 11 failures resolving the absent built `@aicacia/native-fetch` worktree entry. The earlier 66-pass result is historical, not the current result. Native-fetch complete JS package build is a prerequisite for rerunning that suite; no unrelated/native build was attempted here. The framework alias removes the stale Storage output dependency from production password-manager resolution, not that separate dependency prerequisite. Other direct package consumers still require the complete build-output distribution documented by the docs owner; the Storage export map remains unchanged. Independent unaliased checks require an isolated Storage build and are evidence of the build before cleanup, not a claim that clean-checkout or root built artifacts are current.
+
+After all checks, restored **only these self-created worktree build changes** with:
+
+```sh
+git restore -- packages/storage-client/browser/index.js packages/storage-client/esm/index.js packages/storage-client/esm/index.js.map packages/storage-client/types/index.d.ts packages/storage-client/types/index.d.ts.map
+```
+
+Removed only artifacts created by this agent's test/sync/build/dependency setup, using Python `Path.unlink` for files/symlinks and `shutil.rmtree` for real directories (does not traverse linked root dependency store):
+
+- `apps/app/{.svelte-kit,node_modules}`, `apps/password-manager/{.svelte-kit,node_modules}`.
+- `crates/tauri-plugin-fetch-api/node_modules`.
+- `packages/{idp-client,management-client,native-fetch,oidc-client,svelte-headless}/node_modules`, `packages/svelte-headless/.svelte-kit`.
+- `packages/storage-client/{esm/generated,types/generated,tsconfig.tsbuildinfo}`.
+- Self-created `packages/storage-client/node_modules/.bin/openapi-generator-cli` and `packages/storage-client/node_modules/@openapitools` only; original tracked Storage shims/dependency links/cache are retained intact.
+- Worktree-local root `node_modules`, including unlinking its shared-store pointer; root store itself is not deleted.
+
+These paths did not exist as untracked/ignored artifacts before this agent's work; the Storage node_modules baseline is tracked and was deliberately not removed. No blanket `git clean`, reset, deletion of source or root cleanup. Merged `dcdf8e9` generated source is retained. Exact post-cleanup checks:
+
+```sh
+git --no-optional-locks status --short --ignored
+# Only production config and its new test pending staging; no remaining ignored artifacts.
+git --no-pager diff --check
+# passed.
+git --no-pager diff --exit-code -- packages/storage-client/src/generated packages/idp-client/src packages/management-client/src
+git --no-pager diff --exit-code -- apps/app/vitest.package.config.ts packages/storage-client/package.json packages/storage-client/esm packages/storage-client/types packages/storage-client/browser packages/storage-client/node_modules
+# both exit 0: merged source, independent harness/export map and original built/tooling baseline preserved.
+```
+
+Read-only root check after cleanup again reports the same ten dirty Storage output/shim paths and exact diff hash `667afe03e6a9a7e0e3a4b277b1e1f6ea08082e845cba9591bf7d8b3e03cefe9e`. No root bytes were restored or overwritten. Only production source-alias config, its focused test and this evidence were staged and committed; no built output or tooling is committed. Parent/docs owner retains complete-output distribution instructions and ticket closure. Ticket 04 remains incomplete.
+
+Final delivery commands (worktree root):
+
+```sh
+git add apps/password-manager/svelte.config.js apps/password-manager/svelte.config.test.mjs
+git add -f .scratch/offline-first-nodes/evidence/06-callers.md
+git --no-pager diff --cached --check
+GIT_EDITOR=true git -c core.hooksPath=/dev/null -c maintenance.auto=false commit -m "Use current Storage source through production password-manager SvelteKit alias"
+GIT_EDITOR=true git -c core.hooksPath=/dev/null -c maintenance.auto=false merge --no-edit offline-first-nodes-integration
+# Integration tip 2e67ed5; Already up to date.
+git --no-optional-locks status --short --ignored --branch
+# Clean offline-first-ticket06-callers: no tracked, untracked or ignored created artifacts remaining.
+```
+
+Delivery result recorded by amendment of the source-alias commit, followed by the same final merge/status check. All validation preceded deliberate cleanup of the isolated build/dependency metadata; no unrun post-cleanup check is asserted.
