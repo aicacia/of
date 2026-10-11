@@ -12,9 +12,11 @@ use idp_service::repo::PrivateKeyKeyringRepo;
 use tokio::net::TcpListener;
 use unified_server::{LocalProvisioner, ServiceClientCredentials, UnifiedConfig};
 
-use crate::localhost_server::{prepare_test_tls, start_unified_localhost_server};
+use crate::localhost_server::{
+    prepare_test_tls, start_unified_localhost_server, verify_localhost_server,
+};
 
-use super::finish_runtime_startup;
+use super::{finish_managed_startup, finish_runtime_startup};
 
 struct TestStore(Arc<keyring_core::mock::Store>);
 
@@ -207,4 +209,117 @@ async fn desktop_tls_startup_failure_releases_runtime_and_reserved_port() {
     drop(listener);
     drop(guard);
     fs::remove_dir_all(fixture.root).expect("remove only isolated desktop fixture");
+}
+
+#[tokio::test]
+async fn desktop_initial_setup_failure_closes_retained_owners_and_preserves_cause() {
+    let fixture = Fixture::provision().await;
+    let (mut runtime, guard) = LocalProvisioner::open_runtime(fixture.config.clone())
+        .await
+        .expect("real completed runtime");
+    let cancellation = runtime.cancellation_token();
+    let tls = fixture.root.join("tls");
+    let _ca = prepare_test_tls(&tls).await;
+    let listener = runtime.take_listener().expect("retained desktop listener");
+    let address = listener.local_addr().expect("retained port");
+    let server = start_unified_localhost_server(runtime.router(), listener, &tls)
+        .expect("retained TLS server");
+    runtime
+        .start_background_tasks()
+        .await
+        .expect("retained background work");
+    let startup: Result<(), Box<dyn std::error::Error>> = Err(Box::new(io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        "injected window creation failure",
+    )));
+    let result = finish_managed_startup(startup, async move {
+        let listener_result = server.close().await;
+        let runtime_result = runtime.shutdown().await;
+        listener_result.and(runtime_result)?;
+        Err(io::Error::other("injected managed cleanup failure"))
+    })
+    .await;
+    assert_eq!(
+        result.expect_err("initial setup must fail").to_string(),
+        "injected window creation failure"
+    );
+    assert!(
+        cancellation.is_cancelled(),
+        "initial setup error must close retained runtime"
+    );
+    let listener = TcpListener::bind(address)
+        .await
+        .expect("initial setup failure releases port");
+    drop(listener);
+    drop(guard);
+    fs::remove_dir_all(fixture.root).expect("remove only isolated desktop fixture");
+}
+
+#[tokio::test]
+async fn desktop_restored_listener_verification_failure_releases_port() {
+    let root = std::env::temp_dir().join(format!("desktop-restore-{}", Id::now_v7()));
+    let _ca = prepare_test_tls(&root).await;
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("restored listener");
+    let address = listener.local_addr().expect("restored port");
+    let server = start_unified_localhost_server(axum::Router::new(), listener, &root)
+        .expect("retained restored TLS server");
+    finish_managed_startup(Ok::<(), io::Error>(()), async {
+        panic!("successful managed startup must not poll cleanup");
+    })
+    .await
+    .expect("successful setup keeps its owners");
+    let verification =
+        verify_localhost_server(&format!("https://localhost:{}", address.port())).await;
+    let result = finish_managed_startup(verification, server.close()).await;
+    assert_eq!(
+        result
+            .expect_err("untrusted/invalid setup server must fail verification")
+            .to_string(),
+        "localhost server failed trust verification"
+    );
+    let listener = TcpListener::bind(address)
+        .await
+        .expect("failed restored listener releases port");
+    drop(listener);
+    fs::remove_dir_all(root).expect("remove only isolated TLS fixture");
+}
+
+#[tokio::test]
+async fn desktop_window_close_error_still_requests_exit_after_teardown() {
+    let root = std::env::temp_dir().join(format!("desktop-close-{}", Id::now_v7()));
+    let _ca = prepare_test_tls(&root).await;
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("window-close listener");
+    let address = listener.local_addr().expect("window-close port");
+    let server = start_unified_localhost_server(axum::Router::new(), listener, &root)
+        .expect("window-close TLS server");
+    server
+        .close()
+        .await
+        .expect("real listener teardown before injected cleanup error");
+    let mut exits = Vec::new();
+    crate::runtime::exit_after_close(
+        Err(io::Error::other("injected window-close cleanup failure")),
+        |code| exits.push(code),
+    );
+    assert_eq!(
+        exits,
+        vec![1],
+        "cleanup error must still request one nonzero exit"
+    );
+    let listener = TcpListener::bind(address)
+        .await
+        .expect("teardown completed before exit request");
+    drop(listener);
+    exits.clear();
+    crate::runtime::exit_after_close(Ok(()), |code| exits.push(code));
+    assert_eq!(
+        exits,
+        vec![0],
+        "successful teardown requests one successful exit"
+    );
+    fs::remove_dir_all(root).expect("remove only isolated TLS fixture");
 }

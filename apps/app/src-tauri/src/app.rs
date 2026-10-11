@@ -468,13 +468,17 @@ fn persist_setup_intent(directory: &Path, value: &Value) -> io::Result<()> {
 }
 
 pub async fn restore_setup_listener(app_handle: &AppHandle<Wry>) -> io::Result<()> {
-    let (listener, base_url) = reserve_unified_localhost_server(app_handle)
-        .await
-        .map_err(io::Error::other)?;
-    init_unified_localhost_server(app_handle, init_setup_router(), listener, base_url.clone())
-        .await
-        .map_err(io::Error::other)?;
-    crate::localhost_server::verify_localhost_server(&base_url).await
+    let startup = async {
+        let (listener, base_url) = reserve_unified_localhost_server(app_handle)
+            .await
+            .map_err(io::Error::other)?;
+        init_unified_localhost_server(app_handle, init_setup_router(), listener, base_url.clone())
+            .await
+            .map_err(io::Error::other)?;
+        crate::localhost_server::verify_localhost_server(&base_url).await
+    }
+    .await;
+    finish_managed_startup(startup, close(app_handle)).await
 }
 
 async fn require_setup_runtime_stopped(app_handle: &AppHandle<Wry>) -> Result<(), String> {
@@ -872,6 +876,18 @@ async fn start_composed_unified_runtime(
     let runtime = finish_runtime_startup(runtime, startup, close(app_handle)).await?;
     store_unified_runtime(app_handle, runtime).await;
     Ok(())
+}
+
+pub(crate) async fn finish_managed_startup<E>(
+    startup: Result<(), E>,
+    close_owners: impl core::future::Future<Output = io::Result<()>>,
+) -> Result<(), E> {
+    if startup.is_err()
+        && let Err(cleanup_error) = close_owners.await
+    {
+        log::error!("desktop managed cleanup after startup failure: {cleanup_error}");
+    }
+    startup
 }
 
 async fn finish_runtime_startup(

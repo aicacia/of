@@ -144,7 +144,7 @@ those values are not treated as reliable compiler/test peak measurements. No
 OOM was reported; the two initial 900-second build timeouts remain failures,
 not qualified runs. Limits were never raised.
 
-## Exact remaining limits
+## Exact remaining limits at the first qualified delivery (`418dba2`)
 
 - These tests run the **production ownership handoff/error boundary**, real TLS
   listener and real shared runtime, not the complete AppHandle/Wry command or
@@ -179,3 +179,199 @@ not qualified runs. Limits were never raised.
 Delivery: tested source and this evidence committed on the own branch; integration
 merged into that branch before handoff (no root merge). The commit identity is
 reported in the delivery response rather than self-referencing this file.
+
+
+## Historical static handoff — three ordinary-error paths awaiting build slot
+
+The user explicitly requested closing the remaining ordinary-error root causes,
+confirmed the real startup/close seams, and assigned the Rust build slot to a
+**different agent**. This follow-up is static implementation only on the same
+branch/worktree, disjoint from recovery. **No Rust compilation, test execution,
+commit, merge or shared-target write was performed for this follow-up.** Earlier
+five passing checks qualify only commit `418dba240f72bfd27f956cbed6baee6606d84bbc`,
+not these changed sources.
+
+### Trace and minimal changes
+
+- Initial Tauri `.setup` could retain the setup listener or completed runtime,
+  then return from trust repair/verification or window creation with an error.
+  The complete existing setup body is now evaluated as one synchronous Result;
+  its final error boundary invokes `app::close` before returning that original
+  boxed setup error. Early errors before ownership exists also safely use this
+  idempotent close boundary. Successful setup never polls cleanup. The original
+  certificate preparation, registration, fallback behavior and window creation
+  order are unchanged.
+- `restore_setup_listener` previously installed/advertised its TLS server before
+  `verify_localhost_server` returned an error. Reservation, initialization and
+  verification now return through the same `finish_managed_startup` boundary,
+  which calls existing `app::close` on error. This clears advertised readiness,
+  takes retained owners and attempts all their teardown. Secondary close errors
+  are logged, not substituted for the verification/startup cause. An initial
+  setup failure after failed restore can close again: taken Options are empty,
+  so it does not close an owner twice.
+- Window-close prevented closing, then used `expect` on `app::close`, so a
+  returned teardown error panicked its detached callback before process exit.
+  It still awaits actual close first, then `exit_after_close` logs any returned
+  error and requests exit1; success requests exit0. The FnOnce exit callback is
+  the narrow platform side-effect seam, not a task manager or timer abstraction.
+  No timeout, abort, retry task, new dependency or alternate ownership system.
+
+CRP remains low complexity / high ordinary-error lifecycle risk / high priority.
+Files changed in this follow-up are `app.rs`, `runtime.rs`, the existing dedicated
+`desktop_lifecycle_tests.rs` and this evidence only.
+
+### Tests-first design and pending qualification
+
+Each of the three regression slices was written before its corresponding
+production route/fix. Execution of red/green is deferred because compiling is
+not authorized while the other agent owns the slot. **There is no observed
+red/green result for this follow-up.** The new tests are:
+
+1. `desktop_initial_setup_failure_closes_retained_owners_and_preserves_cause`:
+   real provisioned unified runtime, actual TLS listener and started background
+   work; boxed initial-setup error plus injected cleanup-error return *after*
+   actual owner teardown; preserves setup error, observes cancellation and
+   rebinds exact port.
+2. `desktop_restored_listener_verification_failure_releases_port`: actual TLS
+   listener and actual existing setup verifier against an untrusted/invalid
+   fixture server; original verification error survives and exact port is free.
+   Also verifies successful managed startup does not poll cleanup. No OS trust
+   installation or insecure verification bypass.
+3. `desktop_window_close_error_still_requests_exit_after_teardown`: actual TLS
+   listener close before injected returned cleanup error; exit side-effect seam
+   must receive exactly one code1, normal return exactly one code0; port is free.
+   Does not kill the test process or construct a Wry window.
+
+When the exclusive build slot is reassigned, first establish test sensitivity
+at these extracted production boundaries: temporarily retain the former
+no-cleanup behavior in `finish_managed_startup` for the first two tests and the
+former `expect` behavior in `exit_after_close` for the third. Expected failures
+are uncancelled runtime, occupied retained-listener port, and panic/no-exit.
+Restore candidate implementations exactly, then run all five dedicated desktop
+regressions and the previously used three listener controls. Mutation runs are
+not yet performed and must not be represented as pristine whole-GUI baseline
+runs. Final changed-source qualification and commit remain pending.
+
+Prepared focused green command, **not executed**:
+
+```sh
+systemd-run --user --wait --pipe --unit=of-node07-desktop-ordinary-focused --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/node07-desktop -p MemoryMax=4G -p MemorySwapMax=0 -p RuntimeMaxSec=900 env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --jobs 1 --target-dir /home/nathan/code/rust/aicacia/of/target -p lidp --lib app::desktop_lifecycle_tests:: -- --test-threads=1
+```
+
+Lightweight checks actually run for this follow-up:
+
+```sh
+rustfmt --edition 2024 --check --config skip_children=true apps/app/src-tauri/src/runtime.rs apps/app/src-tauri/src/app.rs apps/app/src-tauri/src/desktop_lifecycle_tests.rs
+git --no-pager diff --check
+```
+
+Both pass. These are parse/format/whitespace checks, **not Rust type checking or
+runtime qualification**. The three formerly listed ordinary-error defects now
+have production source fixes pending qualification. Whole-Wry/AppHandle/OS exit,
+actual window-build fault injection, OS-provider/platform behavior, panic/drop/
+forced termination, close/setup concurrency, hung graceful shutdown and universal
+detached owner joins remain unqualified; no new timer or all-task guarantee is
+claimed. Integration will be merged into the own branch before qualified
+commit/handoff; root integration must not be merged or edited by this agent.
+
+
+## Follow-up qualification — all five desktop ownership regressions pass
+
+User reassigned the exclusive Rust build slot and authorized the focused three
+new tests plus two previous ownership regressions, with the same systemd limits.
+This section supersedes the **awaiting-build/unqualified** status of the historical
+static handoff above. The initial-setup, restored-listener and window-close
+ordinary-error defects listed at the first delivery are now fixed and qualified
+at the confirmed headless ownership/exit seams. No broad suites were run.
+
+### Executed sensitivity check
+
+Before the final gate, a narrow mutation restored the former ordinary-error
+behavior at the extracted production seams:
+
+- `finish_managed_startup` dropped its cleanup future and returned the startup
+  result without polling cleanup.
+- `exit_after_close` used `result.expect("failed to close app"); exit(0);`.
+
+These are sensitivity mutations, **not a pristine whole-GUI baseline run**.
+A Python `try/finally` saved the two candidate source files in memory and restored
+them exactly after the command, including on command failure. The shell command
+executed by its literal subprocess argument list was:
+
+```sh
+systemd-run --user --wait --pipe --unit=of-node07-desktop-ordinary-red --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/node07-desktop -p MemoryMax=4G -p MemorySwapMax=0 -p RuntimeMaxSec=900 env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --jobs 1 --target-dir /home/nathan/code/rust/aicacia/of/target -p lidp --lib app::desktop_lifecycle_tests:: -- --test-threads=1
+```
+
+Invocation `f05c130768cc4b199f0cc1b7927d2a7e`, exit101:
+**2 passed / 3 failed / 56 filtered**, test time **167.75s**, build **1m06s**,
+service runtime **3min54.533s**. Failures were exactly:
+
+1. Initial setup: `initial setup error must close retained runtime` because the
+   real runtime cancellation token was not cancelled.
+2. Restored listener: exact-port rebind returned `AddrInUse` / OS error98 because
+   the actual retained TLS listener was not closed.
+3. Window close: `failed to close app` panic on the injected returned cleanup
+   error, so the exit callback was not called.
+
+Both previous ownership regressions passed under these mutations. Failed tests
+may retain their isolated temporary fixtures because their final fixture removal
+is after assertions; they contain only test-owned state and use the mock provider,
+not production stores or OS credentials. The failed test process exited.
+
+### Final restored-candidate gate
+
+```sh
+systemd-run --user --wait --pipe --unit=of-node07-desktop-ordinary-focused --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/node07-desktop -p MemoryMax=4G -p MemorySwapMax=0 -p RuntimeMaxSec=900 env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --jobs 1 --target-dir /home/nathan/code/rust/aicacia/of/target -p lidp --lib app::desktop_lifecycle_tests:: -- --test-threads=1
+```
+
+Invocation `21f2370853684544b68bc0bf9d18303b`, exit0/systemd success:
+**5 passed / 0 failed / 56 filtered**, test time **138.51s**, build **48.85s**,
+service runtime **3min7.545s**. Cargo rebuilt the changed candidate and ran
+`of/target/debug/deps/lidp-32f94624aa51d6c4`.
+
+- `desktop_initial_setup_failure_closes_retained_owners_and_preserves_cause`
+- `desktop_restored_listener_verification_failure_releases_port`
+- `desktop_window_close_error_still_requests_exit_after_teardown`
+- `desktop_startup_failure_closes_runtime_after_listener_cleanup_error`
+- `desktop_tls_startup_failure_releases_runtime_and_reserved_port`
+
+Both commands were single-job/offline with shared `of/target`, explicit unset
+Rust flags, 64 MiB Rust minimum stack, MemoryMax4G, MemorySwapMax0,
+RuntimeMaxSec900 and tool timeout910000. No timeout/OOM was reported in these
+follow-up runs; earlier historical build timeouts remain recorded failures.
+Reported transient memory peaks were 256.0K with swap0B, not independently
+reliable compiler/test peak measurements. No limits or product timers changed.
+
+Final formatting and whitespace checks passed:
+
+```sh
+rustfmt --edition 2024 --check --config skip_children=true apps/app/src-tauri/src/runtime.rs apps/app/src-tauri/src/app.rs apps/app/src-tauri/src/desktop_lifecycle_tests.rs
+git --no-pager diff --check
+```
+
+### Qualified behavior and remaining acceptance boundary
+
+All three requested ordinary-error root causes now have production wiring and
+runnable regression evidence. Initial Tauri setup returns through managed-owner
+cleanup even after trust repair or window creation error; restored-listener
+startup/verification errors close retained owners and clear advertised readiness;
+window close awaits attempted teardown and requests a nonzero exit on returned
+cleanup error instead of panicking. Original startup errors survive secondary
+cleanup errors. Success does not poll error cleanup. No timeout/task framework,
+new dependency, OS trust/provider operation, GUI/create/join/reset run, broad test
+suite, Cargo hack, CRAP, root merge, cross-repository source edit or push.
+
+The Tauri `.setup`/AppHandle wiring compiles, but the tests exercise the production
+error boundaries with real owned runtime/TLS state and an injected exit callback,
+not an actual Wry window failure or real process termination. Actual whole-GUI
+exit/restart, unattended OS providers, Windows ACLs and macOS/Windows behavior
+remain unqualified. Panic/drop/forced termination, close/setup concurrency,
+hung graceful shutdown and universal detached owner-task joins remain outside
+ordinary returned-error acceptance. Stable operations docs and ticket checkboxes
+are unchanged: ticket07's broader deployment, rotation rollout and backup/recovery
+acceptance is not inferred from these five tests.
+
+The four scoped files are committed on `offline-first-node07-desktop` after this
+qualification. Current integration is merged into that branch before handoff;
+root integration and its dirty Storage outputs remain untouched. Commit identity
+and merge outcome are recorded in the delivery response.
