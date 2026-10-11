@@ -9,6 +9,12 @@ export default defineConfig({
       "@aicacia/idp-client": fileURLToPath(
         new URL("../../packages/idp-client/src/index.ts", import.meta.url),
       ),
+      "@aicacia/management-client": fileURLToPath(
+        new URL(
+          "../../packages/management-client/src/index.ts",
+          import.meta.url,
+        ),
+      ),
       "@aicacia/svelte-headless": fileURLToPath(
         new URL(
           "../../packages/svelte-headless/src/lib/state/storage.svelte.ts",

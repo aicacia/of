@@ -12,6 +12,7 @@ import {
     ensureOidcClientId,
     getOidcClient,
 } from "$lib/common/state/oidc.svelte";
+import { getSetupStage } from "$lib/common/state/setupClient.svelte";
 import type { LayoutLoad } from "./$types";
 
 export const prerender = false;
@@ -20,6 +21,24 @@ export const load = (async (event) => {
     await event.parent();
 
     if (isTauri()) {
+        const stage = await getSetupStage().catch(() =>
+            error(
+                503,
+                "Unable to determine local setup readiness. Retry to check it again.",
+            ),
+        );
+        if (stage === "installation" || stage === "unavailable") {
+            redirect(302, resolve("/setup/installation"));
+        }
+        if (stage === "device") {
+            redirect(302, resolve("/setup/device"));
+        }
+        if (stage !== "ready") {
+            error(
+                503,
+                "Unable to determine local setup readiness. Retry to check it again.",
+            );
+        }
         await ensureTauriIdpApiUrl();
         await ensureOidcClientId();
         await ensureTauriManagementApiUrl();

@@ -10,29 +10,13 @@ import { resolve } from "$app/paths";
 import { page } from "$app/state";
 import { env } from "$env/dynamic/public";
 import { afterSigninRedirect } from "./afterSigninRedirect.svelte";
-import {
-  ensureLocalhostBaseUrl,
-  loadLocalhostBaseUrl,
-} from "./localhostBaseUrl.svelte";
+import { ensureLocalhostBaseUrl } from "./localhostBaseUrl.svelte";
 import { ownerAccessToken } from "./idpClient.svelte";
 
 const managementApiUrl = createStorage<string | null>(
   "management-api-url",
   (isTauri() ? null : env.PUBLIC_LIDP_MANAGEMENT_BASE_URL) ?? null,
 );
-
-async function hydrateTauriManagementApiUrl(): Promise<void> {
-  if (!isTauri()) {
-    return;
-  }
-
-  const baseUrl = await loadLocalhostBaseUrl();
-  if (baseUrl) {
-    managementApiUrl.item = `${baseUrl}/management`;
-  }
-}
-
-void hydrateTauriManagementApiUrl();
 
 function readAccessToken(): Promise<string> {
   return ownerAccessToken("idp-management");

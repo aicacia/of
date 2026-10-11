@@ -13,29 +13,13 @@ import { resolve } from "$app/paths";
 import { page } from "$app/state";
 import { env } from "$env/dynamic/public";
 import { afterSigninRedirect } from "./afterSigninRedirect.svelte";
-import {
-  ensureLocalhostBaseUrl,
-  loadLocalhostBaseUrl,
-} from "./localhostBaseUrl.svelte";
+import { ensureLocalhostBaseUrl } from "./localhostBaseUrl.svelte";
 import { getOidcClient } from "./oidc.svelte";
 
 const idpApiUrl = createStorage<string | null>(
   "idp-api-url",
   (isTauri() ? null : env.PUBLIC_LIDP_BASE_URL) ?? null,
 );
-
-async function hydrateTauriApiUrl(): Promise<void> {
-  if (!isTauri()) {
-    return;
-  }
-
-  const baseUrl = await loadLocalhostBaseUrl();
-  if (baseUrl) {
-    idpApiUrl.item = `${baseUrl}/idp`;
-  }
-}
-
-void hydrateTauriApiUrl();
 
 function readAccessToken(): string {
   const oidcClient = getOidcClient();
