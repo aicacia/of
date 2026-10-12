@@ -2,7 +2,13 @@
 
 ## Notes
 
-### Current checkpoint — 2026-10-11, 08 claimed; bounded progress remains UNQUALIFIED
+### Current checkpoint — 2026-10-12, finished-work consolidation; 08 remains UNQUALIFIED
+
+- [Remaining work and exact diagnostic source/receipts](remaining-work.md) collect the08 frontier without accepting failed tests. Consumer branch `offline-first-ticket08-full-nodes` at `57426e3` remains in its live worktree; generic owner diagnostic branch `diagnostics/native-idp-stage-timing` at `b21c583` remains unmerged. Native profiling attempt was compile-OOM; no native-stage result exists. Free machine memory before another bounded attempt.
+  -01–07 remain resolved within recorded scopes. Ofdb06 is now resolved from accepted of02/of03 evidence, not another runtime sweep; finished owner mains include the handoff/branch-retirement receipts. Of08 still owns full-host partition/offline-reopen/reconnect/learned-operation composition and focused final validation. No spec completion is claimed.
+- User authorized consolidating finished `of` integration history through `290738b` into local main. [Cleanup/recovery receipt](../worktree-cleanup/2026-10-12/README.md) records five archived/retired auxiliary worktrees, exact preserved user stash and owner merged-branch retirement. Old auth/partial-bootstrap refs remain recovery-only, not merge candidates. Root and08 are the only registered of worktrees. Preserve stashes, shared targets, sibling links, provider state and live diagnostic evidence; no push/build/test sweep.
+
+### Historical checkpoint — 2026-10-11, 08 claimed; bounded progress remains UNQUALIFIED
 
 - Root base `db50c751a9d994eaac4d83de78306d71eb1d4210`; coordinator's08 claim is retained in the [ticket checkpoint](issues/08-offline-node-integration-and-final-validation.md#comments), with all11 criteria unchecked and no Answer/completion.04/07 revised-scope resolutions remain unchanged; spec is not completed.
 - Preserve **unmerged** `offline-first-ticket08-full-nodes` at `ba91e16997ec1dff0b0fae507ced31a1b9f8b979` and `.worktrees/ticket08-full-nodes`. [Evidence and exact logs via preserved worktree](../../.worktrees/ticket08-full-nodes/.scratch/offline-first-nodes/evidence/08-full-nodes.md) are branch-only, not root-integrated acceptance. Stable pair source `19db0df9e124c626bde56cde99d7133e3ab3e8b0` reached authenticated join/approval, both imports and both composed hosts' current readiness/three-context health. **None of the three pair slices passed:** run06/07/08 each0/1,exit101 (282.01s/274.08s/278.41s); B refresh competitor/sequential replay and Management restriction PUT timed out before offline reopen/reconciliation/retained-socket learned denial.

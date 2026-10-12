@@ -1,0 +1,107 @@
+[
+  {
+    "worktree": ".worktrees/auth-unavailability",
+    "branch": "offline-first-auth-unavailability",
+    "head": "0716062a8e7623659cc2996e195b6c278f964352",
+    "status": "",
+    "archive_members": 31270,
+    "artifacts": {
+      "auth-unavailability.patch": {
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "auth-unavailability.bundle": {
+        "sha256": "fb6aacb422ee12bd95f03e7e529c03afac927d062573f1c3e6052d64db122e07",
+        "bytes": 2928887
+      },
+      "auth-unavailability.tar": {
+        "sha256": "1b39ff206cf9745d84bb944245e29c49bcd181d7eb9e773cd1b39c5fb4d29b67",
+        "bytes": 359618560
+      }
+    }
+  },
+  {
+    "worktree": ".worktrees/bounded04-partial-bootstrap",
+    "branch": "offline-first-bounded04-partial-bootstrap",
+    "head": "c4ef122f67d1f00e020df858872b3b1850abf41e",
+    "status": " M crates/unified-server/src/node_bootstrap_interruption_tests.rs\n M crates/unified-server/src/security_bootstrap.rs\n",
+    "archive_members": 976,
+    "artifacts": {
+      "bounded04-partial-bootstrap.patch": {
+        "sha256": "807f98cc4aa9479bb3b6a9ebde9b088626bc90eceeef3483ff5fa9c720073bd9",
+        "bytes": 19756
+      },
+      "bounded04-partial-bootstrap.bundle": {
+        "sha256": "b0e0e43a37048675a0613f1bfd8b8c957918df8dfe8d5dc8aeda206ce7cf7f1b",
+        "bytes": 2970150
+      },
+      "bounded04-partial-bootstrap.tar": {
+        "sha256": "e1ed7076350d462fe79e782b67d16910536023baca9a02c29645c30cf58e7e62",
+        "bytes": 5498880
+      }
+    }
+  },
+  {
+    "worktree": ".worktrees/bounded04-residency-ui",
+    "branch": "offline-first-bounded04-residency-ui",
+    "head": "3f898c6ef702326f51a868beed52800859ea9cb6",
+    "status": "",
+    "archive_members": 1117,
+    "artifacts": {
+      "bounded04-residency-ui.patch": {
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "bounded04-residency-ui.bundle": {
+        "sha256": "b66593ede2990c3e62d8d01cfab402ff8f04588f13797a86dfe2d9e313a88f51",
+        "bytes": 3420425
+      },
+      "bounded04-residency-ui.tar": {
+        "sha256": "512ea0f283ff070c08ca68652e587edf59d3bbcce9553041b0b868601ea54204",
+        "bytes": 6553600
+      }
+    }
+  },
+  {
+    "worktree": ".worktrees/peer-revocation",
+    "branch": "offline-first-peer-revocation",
+    "head": "b68924125fdb834404f49a535279735dd64409fc",
+    "status": " M Cargo.lock\n M apps/app/src-tauri/Cargo.toml\n M apps/app/src-tauri/src/app.rs\n?? apps/app/src-tauri/src/peer_revocation.rs\n?? apps/app/src-tauri/src/peer_revocation_tests.rs\n",
+    "archive_members": 10752,
+    "artifacts": {
+      "peer-revocation.patch": {
+        "sha256": "d4756390fd2369d5024e47db8da5d69d89bd303609c39673b300d32aa24ff6b7",
+        "bytes": 5605
+      },
+      "peer-revocation.bundle": {
+        "sha256": "039557fd8c11a418fdce0e0c75ddc28a003ad977f26f26d90fd146cd56179996",
+        "bytes": 2924221
+      },
+      "peer-revocation.tar": {
+        "sha256": "021bd154f336e71f65fa5f09c60172a166304eb637e1a8281bcac0aba3904778",
+        "bytes": 2341990400
+      }
+    }
+  },
+  {
+    "worktree": ".worktrees/setup-early-reset",
+    "branch": "offline-first-setup-early-reset",
+    "head": "4a8ad6edd82ca61eed4d715fbfab5e00f28eeb1c",
+    "status": " M apps/app/src-tauri/src/setup_reset.rs\n",
+    "archive_members": 8503,
+    "artifacts": {
+      "setup-early-reset.patch": {
+        "sha256": "3f49e1b68d9642a59dd67e7dc520f0edb1ba7d8ecfdaf0d28a1d8553a00b5ee5",
+        "bytes": 2688
+      },
+      "setup-early-reset.bundle": {
+        "sha256": "bbfa136e7801eb8c0df04e5e914e5581c78af01d121b29962dc93d2b264ba11f",
+        "bytes": 2852421
+      },
+      "setup-early-reset.tar": {
+        "sha256": "d7088ef94024fdfbdc1fe175b86f52fcb0de20a55c696373b8b852a6376e506b",
+        "bytes": 1526405120
+      }
+    }
+  }
+]
