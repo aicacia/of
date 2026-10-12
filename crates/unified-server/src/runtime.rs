@@ -54,25 +54,15 @@ pub(crate) fn owner_replication_authorizer(
         let copies = copies.clone();
         let cleanup = Arc::clone(&cleanup);
         async move {
-            let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
-                .then(std::time::Instant::now);
             let _cleanup = if endpoint == local_endpoint {
                 Some(cleanup.lock().await)
             } else {
                 None
             };
-            if let Some(stage) = stage {
-                log::info!(target: "of::idp_stage_timing", "owner_policy.cleanup_admission elapsed_us={}", stage.elapsed().as_micros());
-            }
-            let stage = stage.map(|_| std::time::Instant::now());
             let device = idp
                 .approved_device_owner(endpoint)
                 .await
                 .map_err(|error| error.to_string())?;
-            if let Some(stage) = stage {
-                log::info!(target: "of::idp_stage_timing", "owner_policy.approved_device_owner elapsed_us={}", stage.elapsed().as_micros());
-            }
-            let stage = stage.map(|_| std::time::Instant::now());
             if endpoint == local_endpoint {
                 let policies = management_service::replica::DbSelectionPolicyRepo::new(Arc::clone(
                     &management,
@@ -113,15 +103,8 @@ pub(crate) fn owner_replication_authorizer(
                     }
                 }
             }
-            if let Some(stage) = stage {
-                log::info!(target: "of::idp_stage_timing", "owner_policy.reconcile_cleanup elapsed_us={}", stage.elapsed().as_micros());
-            }
-            let stage = stage.map(|_| std::time::Instant::now());
             let (admin_allowed, resources) =
                 management_server::replication_policy(management, &device).await?;
-            if let Some(stage) = stage {
-                log::info!(target: "of::idp_stage_timing", "owner_policy.replication_policy elapsed_us={}", stage.elapsed().as_micros());
-            }
             if endpoint == local_endpoint {
                 copies
                     .upgrade()

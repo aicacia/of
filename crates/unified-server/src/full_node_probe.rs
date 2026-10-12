@@ -34,17 +34,6 @@ async fn single_full_host_refresh_replay_and_restriction_put_with_extra_service_
         .expect("bounded single full-host service Client inventory probe");
 }
 
-pub(super) fn install_stage_logger() {
-    #[cfg(feature = "cli")]
-    if std::env::var("OF_IDP_STAGE_TIMING").as_deref() == Ok("1") {
-        env_logger::Builder::new()
-            .parse_filters("off,of::idp_stage_timing=info")
-            .format_timestamp(None)
-            .try_init()
-            .expect("exclusive focused probe installs stage-only logger");
-    }
-}
-
 async fn probe(extra_service_clients: bool) {
     let started = Instant::now();
     let fixture = Fixture::new();
@@ -221,7 +210,6 @@ async fn probe(extra_service_clients: bool) {
         management_service::MANAGEMENT_APPLICATION_URI,
     )
     .await;
-    install_stage_logger();
     let put_started = Instant::now();
     let result = http
         .put(format!(

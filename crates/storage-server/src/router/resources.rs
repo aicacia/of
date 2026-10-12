@@ -338,8 +338,6 @@ pub(super) async fn create_file_system(
     headers: HeaderMap,
     Json(request): Json<CreateResourceRequest>,
 ) -> Result<(StatusCode, Json<FileSystemResourceResponse>), StatusCode> {
-    let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
-        .then(std::time::Instant::now);
     let (scope, _, can_write) = namespace(
         authorization(&state, &headers).await?,
         "storage:filesystems",
@@ -347,10 +345,6 @@ pub(super) async fn create_file_system(
     if !can_write {
         return Err(StatusCode::FORBIDDEN);
     }
-    if let Some(stage) = stage {
-        log::info!(target: "of::idp_stage_timing", "filesystem_create.initial_authorization elapsed_us={}", stage.elapsed().as_micros());
-    }
-    let stage = stage.map(|_| std::time::Instant::now());
     let resource = state
         .file_systems
         .as_ref()
@@ -358,14 +352,7 @@ pub(super) async fn create_file_system(
         .create_resource(&scope, request.name)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if let Some(stage) = stage {
-        log::info!(target: "of::idp_stage_timing", "filesystem_create.resource_mutation elapsed_us={}", stage.elapsed().as_micros());
-    }
-    let stage = stage.map(|_| std::time::Instant::now());
     authorize_response(&state, &headers, &scope, "storage:filesystems", true).await?;
-    if let Some(stage) = stage {
-        log::info!(target: "of::idp_stage_timing", "filesystem_create.response_authorization elapsed_us={}", stage.elapsed().as_micros());
-    }
     Ok((StatusCode::CREATED, Json(resource.into())))
 }
 

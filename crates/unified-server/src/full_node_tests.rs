@@ -1077,9 +1077,6 @@ async fn offline_reopen() {
             "storage:filesystems",
         )
         .await;
-        if label == "offline-b" {
-            probe::install_stage_logger();
-        }
         let (resource, mut connection) = create_written_resource(&http, host, &storage).await;
         connection
             .close(None)
@@ -1153,7 +1150,6 @@ async fn learned_grants() {
     assert!(revocation.status().is_success());
     denied_grant(refresh(&pair.http, &pair.source, &pair.login_id, consumed_grant).await).await;
     denied_grant(refresh(&pair.http, &pair.source, &pair.login_id, revoked_grant).await).await;
-    probe::install_stage_logger();
     pair.reconnect(SecurityContext::Idp).await;
     denied_grant(refresh(&pair.http, &pair.joined, &pair.login_id, consumed_grant).await).await;
     denied_grant(refresh(&pair.http, &pair.joined, &pair.login_id, revoked_grant).await).await;
@@ -1183,7 +1179,6 @@ async fn learned_restrictions() {
         )
         .await;
         if local == pair.binding().member_id {
-            probe::install_stage_logger();
             eprintln!(
                 "08: entering joined-B cold Management PUT at {:?}",
                 pair.started.elapsed()

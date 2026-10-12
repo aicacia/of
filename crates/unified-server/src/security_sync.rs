@@ -150,9 +150,7 @@ impl SecurityProtocol {
         context: SecurityContext,
     ) -> io::Result<SyncResult> {
         self.validate_local_schema(context).await?;
-        log::info!(target: "of::idp_stage_timing", "security_sync.initiator.schema_validated");
         let handshake = self.local_handshake(context).await?;
-        log::info!(target: "of::idp_stage_timing", "security_sync.initiator.local_handshake");
 
         let trusted = DbReplicaSignerRepo::new(self.idp.clone())
             .trusted_signers(&self.installation, now()?)
@@ -165,7 +163,6 @@ impl SecurityProtocol {
             .ok_or_else(|| denied("remote endpoint has no local trusted member"))?;
         self.authorize(connection, remote_member, context).await?;
 
-        log::info!(target: "of::idp_stage_timing", "security_sync.initiator.authorized");
         let (mut send, recv) = connection.open_bi().await.map_err(io::Error::other)?;
         self.authorize(connection, remote_member, context).await?;
         send.write_all(&[SECURITY_STREAM_KIND])
@@ -176,10 +173,8 @@ impl SecurityProtocol {
         transport
             .send(serde_json::to_vec(&handshake).map_err(io::Error::other)?)
             .await?;
-        log::info!(target: "of::idp_stage_timing", "security_sync.initiator.handshake_sent");
         let response: Response =
             serde_json::from_slice(&transport.receive().await?).map_err(io::Error::other)?;
-        log::info!(target: "of::idp_stage_timing", "security_sync.initiator.handshake_received");
         let Response::Accepted(remote) = response else {
             return Err(denied("peer denied security synchronization"));
         };
@@ -334,8 +329,6 @@ impl SecurityProtocol {
         member: Id,
         context: SecurityContext,
     ) -> io::Result<()> {
-        let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
-            .then(std::time::Instant::now);
         self.local_handshake(context).await?;
         let endpoint = connection.remote_id().to_string();
         if !DbReplicaSignerRepo::new(self.idp.clone())
@@ -384,9 +377,6 @@ impl SecurityProtocol {
         }
         if self.cancellation.is_cancelled() {
             return Err(denied("security synchronization is shutting down"));
-        }
-        if let Some(stage) = stage {
-            log::info!(target: "of::idp_stage_timing", "security_sync.authorize elapsed_us={}", stage.elapsed().as_micros());
         }
         Ok(())
     }
@@ -458,8 +448,7 @@ impl SecurityProtocol {
             member,
             context,
         };
-        log::info!(target: "of::idp_stage_timing", "security_sync.owner_session_start role={role:?} context={context:?}");
-        let result = database
+        database
             .synchronize_tables_with_stage_directory_candidate_validated_checked(
                 &mut transport,
                 &SessionConfig::default(),
@@ -512,9 +501,7 @@ impl SecurityProtocol {
                 SyncError::PreApply(reason) => denied(reason),
                 SyncError::Transport(error) => error,
                 error => io::Error::other(error.to_string()),
-            });
-        log::info!(target: "of::idp_stage_timing", "security_sync.owner_session_end role={role:?} context={context:?} success={}", result.is_ok());
-        result
+            })
     }
 }
 
