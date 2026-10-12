@@ -206,10 +206,15 @@ impl IdpClient {
             serde_json::from_slice(&body).map_err(|_| IdpIntrospectionError::ServiceUnavailable)?;
         #[cfg(feature = "network")]
         if let Some((endpoint, policy)) = &self.local_device_policy {
+            let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+                .then(std::time::Instant::now);
             let owner = policy
                 .local_owner(*endpoint)
                 .await
                 .map_err(|_| IdpIntrospectionError::InvalidToken)?;
+            if let Some(stage) = stage {
+                log::info!(target: "of::idp_stage_timing", "storage_introspect.local_owner_policy elapsed_us={}", stage.elapsed().as_micros());
+            }
             if response.claims.sub != owner {
                 return Err(IdpIntrospectionError::InvalidToken);
             }
