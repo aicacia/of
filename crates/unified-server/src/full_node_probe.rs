@@ -158,12 +158,13 @@ async fn probe(extra_service_clients: bool) {
     assert_eq!(redeemed.status(), reqwest::StatusCode::OK);
     let replacement: model::contract::TokenResponse =
         redeemed.json().await.expect("refresh replacement response");
-    assert_ne!(
+    assert!(
         replacement
             .refresh_token
             .expect("replacement refresh grant")
-            .0,
-        grant.0
+            .0
+            != grant.0,
+        "refresh rotation must replace the consumed grant"
     );
     eprintln!(
         "08 probe: redeem complete; entering replay at {:?}",

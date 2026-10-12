@@ -164,9 +164,11 @@ impl Drop for Host {
 
 async fn json(response: reqwest::Response, expected: reqwest::StatusCode) -> serde_json::Value {
     let status = response.status();
-    let url = response.url().to_string();
     let body = response.text().await.expect("owner response body");
-    assert_eq!(status, expected, "{url}: {body}");
+    assert!(
+        status == expected,
+        "owner response must have the expected status"
+    );
     serde_json::from_str(&body).expect("public owner JSON")
 }
 
@@ -252,7 +254,10 @@ async fn denied_grant(response: reqwest::Response) {
         "grant denial must not be outage/server failure: {status}"
     );
     let body: serde_json::Value = response.json().await.expect("OAuth denial");
-    assert_eq!(body["error"], "invalid_grant");
+    assert!(
+        body["error"] == "invalid_grant",
+        "refresh grant denial must report invalid_grant"
+    );
 }
 
 async fn local_winner(http: &reqwest::Client, host: &Host, client: &str, grant: &str) {
@@ -266,11 +271,12 @@ async fn local_winner(http: &reqwest::Client, host: &Host, client: &str, grant: 
         (right, left)
     };
     let winner = json(winner, reqwest::StatusCode::OK).await;
-    assert_ne!(
+    assert!(
         winner["refresh_token"]
             .as_str()
-            .expect("durable replacement"),
-        grant
+            .expect("durable replacement")
+            != grant,
+        "refresh rotation must replace the consumed grant"
     );
     denied_grant(loser).await;
     denied_grant(refresh(http, host, client, grant).await).await;
@@ -287,11 +293,9 @@ async fn restriction(http: &reqwest::Client, host: &Host, actor: &str, device: I
         .send()
         .await
         .expect("real Management policy mutation");
-    assert_eq!(
-        response.status(),
-        reqwest::StatusCode::NO_CONTENT,
-        "{}",
-        response.text().await.expect("policy response")
+    assert!(
+        response.status() == reqwest::StatusCode::NO_CONTENT,
+        "Management restriction mutation must return no content"
     );
 }
 
@@ -947,8 +951,14 @@ async fn offline_reopen() {
             .await
             .expect("joined completion survives offline restart")
     );
-    assert_eq!(secrets_a, a.secrets());
-    assert_eq!(secrets_b, b.secrets());
+    assert!(
+        secrets_a == a.secrets(),
+        "source private inventory must survive offline reopen unchanged"
+    );
+    assert!(
+        secrets_b == b.secrets(),
+        "joined private inventory must survive offline reopen unchanged"
+    );
     let source = Host::start(runtime_a).await;
     let joined = Host::start(runtime_b).await;
     drop(guard_a);
@@ -1121,8 +1131,14 @@ async fn learned_grants() {
         .expect("revocation target")
         .0
         .as_str();
-    assert_ne!(shared_grant, consumed_grant);
-    assert_ne!(consumed_grant, revoked_grant);
+    assert!(
+        shared_grant != consumed_grant,
+        "shared and consumption-target refresh grants must be distinct"
+    );
+    assert!(
+        consumed_grant != revoked_grant,
+        "consumption and revocation targets must be distinct refresh grants"
+    );
     for host in [&pair.source, &pair.joined] {
         json(
             refresh(&pair.http, host, &pair.login_id, shared_grant).await,
