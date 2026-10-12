@@ -19,6 +19,9 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
 use super::{Fixture, rotation_login_client};
 use crate::{LocalProvisioner, SecurityContext, SecurityProtocol, UnifiedEndpoint, UnifiedRuntime};
 
+#[path = "full_node_probe.rs"]
+mod probe;
+
 struct NodeStores {
     stores: [(String, Arc<keyring_core::CredentialStore>); 2],
 }
@@ -77,7 +80,21 @@ impl Host {
         let listener = runtime
             .take_listener()
             .expect("one production host listener");
-        let router = runtime.router();
+        let router = runtime.router().layer(axum::middleware::from_fn(
+            |request: axum::extract::Request, next: axum::middleware::Next| async move {
+                let started = std::time::Instant::now();
+                let method = request.method().clone();
+                let path = request.uri().path().to_owned();
+                eprintln!("08 HTTP begin: {method} {path}");
+                let response = next.run(request).await;
+                eprintln!(
+                    "08 HTTP end: {method} {path} status={} elapsed={:?}",
+                    response.status(),
+                    started.elapsed()
+                );
+                response
+            },
+        ));
         let cancellation = runtime.cancellation_token();
         let task = tokio::spawn(async move {
             axum::serve(listener, router)
