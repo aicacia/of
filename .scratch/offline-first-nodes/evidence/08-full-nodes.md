@@ -1,6 +1,6 @@
-# 08 — bounded two-completed-full-host slice (source pending runtime validation)
+# 08 — bounded two-completed-full-host slices (compiled; runtime qualification blocked)
 
-2026-10-11. **Pending: no Rust build, test execution, Clippy, runtime pass, RED/GREEN result, or ticket acceptance is claimed.** The coordinator has not authorized a build slot. TDD and ponytail skills loaded; the user explicitly selected the production seams below. No root claim/status/map/spec/closure edit was made.
+2026-10-11. **Source compiles; zero full-host tests passed.** The authorized shared-target runs reached authenticated same-Installation join and both completed full hosts, but unchanged fixture HTTP deadlines blocked refresh replay and Management policy mutation before offline reopen or authenticated reconciliation. No learned-denial, completed offline-mutation/issuance, retained-socket denial/cleanup, GREEN result, Clippy pass, or ticket acceptance is claimed. Latest tested source: `19db0df9e124c626bde56cde99d7133e3ab3e8b0`; run06–08 below are the current results. TDD and ponytail skills loaded; the user explicitly selected these production seams. No root claim/status/map/spec/closure edit or root merge was made.
 
 ## Source provenance and boundaries
 
@@ -13,7 +13,7 @@
 - Only Unified Server test/helper files, necessary declarations, and this evidence file are committed. Existing rotation test passes its original grants/audience explicitly to its reused login helper; its behavior is intended unchanged, not revalidated.
 - Existing owner-repository paths use the already present `.worktrees/{ofdb,offs,ofnet}` links to original owner repositories. No manifest overrides, new dependency, networking implementation, owner writes, provider/system/profile/CA operation, root dirty-file edit, broad sweep, or cleanup.
 
-## Agreed seams and test design
+## Original agreed seams and test design — superseded by bounded decomposition below
 
 Exact test: `local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial`.
 
@@ -32,7 +32,7 @@ One Installation creation, one production authenticated join, one stop/offline-r
 
 ### Sensitivity and scope limits
 
-The runtime assertions are not yet executed. Planned sensitivity checks after a slot: removing local consumption serialization should violate one-winner/replay assertions; suppressing the authenticated IdP reconnect should allow B's untouched consumed/revoked grant (violating expected denial); suppressing Management reconnect should preserve true local allowance and permit the retained-socket write. No such negative/control run is claimed now.
+The original design below describes intended assertions, not completed qualification. Runs below stop before the remaining acceptance assertions. Planned sensitivity checks after successful baseline qualification: removing local consumption serialization should violate one-winner/replay assertions; suppressing the authenticated IdP reconnect should allow B's untouched consumed/revoked grant (violating expected denial); suppressing Management reconnect should preserve true local allowance and permit the retained-socket write. No such negative/control run was performed.
 
 This increment uses a previously learned **refresh grant**, not a new authorization-code matrix. It adds a representative retained **local resource WebSocket** learned-restriction/next-write check and public local deletion receipt, not new SQL/KV/FS Iroh apply/batch gates or physical managed-copy-removal receipts. Transfer/deselection cleanup propagation, authorized in-flight completion, first committed KV batch, staging/handle drains, cancellation and Tombstones reuse inherited03/05/owner evidence below. It does not claim new full-host selected-resource DATA/content synchronization, cross-user grants, globally immediate revocation, globally single-use OAuth, remote erasure, WAN/relay/physical-device, GUI approval, real-provider or crash/power-loss qualification.
 
@@ -59,27 +59,27 @@ git --no-pager diff --check
 git --no-pager diff --exit-code -- Cargo.lock Cargo.toml crates/unified-server/Cargo.toml
 ```
 
-Formatting/whitespace checks passed. Existing boundary checker returned `No direct server-to-server dependency edges found.` Manifests/lock unchanged. Rustfmt parsed the new source; **that is not Rust type checking**. No runtime/build/Clippy diagnostic claim is possible before the slot. No full Cargo Hack, CRAP or all-workspace gate.
+Formatting/whitespace checks passed, including the final evidence handoff. Existing boundary checker returned `No direct server-to-server dependency edges found.` Manifests/lock unchanged. Ancestry from the exact integration base returned0 again. Rust type checking subsequently succeeded in the authorized runs below; all three exact tests ran and failed. No Clippy, full Cargo Hack, CRAP or all-workspace gate was run.
 
-## Exact bounded next command — NOT EXECUTED
+## Exact authorized bounded command
 
-Only after coordinator authorizes the single Rust slot, run from `of/.worktrees/ticket08-full-nodes`:
+The initial fresh-target/profile-override proposal was superseded and is not a rerun recommendation. Actual run06 from `of/.worktrees/ticket08-full-nodes` used:
 
 ```sh
-CARGO_TARGET_DIR=target/ticket08-full-nodes CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=1 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_PROFILE_DEV_OPT_LEVEL=1 CARGO_PROFILE_TEST_OPT_LEVEL=1 RUST_MIN_STACK=67108864 timeout 600s cargo test -p unified-server --no-default-features --lib --offline --locked local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial -- --exact --nocapture --test-threads=1
+systemd-run --user --wait --pipe --collect --unit=of-ticket08-full-nodes-06 --property=MemoryMax=4G --property=MemorySwapMax=0 --property=RuntimeMaxSec=900 --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --locked --jobs=1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --lib local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial -- --exact --nocapture --test-threads=1
 ```
 
-Outer600s includes cold compilation; internal360s is the scenario bound, not an increased production deadline. Offline/locked forbids fetching/changing dependencies. The target is dedicated to this worktree; no build cache copying/cleanup is authorized. Capture exact exit status, phase timings and any compilation/runtime failures. Do not count a build-only completion, zero matched tests, timeout, or inherited pass as this test's success. If a production defect is reproduced, report/coordinate the exact owner fix rather than changing production under this test-only assignment.
+Outer tool bound910000ms; internal360s scenario bound; unchanged10s fixture HTTP deadline. Run07/08 used the same properties/environment/shared target with their exact independent test names and distinct unit names, preserved verbatim in the logs. Memory was checked before each run (approximately3.3–3.4GiB available, host swap effectively full). No target cleanup, cache copying, fresh target or profile overrides. Do not count a build-only completion, zero matched tests, timeout, or inherited pass as success. If a production defect is demonstrated, report/coordinate the exact owner fix rather than changing production under this test-only assignment.
 
 Coordinator retains root claim, integration, review, acceptance/status and final bounded-validation decisions. This is a source/evidence handoff, not ticket08 closure.
 
 ## Authorized shared-target execution — initial results
 
-The coordinator granted the exclusive Rust slot and superseded the proposed fresh-target/profile-override command above. All runs use shared original `of/target`, standard profiles, flags unset, jobs1, offline/locked, systemd MemoryMax4G/MemorySwapMax0/RuntimeMaxSec900 and tool910000ms. First memory check: MemAvailable3.4GiB, host swap effectively full; no unrelated process/provider/system changes.
+The coordinator granted the exclusive Rust slot and superseded the initial fresh-target/profile-override proposal. All runs use shared original `of/target`, standard profiles, flags unset, jobs1, offline/locked, systemd MemoryMax4G/MemorySwapMax0/RuntimeMaxSec900 and tool910000ms. First memory check: MemAvailable3.4GiB, host swap effectively full; no unrelated process/provider/system changes.
 
 - Run01/source `1fc2856`: compile failed E0618, local HTTP revocation response shadowed the socket response helper; no test executed. Service377.685s, exit101. Fixed only that test binding in `9bb416c`; no production change.
 - Run02/source `9bb416c`: compile succeeded (test profile optimized+debuginfo,277s), exact test1 failed at26.36s before source startup. The initial-administrator provisioning API correctly rejected a fixture permission list missing both mandatory pairing actions. Replaced that incorrect additive use with ordinary public ManagementService create-permission/attach-to-existing-role operations for just the two intended restriction actions. Nonsecret source/join phase markers added; no timer increase. Service303.619s, exit101.
-- Detailed commands/output retained in `08-full-nodes-run01.log` and `08-full-nodes-run02.log`. Systemd printed implausibly low MemoryPeak values (256/512KiB); do not infer actual process memory usage from those accounting numbers. Swap peak reported0. The enforced requested properties and command are recorded in each log. Final runtime acceptance is still pending the corrected rerun.
+- Detailed commands/output retained in `08-full-nodes-run01.log` and `08-full-nodes-run02.log`. Systemd printed implausibly low MemoryPeak values (256/512KiB); do not infer actual process memory usage from those accounting numbers. Swap peak reported0. The enforced requested properties and command are recorded in each log. Subsequent attempts are recorded below; no runtime acceptance has been achieved.
 
 ### Run03 timeout diagnosis and bounded decomposition
 
@@ -88,7 +88,7 @@ Run03 at stable `27e9902` compiled (200s), then exact1 failed at363.74s on the u
 The original single aggregate/design/command above is now **superseded** by three independent360s tests sharing ONE production join fixture helper:
 
 - `two_completed_full_hosts_join_partition_reopen_and_learn_denial`: no ordinary security DATA exchange; both completed hosts independently consume the previously learned refresh grant with local races, stop/reopen using retained stores, deny durable local replay, serve approved JWKS, and independently mutate identity/policy/resources and issue User/Client tokens offline. Distinct local views of the same owner's display name are acceptable here; this slice does not attempt reconciliation of those competing edits. Each successful resource connection is closed and resource deletion checked before ordinary managed shutdown.
-- `two_completed_full_hosts_reconcile_consumption_and_revocation`: independently created pair, same production join, previously learned three grants, local concurrent-winner/accepted partition divergence, A-only consumption/revocation followed by one authenticated IdP DATA exchange and B denial. Persisted offline reopen is separately qualified by the first test, not duplicated here.
+- `two_completed_full_hosts_reconcile_consumption_and_revocation`: independently created pair, same production join, previously learned three grants, sequential local consumption/replay and accepted partition divergence (concurrency remains in the offline slice), A-only consumption/revocation followed by one authenticated IdP DATA exchange and B denial. Persisted offline reopen is separately qualified by the first test, not duplicated here.
 - `two_completed_full_hosts_learn_restrictions_on_retained_sockets`: independently created pair, same production join, divergent Device restrictions/Full local resource writes, one authenticated Management DATA exchange while retaining both resource sockets, subsequent-write denial and restored-read earlier-byte preservation/public deletion. No extra IdP exchange/restart or generic SQL/KV/FS matrix.
 
 Remove the unnecessary preliminary ordinary Management exchange and two extra public User fixture rows. The source initializes the approved joined Device's empty policy through the existing public provisioning API AFTER authenticated approval, BEFORE the public Management import; B imports that current policy through production bootstrap. No copied native/private stores or unchecked policy bytes. Each scenario provisions only its required extra restriction actions/grants; normal owner checks are unchanged. Source/peer stops and existing-only reopens in the offline slice may run concurrently against their isolated roots. Each exact test can run alone with a fresh pair; no ordering/shared-pair assumption. All360s bounds remain unchanged. This is test decomposition, not a larger aggregate timeout or a successful test claim.
@@ -96,3 +96,29 @@ Remove the unnecessary preliminary ordinary Management exchange and two extra pu
 Run04 at `1ff0b6b`: compilation succeeded266s; exact offline slice failed62.83s after genuine approval, before imports. The fixture called management-server's stopped-store provisioner while the full source already held its native Management engine, correctly receiving `Database already open. Cannot acquire lock.` Corrected to use the existing test-only host Management handle and the SAME public `DbSelectionPolicyRepo` API consumed by that provisioner, after exact actual approval owner/member/endpoint assertions and an absent-policy assertion. The fixture initializes only the approved Device's empty initial policy; it does not reopen a live database, bypass request authorization later, relax native locks, or change production. Service329.395s, exit101; preserved in `08-full-nodes-run04.log`.
 
 Run05 at `30c36d1`: compile succeeded192s; source+joined authenticated imports and full-host readiness completed231.12s. Exact offline slice failed250.81s on the unchanged10s fixture HTTP timeout during local refresh redemption, before the offline reopens. No authentication defect or false permission finding inferred from a transport timeout. Service443.433s, exit101; `08-full-nodes-run05.log`. Added refresh node/status/elapsed and source-A/joined-B race markers without logging grant/bearer/secret values, and stopped/reopen markers. Bounds unchanged; no production change. The independent grant reconciliation slice now does sequential single-use/redemption/replay checks instead of repeating the offline slice's local concurrency probe; accepted cross-partition success remains asserted.
+
+## Current runtime results — run06–08 at stable source `19db0df`
+
+All runs used the exact limits/shared target above and exited101. Each ran exactly one test (0 passed,1 failed,75 filtered), not a matrix. Complete output is retained in [run06](08-full-nodes-run06.log), [run07](08-full-nodes-run07.log), and [run08](08-full-nodes-run08.log).
+
+| Run / independent slice | Compile      | Two full hosts ready | Test duration | Service duration | Actual failure                                                                    |
+| ----------------------- | ------------ | -------------------- | ------------- | ---------------- | --------------------------------------------------------------------------------- |
+| 06 / offline            | 206s         | 258.009s             | 282.01s       | 488.695s         | Joined-B refresh competitor transport timeout10.853s, before stop/reopen          |
+| 07 / grants             | 1.48s (warm) | 251.043s             | 274.08s       | 275.709s         | Joined-B sequential refresh replay transport timeout10.002s, before IdP reconnect |
+| 08 / restrictions       | 0.39s (warm) | 263.477s             | 278.41s       | 278.909s         | Real Management restriction PUT `TimedOut`, before Management reconnect           |
+
+### Observed behavior versus unqualified assertions
+
+- Run06 source-A local race returned200 at3.412s,400 at6.963s, then replay400 at3.492s; the helper's `invalid_grant` checks completed. This is source-A local one-winner/replay evidence only. Joined-B returned200 at5.454s, but its competitor timed out: **no B losing/replay denial response was observed**. Both partition-local success responses for the same previously learned grant were observed before the failure; this is accepted divergence, not global single-use enforcement.
+- Run07 source-A sequential redemption returned200 at3.007s and replay400 at3.290s. Joined-B redemption returned200 at5.621s, then its sequential replay timed out. The B timeout therefore reproduces without the local concurrent-race probe; it is not established to be merely concurrent serialization overhead. No B replay denial, later A-only consumption/revocation, IdP authenticated reconnect, or learned denial is qualified by this run.
+- Run08 reached both full hosts but the real Management restriction mutation request timed out. The log does not explicitly label its source host; no host-specific cause is inferred. No divergent restriction completion, retained resource-write result, Management reconnect, next-write denial, restored-byte preservation, or deletion/cleanup propagation is qualified by this run.
+- All three runs reached the fixture's production authenticated join, both public imports, current public completion checks and local IdP/Management/Storage HTTP health checks. That partial progress is **not** a passed journey, OS-provider qualification or new HTTPS evidence.
+- Offline reopen, unchanged-private-inventory reopen assertions, post-reopen identity/policy/resource mutations and User/Client issuance remain **unreached**, as do consumption/revocation reconciliation and retained-socket learned denial. Inherited03/05 cleanup evidence retains its original meaning and cannot fill these missing08 observations.
+
+### Bounded diagnosis / owner handoff
+
+Read-only inspection of IdP refresh handling found replay detection in the refresh issuance/rotation path: previous-row lookup, issuance eligibility, native transaction, conditional consumption update, rollback on zero updates and `invalid_grant`. No internal stage timing or blocking location was measured. Do not attribute the timeout to rollback, infer a deadlock, call it authorization denial, or alter production speculatively. The Management PUT traverses real actor introspection/permission/Device lookup/policy handling; only its HTTP timeout was observed.
+
+The next useful step is a coordinated focused diagnosis of joined-B refresh replay latency and the independent Management PUT latency, preserving the10s client and360s scenario bounds. Another identical full journey adds little evidence. No timer inflation, assertion removal, production workaround, private-store copying, generic owner matrix, or system/provider mutation was made. No additional Rust invocation follows these three failures in this handoff; shared build artifacts are retained.
+
+Source reviewer can use stable `19db0df9e124c626bde56cde99d7133e3ab3e8b0` for the tested implementation, together with this evidence commit. Coordinator retains claim, review, integration and acceptance/closure; ticket08 remains blocked, not resolved.

@@ -1,0 +1,38 @@
+Source: 19db0df
+Command: systemd-run --user --wait --pipe --collect --unit=of-ticket08-full-nodes-07 --property=MemoryMax=4G --property=MemorySwapMax=0 --property=RuntimeMaxSec=900 --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --locked --jobs=1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --lib local_provisioning_tests::full_nodes::two_completed_full_hosts_reconcile_consumption_and_revocation -- --exact --nocapture --test-threads=1
+Running as unit: of-ticket08-full-nodes-07.service; invocation ID: 1788c413d32d4e268d77a35ff066d862
+    Finished `test` profile [optimized + debuginfo] target(s) in 1.48s
+     Running unittests src/lib.rs (/home/nathan/code/rust/aicacia/of/target/debug/deps/unified_server-a4bf33735b2f05a3)
+
+running 1 test
+test local_provisioning_tests::full_nodes::two_completed_full_hosts_reconcile_consumption_and_revocation ... 08 Grants: source fixture ready at 26.687155913s
+08 Grants: entering authenticated join at 60.648074168s
+08 join: importing Idp at 9.876023715s
+08 join: imported Idp at 86.129438415s
+08 join: importing Management at 86.129456229s
+08 join: imported Management at 143.105292412s
+08 Grants: two completed full hosts; no DATA session at 251.043086644s
+08 refresh: node=b264d181c5624dcd2dc2cf3466136e7500c490c25289dde57d40193110b9d164 status=200 OK elapsed=3.007252422s
+08 refresh: node=b264d181c5624dcd2dc2cf3466136e7500c490c25289dde57d40193110b9d164 status=400 Bad Request elapsed=3.290227451s
+08 refresh: node=3a70373c4bf59bec98515b3fcd0d4049417358b7bceba0e13d1aa139cb728a1f status=200 OK elapsed=5.621486402s
+
+thread 'local_provisioning_tests::full_nodes::two_completed_full_hosts_reconcile_consumption_and_revocation' (1461629) panicked at crates/unified-server/src/full_node_tests.rs:222:23:
+local refresh transport failure: node=3a70373c4bf59bec98515b3fcd0d4049417358b7bceba0e13d1aa139cb728a1f timeout=true elapsed=10.001525203s
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    local_provisioning_tests::full_nodes::two_completed_full_hosts_reconcile_consumption_and_revocation
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 75 filtered out; finished in 274.08s
+
+error: test failed, to rerun pass `-p unified-server --lib`
+Finished with result: exit-code
+Main processes terminated with: code=exited/status=101
+Service runtime: 4min 35.709s
+CPU time consumed: 5min 18.369s
+Memory peak: 308.0K
+Memory swap peak: 0B
+Exit status: 101

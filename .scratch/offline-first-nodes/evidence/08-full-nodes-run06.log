@@ -1,0 +1,43 @@
+Source: 19db0df
+Command: systemd-run --user --wait --pipe --collect --unit=of-ticket08-full-nodes-06 --property=MemoryMax=4G --property=MemorySwapMax=0 --property=RuntimeMaxSec=900 --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --locked --jobs=1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --lib local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial -- --exact --nocapture --test-threads=1
+Running as unit: of-ticket08-full-nodes-06.service; invocation ID: c8f8622a616941ddb0450619e772f466
+   Compiling unified-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/unified-server)
+    Finished `test` profile [optimized + debuginfo] target(s) in 3m 26s
+     Running unittests src/lib.rs (/home/nathan/code/rust/aicacia/of/target/debug/deps/unified_server-a4bf33735b2f05a3)
+
+running 1 test
+test local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial ... 08 Offline: source fixture ready at 27.244121339s
+08 Offline: entering authenticated join at 56.26139574s
+08 join: importing Idp at 9.754738476s
+08 join: imported Idp at 89.662329744s
+08 join: importing Management at 89.662352266s
+08 join: imported Management at 152.069943855s
+08 Offline: two completed full hosts; no DATA session at 258.00903138s
+08 Offline: starting local concurrent race/replay for source-A at 258.009088087s
+08 refresh: node=10cec36b53de2ced5b0ef931955e8175bcbb0d36669ce7987ecfd831cac8b273 status=200 OK elapsed=3.41201753s
+08 refresh: node=10cec36b53de2ced5b0ef931955e8175bcbb0d36669ce7987ecfd831cac8b273 status=400 Bad Request elapsed=6.963191203s
+08 refresh: node=10cec36b53de2ced5b0ef931955e8175bcbb0d36669ce7987ecfd831cac8b273 status=400 Bad Request elapsed=3.491568487s
+08 Offline: finished local concurrent race/replay for source-A at 268.464023631s
+08 Offline: starting local concurrent race/replay for joined-B at 268.464031766s
+08 refresh: node=8e2783c5c1e3e8683169431b679c4771ef1049087ee4d0ea75a0345c3dbfdbec status=200 OK elapsed=5.454400918s
+
+thread 'local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial' (1460770) panicked at crates/unified-server/src/full_node_tests.rs:222:23:
+local refresh transport failure: node=8e2783c5c1e3e8683169431b679c4771ef1049087ee4d0ea75a0345c3dbfdbec timeout=true elapsed=10.853368161s
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 75 filtered out; finished in 282.01s
+
+error: test failed, to rerun pass `-p unified-server --lib`
+Finished with result: exit-code
+Main processes terminated with: code=exited/status=101
+Service runtime: 8min 8.695s
+CPU time consumed: 9min 1.633s
+Memory peak: 308.0K
+Memory swap peak: 0B
+Exit status: 101
