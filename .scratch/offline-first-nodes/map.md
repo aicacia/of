@@ -2,7 +2,14 @@
 
 ## Notes
 
-### Current checkpoint — 2026-10-11, user-approved machine-local qualification
+### Current checkpoint — 2026-10-11, 04/07 revised-scope acceptance; 08 outstanding
+
+- Root integration `a6b517c2fa28bff7329223661e6138af19ed4a34` includes reviewed durable `a2c8c25`, frontend `3f898c6` (prior merge `b61b0d6`), and audience/TLS `9acbe42`/`cc02e32` (prior merge `8a70dee`). [04 Answer](issues/04-equal-node-setup-join-and-desktop.md#answer) and [07 Answer](issues/07-node-operations-and-runtime-lifecycle.md#answer) resolve all nine revised criteria in each ticket after scoped evidence audit.01–07 have resolved work status within their Answers (01 retains its older `Status: ready-for-agent` triage field, unchanged here); **08 is still outstanding**, with status/work status unchanged pending coordinator action. Spec status is unchanged; this is not full-spec acceptance.
+- [04 durable evidence](evidence/04-local-transitions.md#trimmed-representative-regression--actual-pass) records four exact production import/journal/readiness-publication boundaries and native reopens: **1/0, 350.97s**, nominal **9.03s margin** to unchanged internal360s. Earlier larger-fixture timeouts remain historical failures; no performance fix or robust timing headroom is claimed. [Frontend](evidence/04-residency-ui.md#follow-up-genuine-component-events-and-reactive-dom-2026-10-11) records separate **DOM3 and client/SSR12** passes. These combine with actual production join/offline reopen, session-provider native setup/reset and marker-publication evidence, not GUI approval.
+- [Audiences](evidence/07-desktop-audiences.md) and [TLS paths](evidence/07-tls-paths.md) record sensitivity failures/restoration and final1/final5 passes; existing [lifecycle](evidence/07-lifecycle.md), [rotation](evidence/evidence07-rotation.md), [desktop error cleanup](evidence/evidence07-desktop.md) and [same-Node retained-provider filesystem restore](evidence/07-recovery.md) complete07's revised bounded scope. Detached owner mesh joining, concurrent rollout, hostile path races, lost-provider/populated/crash recovery and other platforms/deployments remain unqualified.
+- [Machine-local policy](spec.md#machine-local-qualification-policy) governs closure; historical broad platform/exhaustive blockers below are not current gates. **Verified GUI approval, profile-B completion and two-profile GUI offline restart remain deferred/not observed.**08 owns actual isolated same-host full-Node partition/reconnect/propagation and final focused validation, including its external owner gates; no owner status is inferred here. No independent test run, build, provider/profile/CA operation, main merge, push or cleanup accompanied this merge/closure. All ten root Storage dirty paths remain unchanged.
+
+### Historical checkpoint — 2026-10-11, user-approved machine-local qualification
 
 - All eight `of` tickets and linked15 `ofdb`/3 `offs` tickets use bounded Ubuntu Linux x86_64 qualification. [Policy and follow-ups](spec.md#machine-local-qualification-policy) supersede historical broad completion-gate lists, not historical evidence. No ticket status, prior checkbox or dependency is automatically changed;04/07 need revised-scope audits and08 still requires actual same-host full-Node integration.
 - Foreign-platform, unattended/container deployment, physical WAN/multi-device and exhaustive fault/feature qualification are follow-ups. Retained-provider stopped filesystem recovery is the supported recovery gate; lost-provider/populated/crash recovery is not claimed. No full Cargo Hack/CRAP sweep. Production auth/integrity, independent stores/signers, real authenticated join, learned denial and representative cleanup failures remain required locally.
@@ -165,11 +172,21 @@ Numbers identify tickets from the retired unified-server effort. Destinations be
 
 ## Decisions-so-far
 
+### Current accepted decisions — 2026-10-11
+
+- **[04 resolved](issues/04-equal-node-setup-join-and-desktop.md#answer):** revised representative durable/capture/completion boundaries and fail-closed recovery are accepted with real production join/offline reopen, native session-provider observations, observed marker publication and focused DOM3/client-SSR12 evidence. Reviewed durable `a2c8c25` is merged at `a6b517c`; its350.97s pass is near the unchanged360s bound (9.03s nominal margin). GUI approval/B completion remains deferred, not observed; historical larger-fixture failures are preserved.
+- **[07 resolved](issues/07-node-operations-and-runtime-lifecycle.md#answer):** all nine scoped criteria accepted under coordinator-supplied auditor `a371`, linking qualified audience/TLS checks plus existing lifecycle, rotation, ordinary-error cleanup and actual stopped same-Node retained-provider restore. No universal task joining, concurrent rollout, unattended/image/foreign-platform or provider-loss recovery claim.
+- **08 remains outstanding:** coordinator retains its status decision. Final same-host full-Node partition/reconnect/propagation composition, external owner evidence and focused final validation remain08; neither these ticket closures nor historical prerequisite passes resolve it. Spec status unchanged; no test execution by this merger/auditor is inferred.
+
+### Historical checkpoint decisions — retain original scope and provenance
+
+Entries below describe earlier checkpoints, not the current04/07 acceptance or08 status.
+
 - **2026-10-11: local main consolidation/housekeeping** preserves delivered scopes and active tracker. [Cleanup receipt](../worktree-cleanup/2026-10-11/README.md) and [archive index](../archive/2026-10-11/README.md). No unresolved auxiliary delta merged; four worktrees/stashes/private state retained, no remote push or new acceptance.
 
 - **2026-10-11: [06 resolved](issues/06-api-clients-and-obsolete-artifacts.md#answer)** for current API generation/callers/artifact/docs scope with user-authorized continuation despite incomplete04. [Exact integrated acceptance and limitations](evidence/06-completion.md). No04/fullspec/deployment acceptance; source-based workspace consumption and explicit complete distribution build preserve root user artifacts.
 
-### Current integrated decisions — 2026-10-10
+### Historical integrated decisions — 2026-10-10
 
 - [Current frontier audit](evidence/current-frontier.md) separates integrated scoped deliveries at `ec14858` from04 criteria6–9 qualification and06/07/08 completion. [05 Answer](issues/05-device-policy-catalog-and-cleanup.md#answer) remains resolved; its former cleanup-owner and acceptance gaps below are historical.
 - Reviewed `092e34b` requires a successful durable resetting fence on **every** cleanup retry; reviewed `e7e9bf1` makes attempted relationship credentials load-only; reviewed `b689241` captures Node first production and verifies retained pre-enrollment material without replacement or enrolled-trust fallback. Reviewed `baf8756` fixes the interruption fixture's inventory call and records the restored original broader join pass. No full-suite, every-write or GUI acceptance follows.
@@ -231,6 +248,12 @@ Earlier unresolved/blocker/not-integrated statements below describe their named 
 ## Fog
 
 ### Current gaps — 2026-10-11
+
+Current closure scope is the [machine-local policy](spec.md#machine-local-qualification-policy).04/07 are now resolved within their revised Answers; historical claims below that they remain incomplete/unchecked or lack durable-transition/UI/TLS qualification describe prior revisions, not current gates. **08 remains outstanding and unchanged**: actual isolated same-host full-Node partition/reconnect/learned propagation composition, external owner qualification links and final focused validation still require coordinator acceptance. Known local authorization/integrity defects cannot be deferred away.
+
+Retain the near-bound durable350.97s/360s timing risk and prior unexplained evaluator/test timeouts; no zero-flake guarantee. GUI approval/profile-B completion/two-profile GUI restart remain deferred/not observed. Foreign-platform, unattended/container/WAN, provider-loss/populated/stale/crash and exhaustive matrices are unqualified follow-ups, not04/07 closure gates. Detached owner mesh task joins, hostile concurrent path replacement and concurrent multi-consumer rollout remain explicit limits. No mock/UI acknowledgement/marker is upgraded to resource authorization, content readiness or actual GUI completion.
+
+### Historical gaps — revised-scope audit not yet completed
 
 Current closure scope is the [machine-local policy](spec.md#machine-local-qualification-policy), not the historical platform/exhaustive lists below. Audit remaining04/07 local criteria without rerunning deferred GUI approval;08 still needs real isolated same-host full-Node partition/reconnect integration. Foreign-platform/deployment/provider-loss/exhaustive qualification does not block these tickets. Known local bugs and unqualified actual authorization/completion remain blockers.
 
