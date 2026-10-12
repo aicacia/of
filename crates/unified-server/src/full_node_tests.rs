@@ -5,11 +5,7 @@ use idp_model::{
     contract::{GrantType, INSTALLATION_POLICY_ID, IdentityAction},
     model::Id,
 };
-use idp_service::{
-    oauth2::NodeSignerBinding,
-    replica::DbUserRepo,
-    repo::{PrivateKeyKeyringRepo, UserRepo},
-};
+use idp_service::{oauth2::NodeSignerBinding, repo::PrivateKeyKeyringRepo};
 use iroh_chain::DATA_ALPN;
 use management_service::{
     ManagementService,
@@ -369,15 +365,9 @@ async fn create_written_resource(
     (resource, connection)
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn two_completed_full_hosts_join_partition_reopen_and_learn_denial() {
-    tokio::time::timeout(Duration::from_secs(360), full_hosts())
-        .await
-        .expect("bounded two-full-host slice");
-}
-
 async fn join_host(
     source: &Host,
+    a: &Fixture,
     b: &mut Fixture,
     owner: Id,
     journal: &serde_json::Value,
@@ -475,6 +465,9 @@ async fn join_host(
             .expect("pinned authenticated approval"),
         approval
     );
+    management_server::provision_initial_device(&a.config.management, binding.member_id, owner)
+        .await
+        .expect("source owner initializes the approved joined Device's empty policy");
     joining_owner
         .record_node_join_approval(&approval)
         .expect("durable receipt");
@@ -575,265 +568,309 @@ async fn join_host(
     joined
 }
 
-async fn full_hosts() {
-    let started = std::time::Instant::now();
-    let mut a = Fixture::new();
-    let mut b = Fixture::new();
-    for credential in [
-        &mut b.config.management_idp_client,
-        &mut b.config.storage_idp_client,
-        &mut b.config.storage_management_client,
-        b.config
-            .idp_management_client
-            .as_mut()
-            .expect("local evaluator"),
-    ] {
-        credential.client_secret = format!("node-b-{}", Id::now_v7());
-    }
-    b.config.idp.oauth2.issuer = a.config.idp.oauth2.issuer.clone();
-    a.config.idp.key_namespace = format!("full-node-a-{}", Id::now_v7());
-    b.config.idp.key_namespace = format!("full-node-b-{}", Id::now_v7());
-    let stores = Arc::new(NodeStores {
-        stores: [
-            (a.config.idp.key_namespace.clone(), a.store.clone()),
-            (b.config.idp.key_namespace.clone(), b.store.clone()),
-        ],
-    });
-    let _ = PrivateKeyKeyringRepo::new_with_store(&a.config.idp.oauth2.issuer, stores);
-    let roots = [
-        &a.config.idp.data_dir,
-        &a.config.management.data_dir,
-        &a.config.storage.data_dir,
-        &b.config.idp.data_dir,
-        &b.config.management.data_dir,
-        &b.config.storage.data_dir,
-    ];
-    for (index, root) in roots.iter().enumerate() {
-        assert!(
-            !roots[..index].contains(root),
-            "each context has its own root"
-        );
-    }
-    assert_ne!(a.config.endpoint_data_dir, b.config.endpoint_data_dir);
-    let http = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-        .expect("bounded loopback owner HTTP client");
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Slice {
+    Offline,
+    Grants,
+    Restrictions,
+}
 
-    let mut local = LocalProvisioner::create(a.config.clone(), "operator", "Node A", &a.password)
-        .expect("one fresh Installation");
-    local
-        .provision(&a.password)
-        .await
-        .expect("production restricted local provisioning");
-    let journal = a.journal();
-    assert_eq!(journal["complete"], true);
-    let owner: Id = journal["user"]
-        .as_str()
-        .expect("initial User")
-        .parse()
-        .expect("User ID");
-    let member_a: Id = journal["member"]
-        .as_str()
-        .expect("initial member")
-        .parse()
-        .expect("member ID");
-    let key_a: Id = journal["key"]
-        .as_str()
-        .expect("initial signer")
-        .parse()
-        .expect("key ID");
-    let login = rotation_login_client(
-        &a,
-        vec![
-            GrantType::Password,
-            GrantType::RefreshToken,
-            GrantType::TokenExchange,
-        ],
-        vec![
-            a.config.storage_idp_client.audience.clone(),
-            management_service::MANAGEMENT_APPLICATION_URI.into(),
-            "storage:filesystems".into(),
-        ],
-    )
-    .await;
-    let login_id = login.client_id.as_deref().expect("public login Client");
-    let source_idp = Arc::new(
-        db::Database::open(a.root.join("idp/idp.redb")).expect("public IdP fixture owner"),
-    );
-    let users = DbUserRepo::new(source_idp, a.config.idp.password.clone());
-    let user_a = users
-        .create_user_with_password("identity-a", "fixture-a-password")
-        .await
-        .expect("independent identity target A")
-        .id;
-    let user_b = users
-        .create_user_with_password("identity-b", "fixture-b-password")
-        .await
-        .expect("independent identity target B")
-        .id;
-    drop(users);
-    let management = Arc::new(
-        db::Database::open(a.root.join("management/management.redb"))
-            .expect("public Management fixture owner"),
-    );
-    let policy = ManagementService::new(
-        DbPermissionRepo::new(management.clone()),
-        DbRoleRepo::new(management),
-    );
-    let role = journal["role"]
-        .as_str()
-        .expect("retained administrator role")
-        .parse()
-        .expect("role ID");
-    for action in [
-        IdentityAction::DeviceRestrictionsRead,
-        IdentityAction::DeviceRestrictionsUpdate,
-    ] {
-        let permission = policy
-            .create_permission(INSTALLATION_POLICY_ID, action.permission(), None)
-            .await
-            .expect("explicit Installation restriction permission");
-        policy
-            .add_permission_to_role(INSTALLATION_POLICY_ID, role, permission.id)
-            .await
-            .expect(
-                "attach only the exact requested permission to the existing administrator role",
+struct Pair {
+    source: Host,
+    joined: Host,
+    a: Fixture,
+    b: Fixture,
+    http: reqwest::Client,
+    owner: Id,
+    member_a: Id,
+    key_a: Id,
+    login_id: String,
+    shared: TokenResponse,
+    grants: Option<(TokenResponse, TokenResponse)>,
+    started: std::time::Instant,
+}
+
+impl Pair {
+    async fn new(slice: Slice) -> Self {
+        let started = std::time::Instant::now();
+        let mut a = Fixture::new();
+        let mut b = Fixture::new();
+        for credential in [
+            &mut b.config.management_idp_client,
+            &mut b.config.storage_idp_client,
+            &mut b.config.storage_management_client,
+            b.config
+                .idp_management_client
+                .as_mut()
+                .expect("local evaluator"),
+        ] {
+            credential.client_secret = format!("node-b-{}", Id::now_v7());
+        }
+        b.config.idp.oauth2.issuer = a.config.idp.oauth2.issuer.clone();
+        a.config.idp.key_namespace = format!("full-node-a-{}", Id::now_v7());
+        b.config.idp.key_namespace = format!("full-node-b-{}", Id::now_v7());
+        let stores = Arc::new(NodeStores {
+            stores: [
+                (a.config.idp.key_namespace.clone(), a.store.clone()),
+                (b.config.idp.key_namespace.clone(), b.store.clone()),
+            ],
+        });
+        let _ = PrivateKeyKeyringRepo::new_with_store(&a.config.idp.oauth2.issuer, stores);
+        let roots = [
+            &a.config.idp.data_dir,
+            &a.config.management.data_dir,
+            &a.config.storage.data_dir,
+            &b.config.idp.data_dir,
+            &b.config.management.data_dir,
+            &b.config.storage.data_dir,
+        ];
+        for (index, root) in roots.iter().enumerate() {
+            assert!(
+                !roots[..index].contains(root),
+                "each context has its own root"
             );
+        }
+        assert_ne!(a.config.endpoint_data_dir, b.config.endpoint_data_dir);
+        let http = reqwest::Client::builder()
+            .timeout(Duration::from_secs(10))
+            .build()
+            .expect("bounded loopback owner HTTP client");
+        let mut local =
+            LocalProvisioner::create(a.config.clone(), "operator", "Node A", &a.password)
+                .expect("one fresh Installation");
+        local
+            .provision(&a.password)
+            .await
+            .expect("production restricted local provisioning");
+        let journal = a.journal();
+        assert_eq!(journal["complete"], true);
+        let owner = journal["user"]
+            .as_str()
+            .expect("initial User")
+            .parse()
+            .expect("User ID");
+        let member_a = journal["member"]
+            .as_str()
+            .expect("initial member")
+            .parse()
+            .expect("member ID");
+        let key_a = journal["key"]
+            .as_str()
+            .expect("initial signer")
+            .parse()
+            .expect("key ID");
+        let login = rotation_login_client(
+            &a,
+            vec![
+                GrantType::Password,
+                GrantType::RefreshToken,
+                GrantType::TokenExchange,
+            ],
+            vec![
+                a.config.storage_idp_client.audience.clone(),
+                management_service::MANAGEMENT_APPLICATION_URI.into(),
+                "storage:filesystems".into(),
+            ],
+        )
+        .await;
+        let login_id = login.client_id.expect("public login Client");
+        if slice != Slice::Grants {
+            let management = Arc::new(
+                db::Database::open(a.root.join("management/management.redb"))
+                    .expect("public Management fixture owner"),
+            );
+            let policy = ManagementService::new(
+                DbPermissionRepo::new(management.clone()),
+                DbRoleRepo::new(management),
+            );
+            let role = journal["role"]
+                .as_str()
+                .expect("retained administrator role")
+                .parse()
+                .expect("role ID");
+            for action in [
+                IdentityAction::DeviceRestrictionsRead,
+                IdentityAction::DeviceRestrictionsUpdate,
+            ] {
+                let permission = policy
+                    .create_permission(INSTALLATION_POLICY_ID, action.permission(), None)
+                    .await
+                    .expect("explicit Installation restriction permission");
+                policy
+                    .add_permission_to_role(INSTALLATION_POLICY_ID, role, permission.id)
+                    .await
+                    .expect("attach exact requested permission to existing administrator role");
+            }
+        }
+        eprintln!(
+            "08 {slice:?}: source fixture ready at {:?}",
+            started.elapsed()
+        );
+        let source = Host::start(local.build_runtime().await.expect("completed source host")).await;
+        drop(local);
+        let password_form = [
+            ("grant_type", "password"),
+            ("client_id", login_id.as_str()),
+            ("username", "operator"),
+            ("password", "fixture-initial-password"),
+            ("scope", "openid"),
+        ];
+        let shared = token(&http, &source, &password_form).await;
+        let grants = if slice == Slice::Grants {
+            Some((
+                token(&http, &source, &password_form).await,
+                token(&http, &source, &password_form).await,
+            ))
+        } else {
+            None
+        };
+        let approving = exchange(
+            &http,
+            &source,
+            &login_id,
+            &shared.access_token.0,
+            &a.config.storage_idp_client.audience,
+        )
+        .await;
+        source
+            .runtime()
+            .node_join_accepting(&approving, Some(true))
+            .await
+            .expect("authorized purpose-specific join acceptance");
+        eprintln!(
+            "08 {slice:?}: entering authenticated join at {:?}",
+            started.elapsed()
+        );
+        let joined = join_host(&source, &a, &mut b, owner, &journal, &approving).await;
+        source
+            .runtime()
+            .node_join_accepting(&approving, Some(false))
+            .await
+            .expect("close purpose-specific pairing acceptance");
+        let secrets_a = a.secrets();
+        let secrets_b = b.secrets();
+        assert!(!secrets_a.is_empty() && !secrets_b.is_empty());
+        assert!(
+            secrets_a.iter().all(|secret| !secrets_b.contains(secret)),
+            "no copied/shared private material"
+        );
+        eprintln!(
+            "08 {slice:?}: two completed full hosts; no DATA session at {:?}",
+            started.elapsed()
+        );
+        Self {
+            source,
+            joined,
+            a,
+            b,
+            http,
+            owner,
+            member_a,
+            key_a,
+            login_id,
+            shared,
+            grants,
+            started,
+        }
     }
-    drop(policy);
-    eprintln!(
-        "08: source provisioned and explicit fixture grants ready at {:?}",
-        started.elapsed()
-    );
-    let source = Host::start(local.build_runtime().await.expect("completed source host")).await;
-    drop(local);
-    let endpoint_a = source.runtime().endpoint_id();
-    let password_form = [
-        ("grant_type", "password"),
-        ("client_id", login_id),
-        ("username", "operator"),
-        ("password", "fixture-initial-password"),
-        ("scope", "openid"),
-    ];
-    eprintln!(
-        "08: source full-host listener ready at {:?}",
-        started.elapsed()
-    );
-    let shared = token(&http, &source, &password_form).await;
-    let consumed = token(&http, &source, &password_form).await;
-    let revoked = token(&http, &source, &password_form).await;
-    let shared_grant = shared
+
+    fn binding(&self) -> &NodeSignerBinding {
+        self.b
+            .config
+            .idp
+            .oauth2
+            .local_signer
+            .as_ref()
+            .expect("retained joined binding")
+    }
+
+    async fn reconnect(&self, context: SecurityContext) {
+        eprintln!(
+            "08: reconnecting {context:?} at {:?}",
+            self.started.elapsed()
+        );
+        let connection = self
+            .joined
+            .runtime()
+            .full_node_test_server()
+            .endpoint()
+            .connect(
+                self.source
+                    .runtime()
+                    .full_node_test_server()
+                    .endpoint()
+                    .addr(),
+                DATA_ALPN,
+            )
+            .await
+            .expect("authenticated reconnect using persisted independent identities");
+        assert_eq!(connection.remote_id(), self.source.runtime().endpoint_id());
+        self.joined
+            .runtime()
+            .synchronize_security(&connection, context)
+            .await
+            .expect("learn current public owner state");
+        connection.close(0u32.into(), b"focused reconciliation complete");
+        eprintln!("08: reconciled {context:?} at {:?}", self.started.elapsed());
+    }
+
+    async fn stop(self) {
+        tokio::join!(self.source.stop(), self.joined.stop());
+        eprintln!("08: focused slice stopped at {:?}", self.started.elapsed());
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn two_completed_full_hosts_join_partition_reopen_and_learn_denial() {
+    tokio::time::timeout(Duration::from_secs(360), offline_reopen())
+        .await
+        .expect("bounded full-host offline slice");
+}
+
+async fn offline_reopen() {
+    let pair = Pair::new(Slice::Offline).await;
+    let grant = pair
+        .shared
         .refresh_token
         .as_ref()
         .expect("shared learned refresh")
         .0
         .as_str();
-    let consumed_grant = consumed
-        .refresh_token
-        .as_ref()
-        .expect("consumption propagation target")
-        .0
-        .as_str();
-    let revoked_grant = revoked
-        .refresh_token
-        .as_ref()
-        .expect("revocation propagation target")
-        .0
-        .as_str();
-    assert_ne!(shared_grant, consumed_grant);
-    assert_ne!(consumed_grant, revoked_grant);
-    let approving = exchange(
-        &http,
-        &source,
-        login_id,
-        &shared.access_token.0,
-        &a.config.storage_idp_client.audience,
-    )
-    .await;
-    source
-        .runtime()
-        .node_join_accepting(&approving, Some(true))
-        .await
-        .expect("authorized purpose-specific join acceptance");
-
-    eprintln!("08: entering authenticated join at {:?}", started.elapsed());
-    let joined = join_host(&source, &mut b, owner, &journal, &approving).await;
-    eprintln!("08: joined full host ready at {:?}", started.elapsed());
-    let binding = b
-        .config
-        .idp
-        .oauth2
-        .local_signer
-        .as_ref()
-        .expect("retained joined binding")
-        .clone();
-    let connection = joined
-        .runtime()
-        .full_node_test_server()
-        .endpoint()
-        .connect(
-            source.runtime().full_node_test_server().endpoint().addr(),
-            DATA_ALPN,
-        )
-        .await
-        .expect("approved same-Installation DATA connection");
-    assert_eq!(connection.remote_id(), endpoint_a);
-    joined
-        .runtime()
-        .synchronize_security(&connection, SecurityContext::Management)
-        .await
-        .expect("source learns joined ready policy through authenticated owner sync");
-    connection.close(0u32.into(), b"controlled partition");
-    drop(connection);
-    eprintln!(
-        "08: two completed full hosts, partition at {:?}",
-        started.elapsed()
-    );
-
-    for host in [&source, &joined] {
-        local_winner(&http, host, login_id, shared_grant).await;
+    for host in [&pair.source, &pair.joined] {
+        local_winner(&pair.http, host, &pair.login_id, grant).await;
     }
-    json(
-        refresh(&http, &source, login_id, consumed_grant).await,
-        reqwest::StatusCode::OK,
-    )
-    .await;
-    let revocation = http
-        .post(format!("{}/idp/oauth2/revoke", source.base))
-        .form(&[
-            ("client_id", login_id),
-            ("token", revoked_grant),
-            ("token_type_hint", "refresh_token"),
-        ])
-        .send()
-        .await
-        .expect("real local refresh revocation");
-    assert!(revocation.status().is_success());
-    denied_grant(refresh(&http, &source, login_id, revoked_grant).await).await;
-    let secrets_a = a.secrets();
-    let secrets_b = b.secrets();
-    assert!(!secrets_a.is_empty() && !secrets_b.is_empty());
-    assert!(
-        secrets_a.iter().all(|secret| !secrets_b.contains(secret)),
-        "no copied/shared private signer material"
+    let endpoint_a = pair.source.runtime().endpoint_id();
+    let endpoint_b = pair.joined.runtime().endpoint_id();
+    let secrets_a = pair.a.secrets();
+    let secrets_b = pair.b.secrets();
+    let Pair {
+        source,
+        joined,
+        a,
+        b,
+        http,
+        owner,
+        member_a,
+        key_a,
+        login_id,
+        shared,
+        started,
+        ..
+    } = pair;
+    tokio::join!(source.stop(), joined.stop());
+    let (reopened_a, reopened_b) = tokio::join!(
+        LocalProvisioner::open_runtime(a.config.clone()),
+        LocalProvisioner::open_runtime(b.config.clone())
     );
-    source.stop().await;
-    joined.stop().await;
-
-    let (runtime_a, guard_a) = LocalProvisioner::open_runtime(a.config.clone())
-        .await
-        .expect("completed source offline reopen");
+    let (runtime_a, guard_a) = reopened_a.expect("completed source offline reopen");
+    let (runtime_b, guard_b) = reopened_b.expect("completed joined existing-only offline reopen");
     assert!(guard_a.is_some());
-    let (runtime_b, guard_b) = LocalProvisioner::open_runtime(b.config.clone())
-        .await
-        .expect("completed joined existing-only offline reopen");
     assert!(
         guard_b.is_none(),
-        "joining never invents an unrelated Installation journal"
+        "joining does not invent an unrelated Installation journal"
     );
     assert_eq!(runtime_a.endpoint_id(), endpoint_a);
-    assert_eq!(runtime_b.endpoint_id().to_string(), binding.endpoint_id);
+    assert_eq!(runtime_b.endpoint_id(), endpoint_b);
     assert!(
         runtime_b
             .node_join_public_ready()
@@ -844,9 +881,19 @@ async fn full_hosts() {
     assert_eq!(secrets_b, b.secrets());
     let source = Host::start(runtime_a).await;
     let joined = Host::start(runtime_b).await;
-    eprintln!("08: both reopened offline at {:?}", started.elapsed());
+    drop(guard_a);
+    eprintln!(
+        "08 Offline: both reopened without DATA sessions at {:?}",
+        started.elapsed()
+    );
+    let grant = shared
+        .refresh_token
+        .as_ref()
+        .expect("shared learned refresh")
+        .0
+        .as_str();
     for host in [&source, &joined] {
-        denied_grant(refresh(&http, host, login_id, shared_grant).await).await;
+        denied_grant(refresh(&http, host, &login_id, grant).await).await;
         let jwks = json(
             http.get(format!("{}/idp/.well-known/jwks.json", host.base))
                 .send()
@@ -855,7 +902,17 @@ async fn full_hosts() {
             reqwest::StatusCode::OK,
         )
         .await;
-        for key in [key_a.to_string(), binding.key_id.to_string()] {
+        for key in [
+            key_a.to_string(),
+            b.config
+                .idp
+                .oauth2
+                .local_signer
+                .as_ref()
+                .expect("joined signer")
+                .key_id
+                .to_string(),
+        ] {
             assert!(
                 jwks["keys"]
                     .as_array()
@@ -865,45 +922,45 @@ async fn full_hosts() {
             );
         }
     }
-    let actor_a = exchange(
-        &http,
-        &source,
-        login_id,
-        &shared.access_token.0,
-        &a.config.storage_idp_client.audience,
-    )
-    .await;
-    let actor_b = exchange(
-        &http,
-        &joined,
-        login_id,
-        &shared.access_token.0,
-        &b.config.storage_idp_client.audience,
-    )
-    .await;
-    let policy_a = exchange(
-        &http,
-        &source,
-        login_id,
-        &shared.access_token.0,
-        management_service::MANAGEMENT_APPLICATION_URI,
-    )
-    .await;
-    let policy_b = exchange(
-        &http,
-        &joined,
-        login_id,
-        &shared.access_token.0,
-        management_service::MANAGEMENT_APPLICATION_URI,
-    )
-    .await;
-    for (host, fixture, user, actor, label) in [
-        (&source, &a, user_a, &actor_a, "offline-a"),
-        (&joined, &b, user_b, &actor_b, "offline-b"),
+    for (host, fixture, remote, local, label) in [
+        (
+            &source,
+            &a,
+            b.config
+                .idp
+                .oauth2
+                .local_signer
+                .as_ref()
+                .expect("joined member")
+                .member_id,
+            member_a,
+            "offline-a",
+        ),
+        (
+            &joined,
+            &b,
+            member_a,
+            b.config
+                .idp
+                .oauth2
+                .local_signer
+                .as_ref()
+                .expect("joined member")
+                .member_id,
+            "offline-b",
+        ),
     ] {
+        let actor = exchange(
+            &http,
+            host,
+            &login_id,
+            &shared.access_token.0,
+            &fixture.config.storage_idp_client.audience,
+        )
+        .await;
         let updated = json(
-            http.put(format!("{}/idp/users/{user}", host.base))
-                .bearer_auth(actor)
+            http.put(format!("{}/idp/users/{owner}", host.base))
+                .bearer_auth(&actor)
                 .json(&serde_json::json!({"name": label}))
                 .send()
                 .await
@@ -932,94 +989,144 @@ async fn full_hosts() {
             issued.issuer.as_deref(),
             Some(a.config.idp.oauth2.issuer.as_str())
         );
-    }
-    restriction(&http, &source, &policy_a, binding.member_id, false).await;
-    restriction(&http, &joined, &policy_b, member_a, false).await;
-    assert_restriction(&http, &source, &policy_a, member_a, true).await;
-    assert_restriction(&http, &joined, &policy_b, binding.member_id, true).await;
-    let storage_a = exchange(
-        &http,
-        &source,
-        login_id,
-        &shared.access_token.0,
-        "storage:filesystems",
-    )
-    .await;
-    let storage_b = exchange(
-        &http,
-        &joined,
-        login_id,
-        &shared.access_token.0,
-        "storage:filesystems",
-    )
-    .await;
-    let (resource_a, mut socket_a) = create_written_resource(&http, &source, &storage_a).await;
-    let (resource_b, mut socket_b) = create_written_resource(&http, &joined, &storage_b).await;
-    assert_ne!(resource_a, resource_b);
-    for (host, bearer, absent) in [
-        (&source, &storage_a, &resource_b),
-        (&joined, &storage_b, &resource_a),
-    ] {
-        assert_eq!(
-            http.get(format!("{}/storage/filesystems/{absent}", host.base))
-                .bearer_auth(bearer)
-                .send()
-                .await
-                .expect("isolated local catalog")
-                .status(),
-            reqwest::StatusCode::NOT_FOUND
+        let policy = exchange(
+            &http,
+            host,
+            &login_id,
+            &shared.access_token.0,
+            management_service::MANAGEMENT_APPLICATION_URI,
+        )
+        .await;
+        restriction(&http, host, &policy, remote, false).await;
+        assert_restriction(&http, host, &policy, local, true).await;
+        let storage = exchange(
+            &http,
+            host,
+            &login_id,
+            &shared.access_token.0,
+            "storage:filesystems",
+        )
+        .await;
+        let (resource, mut connection) = create_written_resource(&http, host, &storage).await;
+        connection
+            .close(None)
+            .await
+            .expect("close offline resource connection");
+        delete_resource(&http, host, &storage, &resource).await;
+        eprintln!(
+            "08 Offline: identity/policy/resource/user+client issuance completed for {label} at {:?}",
+            started.elapsed()
         );
     }
+    tokio::join!(source.stop(), joined.stop());
+    eprintln!("08 Offline: complete at {:?}", started.elapsed());
+}
 
-    let connection = joined
-        .runtime()
-        .full_node_test_server()
-        .endpoint()
-        .connect(
-            source.runtime().full_node_test_server().endpoint().addr(),
-            DATA_ALPN,
-        )
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn two_completed_full_hosts_reconcile_consumption_and_revocation() {
+    tokio::time::timeout(Duration::from_secs(360), learned_grants())
         .await
-        .expect("authenticated reconnect using persisted independent identities");
-    assert_eq!(connection.remote_id(), endpoint_a);
-    joined
-        .runtime()
-        .synchronize_security(&connection, SecurityContext::Idp)
-        .await
-        .expect("learn public identity/grant consumption/revocation");
-    denied_grant(refresh(&http, &joined, login_id, consumed_grant).await).await;
-    denied_grant(refresh(&http, &joined, login_id, revoked_grant).await).await;
-    for host in [&source, &joined] {
-        for (user, label) in [(user_a, "offline-a"), (user_b, "offline-b")] {
-            let actor = if host.base == source.base {
-                &actor_a
-            } else {
-                &actor_b
-            };
-            let learned = json(
-                http.get(format!("{}/idp/users/{user}", host.base))
-                    .bearer_auth(actor)
-                    .send()
-                    .await
-                    .expect("reconciled public identity"),
-                reqwest::StatusCode::OK,
-            )
-            .await;
-            assert_eq!(learned["name"], label);
-        }
+        .expect("bounded full-host IdP reconciliation slice");
+}
+
+async fn learned_grants() {
+    let pair = Pair::new(Slice::Grants).await;
+    let (consumed, revoked) = pair.grants.as_ref().expect("pre-bootstrap public grants");
+    let shared_grant = pair
+        .shared
+        .refresh_token
+        .as_ref()
+        .expect("shared learned refresh")
+        .0
+        .as_str();
+    let consumed_grant = consumed
+        .refresh_token
+        .as_ref()
+        .expect("consumption target")
+        .0
+        .as_str();
+    let revoked_grant = revoked
+        .refresh_token
+        .as_ref()
+        .expect("revocation target")
+        .0
+        .as_str();
+    assert_ne!(shared_grant, consumed_grant);
+    assert_ne!(consumed_grant, revoked_grant);
+    for host in [&pair.source, &pair.joined] {
+        local_winner(&pair.http, host, &pair.login_id, shared_grant).await;
     }
-    joined
-        .runtime()
-        .synchronize_security(&connection, SecurityContext::Management)
+    json(
+        refresh(&pair.http, &pair.source, &pair.login_id, consumed_grant).await,
+        reqwest::StatusCode::OK,
+    )
+    .await;
+    let revocation = pair
+        .http
+        .post(format!("{}/idp/oauth2/revoke", pair.source.base))
+        .form(&[
+            ("client_id", pair.login_id.as_str()),
+            ("token", revoked_grant),
+            ("token_type_hint", "refresh_token"),
+        ])
+        .send()
         .await
-        .expect("learn restrictions without replacing retained resource connections");
-    for (host, policy, member, connection) in [
-        (&source, &policy_a, member_a, &mut socket_a),
-        (&joined, &policy_b, binding.member_id, &mut socket_b),
+        .expect("real local refresh revocation");
+    assert!(revocation.status().is_success());
+    denied_grant(refresh(&pair.http, &pair.source, &pair.login_id, consumed_grant).await).await;
+    denied_grant(refresh(&pair.http, &pair.source, &pair.login_id, revoked_grant).await).await;
+    pair.reconnect(SecurityContext::Idp).await;
+    denied_grant(refresh(&pair.http, &pair.joined, &pair.login_id, consumed_grant).await).await;
+    denied_grant(refresh(&pair.http, &pair.joined, &pair.login_id, revoked_grant).await).await;
+    pair.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn two_completed_full_hosts_learn_restrictions_on_retained_sockets() {
+    tokio::time::timeout(Duration::from_secs(360), learned_restrictions())
+        .await
+        .expect("bounded full-host Management reconciliation slice");
+}
+
+async fn learned_restrictions() {
+    let pair = Pair::new(Slice::Restrictions).await;
+    let mut retained = Vec::new();
+    for (host, local, remote) in [
+        (&pair.source, pair.member_a, pair.binding().member_id),
+        (&pair.joined, pair.binding().member_id, pair.member_a),
     ] {
-        assert_restriction(&http, host, policy, member, false).await;
+        let policy = exchange(
+            &pair.http,
+            host,
+            &pair.login_id,
+            &pair.shared.access_token.0,
+            management_service::MANAGEMENT_APPLICATION_URI,
+        )
+        .await;
+        restriction(&pair.http, host, &policy, remote, false).await;
+        assert_restriction(&pair.http, host, &policy, local, true).await;
+        let storage = exchange(
+            &pair.http,
+            host,
+            &pair.login_id,
+            &pair.shared.access_token.0,
+            "storage:filesystems",
+        )
+        .await;
+        let (resource, connection) = create_written_resource(&pair.http, host, &storage).await;
+        retained.push((policy, storage, resource, connection));
+    }
+    pair.reconnect(SecurityContext::Management).await;
+    for ((host, member), (policy, storage, resource, mut connection)) in [
+        (&pair.source, pair.member_a),
+        (&pair.joined, pair.binding().member_id),
+    ]
+    .into_iter()
+    .zip(retained)
+    {
+        assert_restriction(&pair.http, host, &policy, member, false).await;
         send(
-            connection,
+            &mut connection,
             StorageRequest::Write {
                 path: "retained.txt".into(),
                 content: b"must deny after learned restriction".to_vec(),
@@ -1041,61 +1148,49 @@ async fn full_hosts() {
                 frame => panic!("unexpected denied operation frame: {frame:?}"),
             }
         }
-    }
-    connection.close(0u32.into(), b"reconciliation complete");
-    drop(connection);
-    drop(socket_a);
-    drop(socket_b);
-    for (host, policy, member, bearer, resource) in [
-        (&source, &policy_a, member_a, &storage_a, &resource_a),
-        (
-            &joined,
-            &policy_b,
-            binding.member_id,
-            &storage_b,
-            &resource_b,
-        ),
-    ] {
-        restriction(&http, host, policy, member, true).await;
-        let mut retained = socket(host, bearer, resource).await;
+        drop(connection);
+        restriction(&pair.http, host, &policy, member, true).await;
+        let mut reader = socket(host, &storage, &resource).await;
         send(
-            &mut retained,
+            &mut reader,
             StorageRequest::Read {
                 path: "retained.txt".into(),
             },
         )
         .await;
         assert_eq!(
-            response(&mut retained).await,
+            response(&mut reader).await,
             StorageResponse::Read {
                 content: b"committed offline".to_vec()
             }
         );
-        retained
+        reader
             .close(None)
             .await
             .expect("close restored resource connection");
-        assert_eq!(
-            http.delete(format!("{}/storage/filesystems/{resource}", host.base))
-                .bearer_auth(bearer)
-                .send()
-                .await
-                .expect("ordinary public owner resource cleanup")
-                .status(),
-            reqwest::StatusCode::NO_CONTENT
-        );
-        assert_eq!(
-            http.get(format!("{}/storage/filesystems/{resource}", host.base))
-                .bearer_auth(bearer)
-                .send()
-                .await
-                .expect("local deletion receipt")
-                .status(),
-            reqwest::StatusCode::NOT_FOUND
-        );
+        delete_resource(&pair.http, host, &storage, &resource).await;
     }
-    source.stop().await;
-    joined.stop().await;
-    drop(guard_a);
-    eprintln!("08: full-host slice complete at {:?}", started.elapsed());
+    pair.stop().await;
+}
+
+async fn delete_resource(http: &reqwest::Client, host: &Host, bearer: &str, resource: &str) {
+    let url = format!("{}/storage/filesystems/{resource}", host.base);
+    assert_eq!(
+        http.delete(&url)
+            .bearer_auth(bearer)
+            .send()
+            .await
+            .expect("ordinary public owner resource cleanup")
+            .status(),
+        reqwest::StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        http.get(url)
+            .bearer_auth(bearer)
+            .send()
+            .await
+            .expect("local deletion receipt")
+            .status(),
+        reqwest::StatusCode::NOT_FOUND
+    );
 }

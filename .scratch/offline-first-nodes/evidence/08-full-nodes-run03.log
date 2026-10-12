@@ -1,0 +1,38 @@
+Source: 27e9902
+Command: systemd-run --user --wait --pipe --collect --unit=of-ticket08-full-nodes-03 --property=MemoryMax=4G --property=MemorySwapMax=0 --property=RuntimeMaxSec=900 --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --locked --jobs=1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --lib local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial -- --exact --nocapture --test-threads=1
+Running as unit: of-ticket08-full-nodes-03.service; invocation ID: 89bd8394f88148ccb686f8a8edc6d026
+   Compiling unified-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/unified-server)
+    Finished `test` profile [optimized + debuginfo] target(s) in 3m 20s
+     Running unittests src/lib.rs (/home/nathan/code/rust/aicacia/of/target/debug/deps/unified_server-a4bf33735b2f05a3)
+
+running 1 test
+test local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial ... 08: source provisioned and explicit fixture grants ready at 26.932363802s
+08: source full-host listener ready at 45.651304074s
+08: entering authenticated join at 59.37383309s
+08 join: importing Idp at 9.789599113s
+08 join: imported Idp at 86.402980711s
+08 join: importing Management at 86.403005829s
+08 join: imported Management at 142.765135786s
+08: joined full host ready at 247.506469716s
+08: two completed full hosts, partition at 347.612232793s
+
+thread 'local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial' (1454371) panicked at crates/unified-server/src/full_node_tests.rs:376:10:
+bounded two-full-host slice: Elapsed(())
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 73 filtered out; finished in 363.74s
+
+error: test failed, to rerun pass `-p unified-server --lib`
+Finished with result: exit-code
+Main processes terminated with: code=exited/status=101
+Service runtime: 9min 24.403s
+CPU time consumed: 10min 58.055s
+Memory peak: 292.0K
+Memory swap peak: 0B
+Exit status: 101
