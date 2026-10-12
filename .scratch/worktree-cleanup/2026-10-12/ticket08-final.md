@@ -2,7 +2,7 @@
 
 ## Scope and merged sources
 
-Authorized housekeeping **after** the qualified consumer and owner merges. No source edits, new runtime qualification, tests/builds, push, prune, reset, cache cleanup, provider/profile/CA operation or shared-dependency deletion. Complexity is low; loss/disclosure risk is high, so verified local recovery preceded non-forced retirement.
+Authorized housekeeping **after** the qualified consumer and owner merges. No source edits, new runtime qualification, tests/builds, push, explicit prune, reset, cache cleanup, provider/profile/CA operation or shared-dependency deletion. Complexity is low; loss/disclosure risk is high, so verified local recovery preceded non-forced retirement.
 
 - Consumer `of/main`, `offline-first-nodes-integration` and retired `offline-first-ticket08-full-nodes` all started clean at **`e2705f70a7606ef3e370e62b326d4038507109e4`**.
 - Owner `ofdb/main` and retired `integration/native-catalog-reuse` both started clean at **`5b08d0ddc6e2c19a8be29af13fe5af6133b791a6`**; implementation source **`72aae34b75f0fd65f4feadfb49e13ae948b41f6c`**.
@@ -27,15 +27,15 @@ Local recovery directory: **`/home/nathan/code/rust/aicacia/of/.scratch/worktree
 
 All filenames below are relative to `preserved/`.
 
-| File | Bytes | SHA256 |
-| --- | ---: | --- |
-| `ticket08-final.tar` | 32040960 | `45014bafe27adefc327f9978fe3ac118b53d7c0ba01d1c99285b133f6152837c` |
-| `ticket08-final.bundle` | 3601669 | `5585e71006c29ef15c11b80431281a280a7a9880a99078f19238789bafb932d1` |
-| `ticket08-final-status.txt` | 0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
-| `ticket08-final-status-ignored.txt` | 9694 | `1b3c7f925da3c7df7e2096ce9616b66219b6b79f22987fc6e7ca87c778ed6622` |
-| `ticket08-final-untracked.nul` | 0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
-| `ticket08-final-ignored.nul` | 9322 | `3e0bc0e5f2547d240bd71128e6cee3b4b5999add467de82bc5e2b26b4555e120` |
-| `ticket08-final-tracked.nul` | 40464 | `03c2bb4c56a5cebf1b952f4251ab4a313f9af898129a35840c128630b82bf8f6` |
+| File                                |    Bytes | SHA256                                                             |
+| ----------------------------------- | -------: | ------------------------------------------------------------------ |
+| `ticket08-final.tar`                | 32040960 | `45014bafe27adefc327f9978fe3ac118b53d7c0ba01d1c99285b133f6152837c` |
+| `ticket08-final.bundle`             |  3601669 | `5585e71006c29ef15c11b80431281a280a7a9880a99078f19238789bafb932d1` |
+| `ticket08-final-status.txt`         |        0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
+| `ticket08-final-status-ignored.txt` |     9694 | `1b3c7f925da3c7df7e2096ce9616b66219b6b79f22987fc6e7ca87c778ed6622` |
+| `ticket08-final-untracked.nul`      |        0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
+| `ticket08-final-ignored.nul`        |     9322 | `3e0bc0e5f2547d240bd71128e6cee3b4b5999add467de82bc5e2b26b4555e120` |
+| `ticket08-final-tracked.nul`        |    40464 | `03c2bb4c56a5cebf1b952f4251ab4a313f9af898129a35840c128630b82bf8f6` |
 
 Manifest SHA256: **`2f399466348782c59b79c4f7a88bc9ba38813967a8e99748f819566b1ac06a7e`**.
 
@@ -58,12 +58,12 @@ No diagnostics worktree existed; none was removed. No owner-linked scratch track
 
 Post-retirement, before this docs-only commit:
 
-| Root | Main HEAD | Porcelain status | Worktrees |
-| --- | --- | --- | --- |
-| `of` | `e2705f70a7606ef3e370e62b326d4038507109e4` | empty | root on `main` only |
-| `ofdb` | `5b08d0ddc6e2c19a8be29af13fe5af6133b791a6` | empty | root on `main` only |
-| `offs` | `de75aea778f892248d8ab3a4c6a01361999f8dd8` | empty | root on `main` only |
-| `ofnet` | `85632a965a07ab4f3ee1e7654cb762c061afe8d2` | empty | root on `main` only |
+| Root    | Main HEAD                                  | Porcelain status | Worktrees           |
+| ------- | ------------------------------------------ | ---------------- | ------------------- |
+| `of`    | `e2705f70a7606ef3e370e62b326d4038507109e4` | empty            | root on `main` only |
+| `ofdb`  | `5b08d0ddc6e2c19a8be29af13fe5af6133b791a6` | empty            | root on `main` only |
+| `offs`  | `de75aea778f892248d8ab3a4c6a01361999f8dd8` | empty            | root on `main` only |
+| `ofnet` | `85632a965a07ab4f3ee1e7654cb762c061afe8d2` | empty            | root on `main` only |
 
 For each root, exact `git status --porcelain=v1 --untracked-files=all` output was empty; SHA256 **`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`**. The documentation delivery advances only `of/main`; `offline-first-nodes-integration` is retained and fast-forwarded to that same cleanup commit. Identify its exact hash through `git log -1 --format=%H -- .scratch/worktree-cleanup/2026-10-12/ticket08-final.md`; the post-commit local `preserved/ticket08-final-delivery.json` records exact final heads/status hashes/worktrees and refs.
 
@@ -81,4 +81,6 @@ For each root, exact `git status --porcelain=v1 --untracked-files=all` output wa
 
 Use the bundle or surviving main history to create a checkout at the source tip, then inspect/extract the tar there without overwriting `.git`. Symlink targets may depend on a particular workspace layout; inspect before use. The manifest identifies every archived artifact without requiring a live retired checkout. Owner evidence under sibling `ofdb/.scratch/` remains at its existing location.
 
-Only this receipt and the current [remaining-work pointer](../../offline-first-nodes/remaining-work.md) are committed. No raw archive, manifest, fixture, local helper or unqualified source is staged. Validation is limited to ancestry, exact archive/source verification, ref/stash/protected-path comparisons, branch/worktree inventories, clean statuses and documentation whitespace. No tests/builds, Cargo Hack/CRAP, push, prune, reset or provider/cache operations were run.
+Only this receipt and the current [remaining-work pointer](../../offline-first-nodes/remaining-work.md) are committed. No raw archive, manifest, fixture, local helper or unqualified source is staged. Validation is limited to ancestry, exact archive/source verification, ref/stash/protected-path comparisons, branch/worktree inventories, clean statuses and documentation whitespace. No tests/builds, Cargo Hack/CRAP, push, explicit prune, reset or provider/cache operations were run.
+
+Git unexpectedly announced automatic background packing during the initial documentation commit and integration fast-forward. No housekeeping/prune command was explicitly invoked; whether internal automatic GC performed pruning is not certified. Subsequent Git writes disable automatic housekeeping per invocation (`-c gc.auto=0`). Final delivery verification checks all preserved refs/stashes and archive hashes again; the packing message is not hidden as a clean no-housekeeping claim.
