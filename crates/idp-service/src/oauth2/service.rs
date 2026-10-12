@@ -891,6 +891,9 @@ where
                 .with_description("client authentication is required")
         })?;
 
+        #[cfg(feature = "std")]
+        let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+            .then(std::time::Instant::now);
         let client = self
             .client_repo
             .find_client_by_client_id(&auth.client_id)
@@ -899,6 +902,10 @@ where
             .ok_or_else(|| {
                 ErrorResponse::new(ErrorCode::InvalidClient).with_description("client not found")
             })?;
+        #[cfg(feature = "std")]
+        if let Some(stage) = stage {
+            log::info!(target: "of::idp_stage_timing", "client_credentials.client_lookup elapsed_us={}", stage.elapsed().as_micros());
+        }
         self.validate_grant_type(&client, GrantType::ClientCredentials)?;
         if client.client_type != ClientType::Confidential {
             return Err(ErrorResponse::new(ErrorCode::UnauthorizedClient)
@@ -911,7 +918,15 @@ where
             return Err(ErrorResponse::new(ErrorCode::InvalidClient)
                 .with_description("client credentials have expired"));
         }
-        self.authenticate_client_for_token_endpoint(&client, Some(auth))?;
+        #[cfg(feature = "std")]
+        let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+            .then(std::time::Instant::now);
+        let authenticated = self.authenticate_client_for_token_endpoint(&client, Some(auth));
+        #[cfg(feature = "std")]
+        if let Some(stage) = stage {
+            log::info!(target: "of::idp_stage_timing", "client_credentials.authenticate_secret_verify elapsed_us={}", stage.elapsed().as_micros());
+        }
+        authenticated?;
         if request.client_id != auth.client_id {
             return Err(ErrorResponse::new(ErrorCode::InvalidClient)
                 .with_description("client_id does not match authenticated client"));
@@ -950,6 +965,9 @@ where
         }
         validate_scopes(&requested_scopes, &client.allowed_scopes)?;
 
+        #[cfg(feature = "std")]
+        let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+            .then(std::time::Instant::now);
         let key = self
             .key_service
             .key_repo()
@@ -959,10 +977,21 @@ where
                 ErrorResponse::new(ErrorCode::InvalidClient)
                     .with_description("active client signing key not found")
             })?;
+        #[cfg(feature = "std")]
+        if let Some(stage) = stage {
+            log::info!(target: "of::idp_stage_timing", "client_credentials.principal_root_key_load elapsed_us={}", stage.elapsed().as_micros());
+        }
+        #[cfg(feature = "std")]
+        let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+            .then(std::time::Instant::now);
         let principal = self.find_principal(key.id).await?.ok_or_else(|| {
             ErrorResponse::new(ErrorCode::InvalidClient)
                 .with_description("client principal is inactive")
         })?;
+        #[cfg(feature = "std")]
+        if let Some(stage) = stage {
+            log::info!(target: "of::idp_stage_timing", "client_credentials.principal_key_client_load elapsed_us={}", stage.elapsed().as_micros());
+        }
         self.issue_client_credentials_access_token(
             &client,
             principal.as_ref(),
@@ -1642,9 +1671,23 @@ where
         }
 
         let now = Utc::now();
+        #[cfg(feature = "std")]
+        let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+            .then(std::time::Instant::now);
         self.validate_issuance_inputs(client, principal, scopes)
             .await?;
+        #[cfg(feature = "std")]
+        if let Some(stage) = stage {
+            log::info!(target: "of::idp_stage_timing", "client_credentials.live_validate_client_principal_load elapsed_us={}", stage.elapsed().as_micros());
+        }
+        #[cfg(feature = "std")]
+        let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+            .then(std::time::Instant::now);
         let signing_jwk = self.local_signing_jwk().await?;
+        #[cfg(feature = "std")]
+        if let Some(stage) = stage {
+            log::info!(target: "of::idp_stage_timing", "client_credentials.signer_trust_private_key_load elapsed_us={}", stage.elapsed().as_micros());
+        }
         let claims = StandardClaims {
             r#type: TokenType::Bearer,
             r#use: TokenUse::Access,
@@ -1660,6 +1703,9 @@ where
             resource: resource.map(str::to_string),
             authorization_details: None,
         };
+        #[cfg(feature = "std")]
+        let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+            .then(std::time::Instant::now);
         let access_token = AccessToken(encode_jwt(
             &signing_jwk,
             &super::token::PrincipalBoundClaims {
@@ -1667,6 +1713,10 @@ where
                 principal_key_id: principal.get_key().id,
             },
         )?);
+        #[cfg(feature = "std")]
+        if let Some(stage) = stage {
+            log::info!(target: "of::idp_stage_timing", "client_credentials.jwt_sign elapsed_us={}", stage.elapsed().as_micros());
+        }
 
         Ok(TokenResponse {
             id_token: None,

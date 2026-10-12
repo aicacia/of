@@ -142,7 +142,12 @@ pub(crate) async fn lookup_device_identity(
         .and_then(|value| value.strip_prefix("Bearer "))
         .filter(|value| !value.is_empty())
         .ok_or_else(|| ErrorResponse::new(ErrorCode::NotAuthorized))?;
+    let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+        .then(std::time::Instant::now);
     let caller = authorize_bearer_client(&state, token).await?;
+    if let Some(stage) = stage {
+        log::info!(target: "of::idp_stage_timing", "device_lookup.caller_authorization_key_trust_principal_load elapsed_us={}", stage.elapsed().as_micros());
+    }
     if !can_lookup_device_endpoint(
         caller.claims.principal_type,
         &caller.claims.aud,
@@ -159,6 +164,8 @@ async fn trusted_device_identity(
     state: &RouterState,
     device_id: Id,
 ) -> Result<DeviceEndpointIdentity, ErrorResponse> {
+    let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+        .then(std::time::Instant::now);
     let device = state
         .devices
         .list()
@@ -167,6 +174,9 @@ async fn trusted_device_identity(
         .into_iter()
         .find(|device| device.id == device_id && device.state == DeviceState::Approved)
         .ok_or_else(|| ErrorResponse::new(ErrorCode::NotFound))?;
+    if let Some(stage) = stage {
+        log::info!(target: "of::idp_stage_timing", "device_lookup.approved_device_load elapsed_us={}", stage.elapsed().as_micros());
+    }
     let endpoint = device
         .public_key
         .parse::<EndpointId>()
@@ -176,6 +186,8 @@ async fn trusted_device_identity(
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|_| ErrorResponse::new(ErrorCode::ServerError))?
         .as_secs() as i64;
+    let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+        .then(std::time::Instant::now);
     if endpoint.to_string() != device.public_key
         || !state
             .replica_signers
@@ -189,11 +201,19 @@ async fn trusted_device_identity(
     {
         return Err(ErrorResponse::new(ErrorCode::AccessDenied));
     }
+    if let Some(stage) = stage {
+        log::info!(target: "of::idp_stage_timing", "device_lookup.signer_trust_load elapsed_us={}", stage.elapsed().as_micros());
+    }
     let owner = device
         .owner_subject
         .parse::<Id>()
         .map_err(|_| ErrorResponse::new(ErrorCode::AccessDenied))?;
+    let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+        .then(std::time::Instant::now);
     state.oauth2_service.find_user_info(owner).await?;
+    if let Some(stage) = stage {
+        log::info!(target: "of::idp_stage_timing", "device_lookup.owner_user_info_load elapsed_us={}", stage.elapsed().as_micros());
+    }
     Ok(DeviceEndpointIdentity {
         device_id,
         owner_subject: device.owner_subject,

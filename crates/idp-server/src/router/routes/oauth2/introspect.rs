@@ -33,7 +33,12 @@ pub(crate) async fn introspect(
         .and_then(|value| value.strip_prefix("Bearer "))
         .filter(|value| !value.is_empty())
         .ok_or_else(not_authorized)?;
+    let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+        .then(std::time::Instant::now);
     let caller = authorize_bearer_client(&state, caller_token).await?;
+    if let Some(stage) = stage {
+        log::info!(target: "of::idp_stage_timing", "introspect.caller_authorization_key_trust_principal_load elapsed_us={}", stage.elapsed().as_micros());
+    }
 
     if caller.claims.aud != state.service_audience {
         return Err(not_authorized());
@@ -46,19 +51,34 @@ pub(crate) async fn introspect(
     {
         return Err(ErrorResponse::new(ErrorCode::AccessDenied));
     }
+    let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+        .then(std::time::Instant::now);
     let client = state
         .oauth2_service
         .get_client(&caller.claims.client_id)
         .await?;
+    if let Some(stage) = stage {
+        log::info!(target: "of::idp_stage_timing", "introspect.client_allowlist_load elapsed_us={}", stage.elapsed().as_micros());
+    }
 
+    let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+        .then(std::time::Instant::now);
     let inspected = authorize_bearer_any_principal(&state, &request.token).await?;
+    if let Some(stage) = stage {
+        log::info!(target: "of::idp_stage_timing", "introspect.actor_authorization_key_trust_principal_load elapsed_us={}", stage.elapsed().as_micros());
+    }
     if !allows_audience(&client.allowed_audiences, &inspected.claims.aud) {
         return Err(not_authorized());
     }
+    let stage = log::log_enabled!(target: "of::idp_stage_timing", log::Level::Info)
+        .then(std::time::Instant::now);
     let application_id = state
         .oauth2_service
         .application_id_for_client(&inspected.claims.client_id)
         .await?;
+    if let Some(stage) = stage {
+        log::info!(target: "of::idp_stage_timing", "introspect.application_client_load elapsed_us={}", stage.elapsed().as_micros());
+    }
 
     Ok(Json(IntrospectionResponse {
         claims: inspected.claims,

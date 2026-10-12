@@ -235,4 +235,42 @@ Across these two runs the PUT grew3.451252s; nested IdP intervals account for3.3
 
 **Remaining joined-B refresh handoff:** baseline and inventory-control replay return real denial. Four extra Clients alone are therefore insufficient to reproduce run07. Remaining distinguishing inputs include two current trusted signer/membership/Device records, authenticated imported public history, and concurrent second-host/background scheduling; none was measured separately here. A focused IdP public-bootstrap/trust-state probe with nonsecret principal/trust/transaction phase timing is the next measurement, not another completed-full-pair journey. No claim that replay waits for a missing credential, that rollback deadlocks, or that the restriction timeout and replay timeout have the same root cause.
 
-No third Rust run or service-only baseline was performed. Final source/evidence remain pending full08 qualification. Test-only request traces are intentionally retained; production files and generic persistence owners are unchanged. Coordinator retains root claim, review, merge and ticket acceptance/closure.
+No third Rust run or service-only baseline was performed. Final source/evidence remain pending full08 qualification. Test-only request traces are intentionally retained; production files and generic persistence owners are unchanged at this historical checkpoint. Coordinator retains root claim, review, merge and ticket acceptance/closure.
+
+## Opt-in restriction-PUT stage instrumentation — source-only handoff, 2026-10-12
+
+First merged integration tip `290738bb2aa8fdca1c3ee42ae2da4c2df7ee6eed` using `GIT_EDITOR=true git merge --no-edit offline-first-nodes-integration`; merge commit `6d6d032063147901372cdc164626bc4e626e3cee`. Worktree was clean before and after the merge; no reset, stash, owner write, cache/target cleanup or provider change. Read current spec/machine-local policy, issue08, evidence08 and shared glossary; loaded TDD and ponytail. Complexity: low instrumentation complexity; risk: log overhead and scheduling can perturb elapsed measurements, and authentication must remain unchanged; priority: localize the already reproduced cold-service-token restriction PUT before requesting generic-owner measurements.
+
+The existing extra-service-Client probe is the user-selected public seam. Its four ordinary registrations, real authorization, refresh/replay assertions, background tasks, cold Management service-token acquisition, shutdown, 10s HTTP timeout and 120s whole-diagnostic bound remain unchanged. No new fixture/matrix, cache, prewarming, generic-owner change, deadline increase or authorization shortcut. TDD execution is deliberately deferred: the earlier control is the existing failing behavior, not a newly executed RED; no new GREEN or type-check result is claimed.
+
+### Instrumentation and interpretation
+
+Only `idp-service/src/oauth2/service.rs`, the IdP introspection and Device lookup route files, `unified-server/src/full_node_probe.rs` and this evidence change. Existing `log`/`env_logger` facilities are reused, without dependencies or manifest/lock edits. Fixed target `of::idp_stage_timing` emits fixed stage labels and integer elapsed microseconds only: no token, secret, verifier/hash, SQL, IDs, claims, request bodies or error details.
+
+- Client credentials: Client lookup; synchronous authentication/secret verification (no repository await); principal root-key load; principal key/active-root/Client loads; live Client/principal revalidation; signer trust/private-key load; JWT encoding/signing.
+- Introspection: caller authorization (JWT verification plus key/trust/principal loads); caller Client audience-allowlist load; actor authorization; Application/Client load.
+- Device lookup: caller authorization; approved Device inventory load/filter; signer trust load/check; owner User info hydration.
+
+These are **wall-clock intervals, not CPU samples or exclusive DB/lock timings**. In particular, the secret-verification interval isolates synchronous verification from repository loads but includes descheduling; authorization combines JWT verification and loads, signer loading combines trusted-public-state and private-provider loading, and live validation combines Client and principal reads. Those buckets guide owner measurement without pretending to attribute generic persistence cost. Success-only load markers disappear on early error/cancellation; authentication emits after its result is computed, before propagating it. Absence of a marker is not proof of a deadlock or a denied request. No request correlation IDs or general profiling framework. With the logger active, any concurrent call to these paths can also emit; the exact single-test window limits, but does not eliminate, background ambiguity.
+
+`OF_IDP_STAGE_TIMING=1` installs a logger **immediately before the PUT**, after all existing setup/password/refresh/replay/actor exchange work, with the hard-coded filter `off,of::idp_stage_timing=info`; other log targets remain disabled. No RUST_LOG-wide diagnostic logging is requested. The logger remains enabled through ordinary managed shutdown, retaining any late server completion after client timeout. Initialization requires an unused process-global logger (the exact isolated test command below); it fails explicitly if another logger is already installed. Production callers can independently enable the same log target through their existing logger; the environment opt-in here is probe-only.
+
+**Changed discriminator:** only the extra-service-Client test now uses `#[tokio::test(flavor = "multi_thread", worker_threads = 2)]`, matching the pair. Historical run02 used Tokio's default current-thread scheduler. Future results must be described as an instrumented **two-worker** control, not an identical run02 rerun or proof that inventory alone changed latency. The minimal-inventory test remains unchanged and is not requested for execution.
+
+**Feature gating:** service timing is `#[cfg(feature = "std")]` so no_std builds have no Instant/log instrumentation. Probe logger initialization uses the existing Unified Server `cli` feature (optional env_logger); Unified Server defaults are empty, so the focused command explicitly adds `--features cli`. That feature selection is another changed build discriminator from historical no-feature commands, not a new feature or dependency. Without cli, the environment variable does not install the probe logger.
+
+### Pending coordinator-authorized command
+
+Do not run before coordinator grants the exclusive Rust slot and reviews this committed source. Available memory at assignment: approximately 2.9GiB, not a proven build budget. Proposed cap is 2500M with no swap and one build job; coordinator must recheck headroom/approve before executing. A resource-limit failure is not a test result; do not silently raise the cap or clean artifacts. Reuse original shared target, offline/locked and standard profiles; no feature powerset, full pair, owner baseline or CRAP sweep.
+
+From `of/.worktrees/ticket08-full-nodes`, after recording/reviewing the instrumentation commit hash:
+
+```sh
+systemd-run --user --wait --pipe --collect --unit=of-ticket08-idp-stage-timing-01 --property=MemoryMax=2500M --property=MemorySwapMax=0 --property=RuntimeMaxSec=900 --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS OF_IDP_STAGE_TIMING=1 RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --locked --jobs=1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --features cli --lib local_provisioning_tests::full_nodes::probe::single_full_host_refresh_replay_and_restriction_put_with_extra_service_clients -- --exact --nocapture --test-threads=1
+```
+
+Outer tool bound: 910000ms. Existing internal 120s/HTTP 10s bounds unchanged. Record literal command, reviewed commit hash, exactly one matched test, stage output, exit status and any deadline/resource failure before making causal claims. Stable source review must precede the run; no execution is part of this handoff.
+
+### Source-only validation
+
+Ran rustfmt on exactly the four changed Rust files (`--edition 2024 --config skip_children=true`), reviewed their full scoped git diff, and ran `git --no-pager diff --check`; passed. `git --no-pager diff --exit-code -- Cargo.lock Cargo.toml crates/idp-service/Cargo.toml crates/idp-server/Cargo.toml crates/unified-server/Cargo.toml` passed (unchanged). No Cargo/build/test/Clippy/runtime invocation, no new latency evidence and no ticket acceptance/closure. Scoped instrumentation commit is the stable source-review/run anchor; its hash is returned with the handoff rather than embedded self-referentially here.
