@@ -858,6 +858,10 @@ impl Pair {
             )
             .await
             .expect("authenticated reconnect using persisted independent identities");
+        eprintln!(
+            "08: endpoint connected {context:?}; entering security sync at {:?}",
+            self.started.elapsed()
+        );
         assert_eq!(connection.remote_id(), self.source.runtime().endpoint_id());
         self.joined
             .runtime()
@@ -1146,6 +1150,7 @@ async fn learned_grants() {
     assert!(revocation.status().is_success());
     denied_grant(refresh(&pair.http, &pair.source, &pair.login_id, consumed_grant).await).await;
     denied_grant(refresh(&pair.http, &pair.source, &pair.login_id, revoked_grant).await).await;
+    probe::install_stage_logger();
     pair.reconnect(SecurityContext::Idp).await;
     denied_grant(refresh(&pair.http, &pair.joined, &pair.login_id, consumed_grant).await).await;
     denied_grant(refresh(&pair.http, &pair.joined, &pair.login_id, revoked_grant).await).await;
@@ -1174,6 +1179,13 @@ async fn learned_restrictions() {
             management_service::MANAGEMENT_APPLICATION_URI,
         )
         .await;
+        if local == pair.binding().member_id {
+            probe::install_stage_logger();
+            eprintln!(
+                "08: entering joined-B cold Management PUT at {:?}",
+                pair.started.elapsed()
+            );
+        }
         restriction(&pair.http, host, &policy, remote, false).await;
         assert_restriction(&pair.http, host, &policy, local, true).await;
         let storage = exchange(
