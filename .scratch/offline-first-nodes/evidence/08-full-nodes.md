@@ -274,3 +274,55 @@ Outer tool bound: 910000ms. Existing internal 120s/HTTP 10s bounds unchanged. Re
 ### Source-only validation
 
 Ran rustfmt on exactly the four changed Rust files (`--edition 2024 --config skip_children=true`), reviewed their full scoped git diff, and ran `git --no-pager diff --check`; passed. `git --no-pager diff --exit-code -- Cargo.lock Cargo.toml crates/idp-service/Cargo.toml crates/idp-server/Cargo.toml crates/unified-server/Cargo.toml` passed (unchanged). No Cargo/build/test/Clippy/runtime invocation, no new latency evidence and no ticket acceptance/closure. Scoped instrumentation commit is the stable source-review/run anchor; its hash is returned with the handoff rather than embedded self-referentially here.
+
+## Actual instrumented extra-Client run01 — FAILED, 2026-10-12
+
+Coordinator executed the focused probe at stable local instrumentation source `d2720cb7f759b825e613af5d8a4f1dde4be4e852`. Complete captured output: [08-idp-stage-timing-run01.log](08-idp-stage-timing-run01.log). This is the instrumented **two-worker, cli-enabled** extra-Client control described above, not an identical historical current-thread run02. Local stage source is preserved pending generic-owner measurements; no production/owner edits, build or rerun accompany this evidence update.
+
+### Actual command and result provenance
+
+Coordinator reports the actual resource cap was **2G**, superseding the proposed 2500M cap above. The focused command with that actual systemd `MemoryMax=2G` setting was:
+
+```sh
+systemd-run --user --wait --pipe --collect --unit=of-ticket08-idp-stage-timing-01 --property=MemoryMax=2G --property=MemorySwapMax=0 --property=RuntimeMaxSec=900 --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS OF_IDP_STAGE_TIMING=1 RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --locked --jobs=1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --features cli --lib local_provisioning_tests::full_nodes::probe::single_full_host_refresh_replay_and_restriction_put_with_extra_service_clients -- --exact --nocapture --test-threads=1
+```
+
+The captured log starts at systemd's unit announcement and does not echo the launch command/properties; the actual cap is coordinator-reported command provenance, not independently observable in this output. Existing **10s HTTP / 120s diagnostic bounds remain unchanged**. No deadline increase, prewarming, cache or assertion removal.
+
+- Compilation succeeded in **6m 21s**, standard optimized+debuginfo test profile; exactly one test executed.
+- Test: **FAILED, 0 passed / 1 failed / 78 filtered**, **81.06s**. Panic at `full_node_probe.rs:248:27` propagates the stored restriction PUT `TimedOut` result.
+- Systemd: `Finished with result: exit-code`, main process **status=101**; service runtime **7min 42.806s**, reported CPU time **7min 47.402s**.
+- Coordinator reports the surrounding shell wrapper incorrectly finished with **`result=0`**, causing apparent tool success. **Wrapper/tool success is NOT Cargo/test/systemd success.** The preserved log conclusively records the failed test and status101; the wrapper result itself is not echoed in this log.
+- Reported MemoryPeak **256.0K** is implausibly low and not evidence of actual peak RSS or memory headroom; reported swap peak0B is retained without upgrading it into a broader memory guarantee.
+
+### Observed progress and stage timings
+
+Four extra service Clients were created at31.622s; composed full host ready at56.193s, with all three health endpoints200. Refresh redemption returned200; replay returned400 `invalid_grant` in2.698724s client. Management-targeted actor-token exchange returned200 in3.181246s server before the timing logger was installed. Existing replay/status/assertions were retained.
+
+The cold nested service-token request returned200 in **4.471085s**, introspection returned200 in **4.691319s**, and Device identity lookup returned200 in **2.513709s**. Their server HTTP intervals sum to **11.676114s**, not an exclusive PUT duration or a CPU total. Client restriction PUT reported `timeout=true` at **10.001401s**; Device authorization/load markers and its200 response followed the timeout while the fixture awaited ordinary shutdown.
+
+| Stage label                                                   | Elapsed seconds |
+| ------------------------------------------------------------- | --------------: |
+| `client_credentials.client_lookup`                            |        1.550412 |
+| `client_credentials.authenticate_secret_verify`               |        0.163856 |
+| `client_credentials.principal_root_key_load`                  |        0.220260 |
+| `client_credentials.principal_key_client_load`                |        1.052184 |
+| `client_credentials.live_validate_client_principal_load`      |        1.265924 |
+| `client_credentials.signer_trust_private_key_load`            |        0.217360 |
+| `client_credentials.jwt_sign`                                 |        0.000301 |
+| `introspect.caller_authorization_key_trust_principal_load`    |        2.517252 |
+| `introspect.client_allowlist_load`                            |        0.414287 |
+| `introspect.actor_authorization_key_trust_principal_load`     |        1.355802 |
+| `introspect.application_client_load`                          |        0.403614 |
+| `device_lookup.caller_authorization_key_trust_principal_load` |        2.075491 |
+| `device_lookup.approved_device_load`                          |        0.110946 |
+| `device_lookup.signer_trust_load`                             |        0.215547 |
+| `device_lookup.owner_user_info_load`                          |        0.111286 |
+
+Service-token Client/principal/root-key/live-validation/signer-load buckets sum to **4.306140s**, versus **0.163856s** synchronous Argon2 secret verification and **0.000301s** JWT signing. Repeated Client/principal/native-backed load and authorization buckets dominate the observed request path, rather than secret verification or signing. These wall-clock buckets include scheduling and grouped trust/verification work; they do **not** isolate generic native read admission, conflicts, catalog/history materialization, locks or CPU cost. Generic-owner measurements are still needed before attributing a persistence bottleneck or changing any owner implementation.
+
+**No restriction PUT204 is logged in this run. Do not claim that this run completed the policy mutation.** Device lookup200 after timeout does not prove the later Management mutation completed; likewise, absence of PUT204 does not prove no effect. Historical run02's late PUT204 retains its own provenance and is not transferred to run01. No joined-B replay reproduction, pair completion, learned restriction qualification, GREEN result or ticket08 acceptance follows.
+
+Stage log messages remain fixed labels plus elapsed microseconds only. The preserved raw run log also contains pre-existing test-helper node/path IDs and the reqwest failure URL; these were not introduced by the stage logger and are retained as original evidence, not copied into new diagnostic messages. No token/secret/hash/SQL logging was added.
+
+Evidence-only handoff: reviewed the complete captured log and scoped evidence diff; whitespace check passed. No build/test/Clippy, production edit, generic-owner change or source retirement. Commit only this evidence file and the exact raw run log; retain `d2720cb` as the measured local source pending owner handoff.

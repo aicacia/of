@@ -1,0 +1,74 @@
+Running as unit: of-ticket08-idp-stage-timing-01.service; invocation ID: 63ea5de5b89f47feb86e26a8e1d7c858
+   Compiling idp-service v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/idp-service)
+   Compiling management-service v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/management-service)
+   Compiling cli v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/cli)
+   Compiling idp-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/idp-server)
+   Compiling management-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/management-server)
+   Compiling unified-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/unified-server)
+    Finished `test` profile [optimized + debuginfo] target(s) in 6m 21s
+     Running unittests src/lib.rs (/home/nathan/code/rust/aicacia/of/target/debug/deps/unified_server-46af00983c0d5f3f)
+
+running 1 test
+test local_provisioning_tests::full_nodes::probe::single_full_host_refresh_replay_and_restriction_put_with_extra_service_clients ... 08 probe: added exactly four independent service Clients at 31.62230224s
+08 HTTP begin: GET /idp/health
+08 HTTP end: GET /idp/health status=200 OK elapsed=180.366µs
+08 HTTP begin: GET /management/health
+08 HTTP end: GET /management/health status=200 OK elapsed=68.792µs
+08 HTTP begin: GET /storage/health
+08 HTTP end: GET /storage/health status=200 OK elapsed=68.532µs
+08 probe: completed local full host at 56.193396704s
+08 HTTP begin: POST /idp/oauth2/token
+08 HTTP end: POST /idp/oauth2/token status=200 OK elapsed=3.581401197s
+08 HTTP begin: POST /idp/oauth2/token
+08 HTTP end: POST /idp/oauth2/token status=200 OK elapsed=3.008650487s
+08 refresh: node=22c121bbb69e4ff0c30b7b13599f67ee03cca4f69a25812f4ab93c2c004c9ed2 status=200 OK elapsed=3.009281767s
+08 probe: redeem complete; entering replay at 62.786730551s
+08 HTTP begin: POST /idp/oauth2/token
+08 HTTP end: POST /idp/oauth2/token status=400 Bad Request elapsed=2.698195687s
+08 probe: replay status=400 Bad Request elapsed=2.698723709s
+08 probe: entering Management token exchange at 65.48559493s
+08 HTTP begin: POST /idp/oauth2/token
+08 HTTP end: POST /idp/oauth2/token status=200 OK elapsed=3.181246064s
+08 HTTP begin: PUT /management/devices/01a12f88-8c1e-758e-b635-6f0449b701e5/restriction
+08 HTTP begin: POST /idp/oauth2/token
+[INFO  of::idp_stage_timing] client_credentials.client_lookup elapsed_us=1550412
+[INFO  of::idp_stage_timing] client_credentials.authenticate_secret_verify elapsed_us=163856
+[INFO  of::idp_stage_timing] client_credentials.principal_root_key_load elapsed_us=220260
+[INFO  of::idp_stage_timing] client_credentials.principal_key_client_load elapsed_us=1052184
+[INFO  of::idp_stage_timing] client_credentials.live_validate_client_principal_load elapsed_us=1265924
+[INFO  of::idp_stage_timing] client_credentials.signer_trust_private_key_load elapsed_us=217360
+[INFO  of::idp_stage_timing] client_credentials.jwt_sign elapsed_us=301
+08 HTTP end: POST /idp/oauth2/token status=200 OK elapsed=4.471085382s
+08 HTTP begin: POST /idp/oauth2/introspect
+[INFO  of::idp_stage_timing] introspect.caller_authorization_key_trust_principal_load elapsed_us=2517252
+[INFO  of::idp_stage_timing] introspect.client_allowlist_load elapsed_us=414287
+[INFO  of::idp_stage_timing] introspect.actor_authorization_key_trust_principal_load elapsed_us=1355802
+[INFO  of::idp_stage_timing] introspect.application_client_load elapsed_us=403614
+08 HTTP end: POST /idp/oauth2/introspect status=200 OK elapsed=4.691319241s
+08 HTTP begin: GET /idp/devices/identities/01a12f88-8c1e-758e-b635-6f0449b701e5
+08 probe: local Device restriction PUT transport failure timeout=true elapsed=10.001400965s
+[INFO  of::idp_stage_timing] device_lookup.caller_authorization_key_trust_principal_load elapsed_us=2075491
+[INFO  of::idp_stage_timing] device_lookup.approved_device_load elapsed_us=110946
+[INFO  of::idp_stage_timing] device_lookup.signer_trust_load elapsed_us=215547
+[INFO  of::idp_stage_timing] device_lookup.owner_user_info_load elapsed_us=111286
+08 HTTP end: GET /idp/devices/identities/01a12f88-8c1e-758e-b635-6f0449b701e5 status=200 OK elapsed=2.513708883s
+
+thread 'local_provisioning_tests::full_nodes::probe::single_full_host_refresh_replay_and_restriction_put_with_extra_service_clients' (1551611) panicked at crates/unified-server/src/full_node_probe.rs:248:27:
+real composed Management restriction PUT: reqwest::Error { kind: Request, url: "http://127.0.0.1:34621/management/devices/01a12f88-8c1e-758e-b635-6f0449b701e5/restriction", source: TimedOut }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    local_provisioning_tests::full_nodes::probe::single_full_host_refresh_replay_and_restriction_put_with_extra_service_clients
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 78 filtered out; finished in 81.06s
+
+error: test failed, to rerun pass `-p unified-server --lib`
+Finished with result: exit-code
+Main processes terminated with: code=exited/status=101
+Service runtime: 7min 42.806s
+CPU time consumed: 7min 47.402s
+Memory peak: 256.0K
+Memory swap peak: 0B
