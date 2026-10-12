@@ -1,0 +1,36 @@
+Source: 30c36d1
+Command: systemd-run --user --wait --pipe --collect --unit=of-ticket08-full-nodes-05 --property=MemoryMax=4G --property=MemorySwapMax=0 --property=RuntimeMaxSec=900 --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --locked --jobs=1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --lib local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial -- --exact --nocapture --test-threads=1
+Running as unit: of-ticket08-full-nodes-05.service; invocation ID: c6a4f3a29c774b86a3f4c34697aef61a
+   Compiling unified-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/unified-server)
+    Finished `test` profile [optimized + debuginfo] target(s) in 3m 12s
+     Running unittests src/lib.rs (/home/nathan/code/rust/aicacia/of/target/debug/deps/unified_server-a4bf33735b2f05a3)
+
+running 1 test
+test local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial ... 08 Offline: source fixture ready at 25.303388727s
+08 Offline: entering authenticated join at 51.851251298s
+08 join: importing Idp at 9.455054943s
+08 join: imported Idp at 80.234580143s
+08 join: importing Management at 80.234600892s
+08 join: imported Management at 133.646270155s
+08 Offline: two completed full hosts; no DATA session at 231.118229095s
+
+thread 'local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial' (1458818) panicked at crates/unified-server/src/full_node_tests.rs:210:10:
+local refresh redemption: reqwest::Error { kind: Request, url: "http://127.0.0.1:37027/idp/oauth2/token", source: TimedOut }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 75 filtered out; finished in 250.81s
+
+error: test failed, to rerun pass `-p unified-server --lib`
+Finished with result: exit-code
+Main processes terminated with: code=exited/status=101
+Service runtime: 7min 23.433s
+CPU time consumed: 8min 11.055s
+Memory peak: 512.0K
+Memory swap peak: 0B
+Exit status: 101

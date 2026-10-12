@@ -199,15 +199,33 @@ async fn refresh(
     client: &str,
     grant: &str,
 ) -> reqwest::Response {
-    http.post(format!("{}/idp/oauth2/token", host.base))
+    let started = std::time::Instant::now();
+    let result = http
+        .post(format!("{}/idp/oauth2/token", host.base))
         .form(&[
             ("grant_type", "refresh_token"),
             ("client_id", client),
             ("refresh_token", grant),
         ])
         .send()
-        .await
-        .expect("local refresh redemption")
+        .await;
+    match result {
+        Ok(response) => {
+            eprintln!(
+                "08 refresh: node={} status={} elapsed={:?}",
+                host.runtime().endpoint_id(),
+                response.status(),
+                started.elapsed()
+            );
+            response
+        }
+        Err(error) => panic!(
+            "local refresh transport failure: node={} timeout={} elapsed={:?}",
+            host.runtime().endpoint_id(),
+            error.is_timeout(),
+            started.elapsed()
+        ),
+    }
 }
 
 async fn denied_grant(response: reqwest::Response) {
@@ -855,8 +873,16 @@ async fn offline_reopen() {
         .expect("shared learned refresh")
         .0
         .as_str();
-    for host in [&pair.source, &pair.joined] {
+    for (label, host) in [("source-A", &pair.source), ("joined-B", &pair.joined)] {
+        eprintln!(
+            "08 Offline: starting local concurrent race/replay for {label} at {:?}",
+            pair.started.elapsed()
+        );
         local_winner(&pair.http, host, &pair.login_id, grant).await;
+        eprintln!(
+            "08 Offline: finished local concurrent race/replay for {label} at {:?}",
+            pair.started.elapsed()
+        );
     }
     let endpoint_a = pair.source.runtime().endpoint_id();
     let endpoint_b = pair.joined.runtime().endpoint_id();
@@ -877,6 +903,10 @@ async fn offline_reopen() {
         ..
     } = pair;
     tokio::join!(source.stop(), joined.stop());
+    eprintln!(
+        "08 Offline: stopped; opening retained hosts at {:?}",
+        started.elapsed()
+    );
     let (reopened_a, reopened_b) = tokio::join!(
         LocalProvisioner::open_runtime(a.config.clone()),
         LocalProvisioner::open_runtime(b.config.clone())
@@ -1073,7 +1103,12 @@ async fn learned_grants() {
     assert_ne!(shared_grant, consumed_grant);
     assert_ne!(consumed_grant, revoked_grant);
     for host in [&pair.source, &pair.joined] {
-        local_winner(&pair.http, host, &pair.login_id, shared_grant).await;
+        json(
+            refresh(&pair.http, host, &pair.login_id, shared_grant).await,
+            reqwest::StatusCode::OK,
+        )
+        .await;
+        denied_grant(refresh(&pair.http, host, &pair.login_id, shared_grant).await).await;
     }
     json(
         refresh(&pair.http, &pair.source, &pair.login_id, consumed_grant).await,
