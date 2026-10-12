@@ -1,4 +1,5 @@
 use std::{
+    cell::Cell,
     io,
     sync::{
         Arc,
@@ -9,7 +10,7 @@ use std::{
 
 use db::Database;
 use idp_model::{contract::IdentityAction, model::Id};
-use idp_server::{AppConfig, OwnerProvisioner};
+use idp_server::{AppConfig, NodeJoinStage, OwnerProvisioner};
 use idp_service::{oauth2::NodeSignerBinding, replica::DbReplicaSignerRepo};
 use iroh::{SecretKey, endpoint::presets::Minimal};
 use iroh_chain::{DATA_ALPN, EndpointIdStore, Server};
@@ -31,19 +32,82 @@ use storage_server::DatabaseTransport;
 
 #[tokio::test]
 async fn bootstrap_current_boundaries_preserve_admitted_import_and_native_retry() {
-    tokio::time::timeout(Duration::from_secs(360), interruption_boundary(false))
-        .await
-        .expect("dedicated bootstrap interruption completes");
+    tokio::time::timeout(
+        Duration::from_secs(360),
+        interruption_boundary(false, false, None),
+    )
+    .await
+    .expect("dedicated bootstrap interruption completes");
 }
 
 #[tokio::test]
 async fn desktop_bootstrap_orchestration_completes_both_public_contexts_and_retries_offline() {
-    tokio::time::timeout(Duration::from_secs(360), interruption_boundary(true))
-        .await
-        .expect("production orchestration, offline retry and learned-revocation denial complete");
+    tokio::time::timeout(
+        Duration::from_secs(360),
+        interruption_boundary(true, false, None),
+    )
+    .await
+    .expect("production orchestration, offline retry and learned-revocation denial complete");
 }
 
-async fn interruption_boundary(complete: bool) {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum Transition {
+    IdpImported,
+    ManagementImported,
+    ReadinessVerified,
+    PublicReadyPublished,
+}
+
+tokio::task_local! {
+    static INTERRUPT_AT: Cell<Option<Transition>>;
+}
+
+pub(super) fn interrupt(transition: Transition) -> io::Result<()> {
+    if INTERRUPT_AT
+        .try_with(|point| {
+            if point.get() == Some(transition) {
+                point.set(None);
+                true
+            } else {
+                false
+            }
+        })
+        .unwrap_or(false)
+    {
+        eprintln!("durable transition checkpoint reached: {transition:?}");
+        return Err(io::Error::other(format!("interrupted at {transition:?}")));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn production_durable_transitions_preserve_imports_and_verified_readiness_on_reopen() {
+    let phase = Cell::new("fixture initialization");
+    let result = tokio::time::timeout(
+        Duration::from_secs(360),
+        interruption_boundary(true, true, Some(&phase)),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "360s whole-test deadline elapsed during: {}",
+        phase.get(),
+    );
+}
+
+fn diagnostic_stage(phase: Option<&Cell<&'static str>>, stage: &'static str) {
+    if let Some(phase) = phase {
+        phase.set(stage);
+        eprintln!("durable transition phase: {stage}");
+    }
+}
+
+async fn interruption_boundary(
+    complete: bool,
+    durable_transitions: bool,
+    phase: Option<&Cell<&'static str>>,
+) {
+    diagnostic_stage(phase, "fixture initialization");
     let root = std::env::temp_dir().join(format!("of-node-join-bootstrap-{}", Id::now_v7()));
     let issuer = format!("https://join-{}.example", Id::now_v7());
     let source_secret = SecretKey::generate();
@@ -222,13 +286,15 @@ async fn interruption_boundary(complete: bool) {
         .timeout(Duration::from_secs(15))
         .build()
         .expect("HTTP client");
+    diagnostic_stage(phase, "local HTTP token issuance");
     let bearer = user_token(&client, &base, "administrator", "idp-services").await;
+    diagnostic_stage(phase, "joining owner and private signer preparation");
     let binding = NodeSignerBinding {
         member_id: Id::now_v7(),
         key_id: Id::now_v7(),
         endpoint_id: joining.endpoint().id().to_string(),
     };
-    let provisioner = OwnerProvisioner::open(&config)
+    let mut provisioner = OwnerProvisioner::open(&config)
         .await
         .expect("fresh native joining owner with injected keyring");
     provisioner
@@ -242,14 +308,14 @@ async fn interruption_boundary(complete: bool) {
     let request = provisioner
         .prepare_node_join(&binding, "Joining Node", source.endpoint().id())
         .expect("durable independent private signer");
-    let joining_idp = provisioner.node_join_database();
-    let joining_policy = Arc::new(
+    let mut joining_idp = provisioner.node_join_database();
+    let mut joining_policy = Arc::new(
         Database::open(joining_root.join("management.redb")).expect("joining policy owner"),
     );
     management_service::replica::up(&joining_policy)
         .await
         .expect("empty fixed public policy schema");
-    let protocol = SecurityProtocol::new(
+    let mut protocol = SecurityProtocol::new(
         joining.clone(),
         joining_idp.clone(),
         joining_policy.clone(),
@@ -259,6 +325,7 @@ async fn interruption_boundary(complete: bool) {
         CancellationToken::new(),
     );
     // Minimal discovery has no resolver; authenticate the address before exercising the ID-only driver.
+    diagnostic_stage(phase, "authenticated pairing address connection");
     let address_connection = joining
         .endpoint()
         .connect(source.endpoint().addr(), iroh_chain::PAIRING_ALPN)
@@ -272,19 +339,24 @@ async fn interruption_boundary(complete: bool) {
     );
     let peer_id = source.endpoint().id().to_string();
     let sending = async {
-        if complete {
+        if complete && !durable_transitions {
             protocol
                 .join_from_trusted_peer(&provisioner, "Joining Node", &peer_id)
                 .await
         } else {
-            request.send(&joining, source.endpoint().addr()).await
+            diagnostic_stage(phase, "pairing request send and signed reply wait");
+            let result = request.send(&joining, source.endpoint().addr()).await;
+            diagnostic_stage(phase, "pairing signed reply returned");
+            result
         }
     };
     let approving = async {
+        diagnostic_stage(phase, "source waiting for pairing offer");
         let offer = offers
             .recv()
             .await
             .expect("driver sends actual authenticated offer without a persisted receipt");
+        diagnostic_stage(phase, "pre-approval bootstrap admission denial");
         assert!(
             joining
                 .endpoint()
@@ -293,10 +365,12 @@ async fn interruption_boundary(complete: bool) {
                 .is_err(),
             "no bootstrap admission before verified persisted receipt"
         );
+        diagnostic_stage(phase, "authorized pairing approval");
         let approved = runtime
             .approve_node_join(&offer, &bearer)
             .await
             .expect("purpose-specific authorized enrollment");
+        diagnostic_stage(phase, "approved endpoint allowlist restoration");
         source_allowed.replace(
             runtime
                 .approved_peer_ids()
@@ -307,6 +381,7 @@ async fn interruption_boundary(complete: bool) {
         (approved, offer)
     };
     let (received, (approved, retained_offer)) = tokio::join!(sending, approving);
+    diagnostic_stage(phase, "pairing exchange joined and receipt persistence");
     let received = received.expect("production driver or pinned peer signed reply");
     assert_eq!(approved, received);
     drop(retained_offer);
@@ -317,12 +392,13 @@ async fn interruption_boundary(complete: bool) {
     provisioner
         .record_node_join_approval(&received)
         .expect("exact receipt retry");
-    if !complete {
+    if !complete || durable_transitions {
         assert!(
             provisioner.verify_node_signer(&binding).await.is_err(),
             "receipt is not local signer trust"
         );
     }
+    diagnostic_stage(phase, "ordinary DATA admission denial");
     assert!(
         joining
             .endpoint()
@@ -331,13 +407,194 @@ async fn interruption_boundary(complete: bool) {
             .is_err(),
         "receipt/pairing cannot allow ordinary DATA"
     );
+    diagnostic_stage(phase, "approved bootstrap connection");
     let connection = joining
         .endpoint()
         .connect(source.endpoint().addr(), idp_server::BOOTSTRAP_ALPN)
         .await
         .expect("authenticated purpose-specific bootstrap connection");
 
+    if durable_transitions {
+        for transition in [
+            Transition::IdpImported,
+            Transition::ManagementImported,
+            Transition::ReadinessVerified,
+            Transition::PublicReadyPublished,
+        ] {
+            diagnostic_stage(
+                phase,
+                match transition {
+                    Transition::IdpImported => "IdP import before journal interruption",
+                    Transition::ManagementImported => {
+                        "Management import before journal interruption"
+                    }
+                    Transition::ReadinessVerified => {
+                        "verified readiness before publication interruption"
+                    }
+                    Transition::PublicReadyPublished => {
+                        "PublicReady publication before return interruption"
+                    }
+                },
+            );
+            let error = INTERRUPT_AT
+                .scope(Cell::new(Some(transition)), async {
+                    match transition {
+                        Transition::IdpImported => protocol
+                            .receive_node_bootstrap(&connection, &provisioner, SecurityContext::Idp)
+                            .await
+                            .map(|_| ()),
+                        Transition::ManagementImported => protocol
+                            .receive_node_bootstrap(
+                                &connection,
+                                &provisioner,
+                                SecurityContext::Management,
+                            )
+                            .await
+                            .map(|_| ()),
+                        _ => {
+                            protocol
+                                .complete_node_join_public_bootstrap(&provisioner)
+                                .await
+                        }
+                    }
+                })
+                .await
+                .expect_err("production transition reaches selected interruption");
+            assert_eq!(error.to_string(), format!("interrupted at {transition:?}"));
+            diagnostic_stage(phase, "transition native owner and policy reopen");
+            drop(protocol);
+            drop(provisioner);
+            drop(joining_idp);
+            drop(joining_policy);
+            provisioner = OwnerProvisioner::open(&config)
+                .await
+                .expect("reopen durable import and retained independent signer");
+            joining_idp = provisioner.node_join_database();
+            joining_policy = Arc::new(
+                Database::open(joining_root.join("management.redb"))
+                    .expect("reopen actual policy owner"),
+            );
+            protocol = SecurityProtocol::new(
+                joining.clone(),
+                joining_idp.clone(),
+                joining_policy.clone(),
+                issuer.clone(),
+                Some(binding.clone()),
+                joining_root.join("security-staging"),
+                CancellationToken::new(),
+            );
+            diagnostic_stage(
+                phase,
+                "transition retained binding and current readiness verification",
+            );
+            assert_eq!(
+                provisioner.node_join_request().expect("stable request"),
+                Some(request.clone())
+            );
+            assert_eq!(
+                provisioner
+                    .node_join_anchor()
+                    .expect("stable receipt and key reference"),
+                received
+            );
+            protocol
+                .check_exact_join_trust(&received)
+                .await
+                .expect("actual imported trust survives without its journal");
+            assert_eq!(
+                provisioner
+                    .verify_node_signer(&binding)
+                    .await
+                    .expect("retained private signer"),
+                request.public_signer
+            );
+            assert_eq!(
+                protocol
+                    .node_join_public_ready(&provisioner)
+                    .await
+                    .expect("current readiness after reopen"),
+                transition == Transition::PublicReadyPublished,
+            );
+            match transition {
+                Transition::IdpImported | Transition::ManagementImported => {
+                    let (context, stage) = if transition == Transition::IdpImported {
+                        (SecurityContext::Idp, NodeJoinStage::Idp)
+                    } else {
+                        protocol
+                            .check_join_context_grants(&received)
+                            .await
+                            .expect("actual imported policy survives without its journal");
+                        (SecurityContext::Management, NodeJoinStage::Management)
+                    };
+                    assert!(
+                        !provisioner
+                            .node_join_stage_recorded(stage)
+                            .expect("import journal absent")
+                    );
+                    diagnostic_stage(
+                        phase,
+                        if transition == Transition::IdpImported {
+                            "exact IdP import retry and journal publication"
+                        } else {
+                            "exact Management import retry and journal publication"
+                        },
+                    );
+                    protocol
+                        .receive_node_bootstrap(&connection, &provisioner, context)
+                        .await
+                        .expect("exact production import retry");
+                    assert!(
+                        provisioner
+                            .node_join_stage_recorded(stage)
+                            .expect("retry journal published")
+                    );
+                }
+                Transition::ReadinessVerified => {
+                    assert!(
+                        !provisioner
+                            .node_join_stage_recorded(NodeJoinStage::PublicReady)
+                            .expect("verified but unpublished")
+                    );
+                }
+                Transition::PublicReadyPublished => {
+                    diagnostic_stage(phase, "exact PublicReady completion retry");
+                    protocol
+                        .complete_node_join_public_bootstrap(&provisioner)
+                        .await
+                        .expect("exact completion retry");
+                }
+            }
+        }
+        diagnostic_stage(phase, "durable boundary fixture source shutdown");
+        connection.close(0u32.into(), b"durable boundary checks finished");
+        cancellation.cancel();
+        peer_router
+            .shutdown()
+            .await
+            .expect("boundary source shutdown");
+        source.endpoint().close().await;
+        http.abort();
+        let _ = http.await;
+        diagnostic_stage(phase, "durable boundary fixture joining endpoint close");
+        joining.endpoint().close().await;
+        diagnostic_stage(phase, "durable boundary fixture teardown");
+        drop(protocol);
+        drop(provisioner);
+        drop(joining_idp);
+        drop(joining_policy);
+        drop(runtime);
+        drop(storage);
+        drop(policy);
+        drop(source_security);
+        drop(source_idp);
+        drop(source_policy);
+        std::fs::remove_dir_all(root).expect("remove durable boundary fixture");
+        diagnostic_stage(phase, "durable boundary fixture removed");
+        return;
+    }
+
     if complete {
+        diagnostic_stage(phase, "post-transition production driver completion retry");
         let approved = protocol
             .join_from_trusted_peer(
                 &provisioner,
@@ -347,6 +604,10 @@ async fn interruption_boundary(complete: bool) {
             .await
             .expect("production driver imports both public contexts and checks completion");
         assert_eq!(approved, received);
+        diagnostic_stage(
+            phase,
+            "post-transition current readiness and changed-name denial",
+        );
         assert!(
             protocol
                 .node_join_public_ready(&provisioner)
@@ -366,11 +627,14 @@ async fn interruption_boundary(complete: bool) {
         );
         connection.close(0u32.into(), b"completed bootstrap");
         cancellation.cancel();
+        diagnostic_stage(phase, "source protocol router shutdown");
         peer_router
             .shutdown()
             .await
             .expect("disconnect source before retry");
+        diagnostic_stage(phase, "source endpoint close");
         source.endpoint().close().await;
+        diagnostic_stage(phase, "disconnected completed production retry");
         assert_eq!(
             protocol
                 .join_from_trusted_peer(&provisioner, "Joining Node", &request.approving_peer)
@@ -382,6 +646,7 @@ async fn interruption_boundary(complete: bool) {
         drop(provisioner);
         drop(joining_idp);
         drop(joining_policy);
+        diagnostic_stage(phase, "completed offline native owner reopen");
         let provisioner = OwnerProvisioner::open(&config)
             .await
             .expect("offline native owner reopen");
@@ -397,6 +662,7 @@ async fn interruption_boundary(complete: bool) {
             joining_root.join("security-staging"),
             CancellationToken::new(),
         );
+        diagnostic_stage(phase, "offline current readiness and exact driver retry");
         assert!(
             protocol
                 .node_join_public_ready(&provisioner)
@@ -410,6 +676,7 @@ async fn interruption_boundary(complete: bool) {
                 .expect("offline production retry after native reopen"),
             approved
         );
+        diagnostic_stage(phase, "learned local revocation and readiness denial");
         DbReplicaSignerRepo::new(provisioner.node_join_database())
             .revoke(binding.member_id, &issuer, 11)
             .await
@@ -429,7 +696,9 @@ async fn interruption_boundary(complete: bool) {
         );
         http.abort();
         let _ = http.await;
+        diagnostic_stage(phase, "joining endpoint close");
         joining.endpoint().close().await;
+        diagnostic_stage(phase, "completed fixture teardown");
         drop(protocol);
         drop(provisioner);
         drop(policy_store);
@@ -440,6 +709,7 @@ async fn interruption_boundary(complete: bool) {
         drop(source_idp);
         drop(source_policy);
         std::fs::remove_dir_all(root).expect("remove completed native fixture");
+        diagnostic_stage(phase, "completed fixture removed");
         return;
     }
 
