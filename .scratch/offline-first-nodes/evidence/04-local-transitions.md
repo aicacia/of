@@ -1,4 +1,4 @@
-# 04 local durable transition qualification — timeout, not qualified
+# 04 local durable transition qualification — representative focused test passed
 
 ## Provenance and assessment
 
@@ -99,3 +99,32 @@ systemd-run --user --wait --pipe --unit=bounded04-durable-diagnostic --working-d
 ```
 
 Check available memory/no other Rust before running. Preserve the last phase and checkpoint messages on failure. If it reaches the original suffix within the unchanged deadline, use that actual stage evidence to choose the smallest independently bounded fixture; do not enlarge bounds or repeat blindly. Representative acceptance and Device composed success remain unqualified.
+
+## Trimmed representative regression — actual PASS
+
+User authorized trimming only the new fixture and one exclusive focused run (plus one concrete fix if needed). Added an early cleanup/return after the existing four transition checks. The last PublicReady checkpoint still drops all joining owner/policy handles and performs native reopen, exact request/approval/member/endpoint/private-public signer checks and current readiness=true; exact completion publication retry follows. Both import-before-journal checkpoints still assert durable owner state, readiness=false, missing import journals, real production import retry and subsequently published journal. Readiness-before-publication still verifies missing PublicReady/false readiness. No bound, permission, assertion, owner, public hook or original control behavior changed.
+
+The new fixture no longer proceeds into the original production driver/name-change/source-disconnected retry/additional native reopen/learned-revocation tail. That journey remains in `desktop_bootstrap_orchestration_completes_both_public_contexts_and_retries_offline`; it was NOT rerun in this slot. New fixture retains only required source/router/HTTP/endpoint teardown and fixture cleanup after its boundary assertions. Nonsecret diagnostics retained. This scope reduction is fixture-work reduction, not a claimed production performance fix or proof of the exact old stalled suffix.
+
+### Executed command and observations
+
+Before run:30GiB total,3.6GiB available, swap effectively full; no cargo/rustc process. Shared target and standard profile, no fresh target or override mix. Exact invocation, from `of/.worktrees/bounded04-durable-evidence`, terminal bound910000ms:
+
+```sh
+systemd-run --user --wait --pipe --unit=bounded04-durable-trimmed --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/bounded04-durable-evidence -p MemoryMax=4G -p MemorySwapMax=0 -p RuntimeMaxSec=900 env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --jobs=1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --lib security_sync::bootstrap::interruption_tests::production_durable_transitions_preserve_imports_and_verified_readiness_on_reopen -- --exact --test-threads=1 --nocapture
+```
+
+Unit invocation `5a9e1786543d43d4ac42da2901359d40`. Three package-cache-lock wait messages preceded Unified compilation; no cause inferred. Compilation passed in3m49s. Focused result: **1passed/0failed/0ignored/72filtered,350.97s**, exit0. Internal360s bound unchanged. Service runtime9min41.513s, CPU9min14.530s, reported memory peak256.0K/swap0B (not interpreted as actual compiler/test working set).
+
+Actual stdout observed in order:
+
+- Local HTTP token200, authenticated pairing/authorized approval/signed reply and admission checks.
+- `durable transition checkpoint reached: IdpImported`, native reopen/current binding verification, exact IdP import retry/journal publication.
+- `durable transition checkpoint reached: ManagementImported`, native reopen/current binding verification, exact Management retry/journal publication.
+- `durable transition checkpoint reached: ReadinessVerified`, native reopen/current binding/readiness verification.
+- `durable transition checkpoint reached: PublicReadyPublished`, final native reopen/current binding/readiness verification, exact PublicReady completion retry.
+- Source shutdown, joining endpoint close, teardown, fixture removed, `ok`.
+
+This run qualifies the representative production owner-import/journal and verified-public-readiness/publication transitions at the actual authenticated local Iroh/owner seams with injected retained private-key storage and native database reopen. Not exhaustive crash/partial-row/provider/platform/GUI/Device completion qualification. Earlier cold service timeout and warm whole-test failure above remain historical failures at the larger fixture revision, not silently converted to passes. No production bug RED/GREEN claim; passing scoped test after trimming redundant journey work.
+
+Scoped rustfmt, `git diff --check` and `python3 scripts/check_server_dependencies.py` passed. One focused run only, no subsequent fix/run, original control, Clippy/hack/CRAP or broader tests. Device marker assessment unchanged and separate; no composed Device/Tauri success. Shared target preserved; no profile/provider/CA operation or root merge. Integration8a70dee remains merged into this branch. Representative boundaries now have a passing observation, not ticket/map/status/checkbox closure.

@@ -565,6 +565,32 @@ async fn interruption_boundary(
                 }
             }
         }
+        diagnostic_stage(phase, "durable boundary fixture source shutdown");
+        connection.close(0u32.into(), b"durable boundary checks finished");
+        cancellation.cancel();
+        peer_router
+            .shutdown()
+            .await
+            .expect("boundary source shutdown");
+        source.endpoint().close().await;
+        http.abort();
+        let _ = http.await;
+        diagnostic_stage(phase, "durable boundary fixture joining endpoint close");
+        joining.endpoint().close().await;
+        diagnostic_stage(phase, "durable boundary fixture teardown");
+        drop(protocol);
+        drop(provisioner);
+        drop(joining_idp);
+        drop(joining_policy);
+        drop(runtime);
+        drop(storage);
+        drop(policy);
+        drop(source_security);
+        drop(source_idp);
+        drop(source_policy);
+        std::fs::remove_dir_all(root).expect("remove durable boundary fixture");
+        diagnostic_stage(phase, "durable boundary fixture removed");
+        return;
     }
 
     if complete {
