@@ -8,17 +8,23 @@ Finished `of` history through `290738b` is being consolidated into local main. T
 
 ## Exact source and receipts to retain
 
-| Item | Location / revision |
-| --- | --- |
-| Live consumer worktree | `of/.worktrees/ticket08-full-nodes` |
-| Consumer branch / latest checkpoint | `offline-first-ticket08-full-nodes`, `57426e363d413d3f29b16665459605683e9ad52f` |
-| Pair slice source | `19db0df9e124c626bde56cde99d7133e3ab3e8b0` |
-| IdP stage instrumentation, independently source-reviewed | `d2720cb7f759b825e613af5d8a4f1dde4be4e852` |
-| Diagnostic consumer lockfile | `437c9bf` adds three edges to the existing `log` crate |
-| Generic native instrumentation, independently source-reviewed | `ofdb`, branch `diagnostics/native-idp-stage-timing`, source `b1d957d8afb33b0cb9e6981d6a09793d97659e35` |
-| Generic diagnostic receipt tip | `b21c5839ee7f0578be891e9c8aae6d1b687e108f` |
-| Consumer full receipt and raw logs | [preserved worktree evidence](../../.worktrees/ticket08-full-nodes/.scratch/offline-first-nodes/evidence/08-full-nodes.md) |
-| Generic diagnostic receipt | [ofdb evidence](../../../ofdb/.scratch/storage-sync/evidence/16-native-idp-stage-timing.md), on the preserved diagnostics branch |
+| Item                                                          | Location / revision                                                                                                        |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Live consumer worktree                                        | `of/.worktrees/ticket08-full-nodes`                                                                                        |
+| Consumer branch / latest checkpoint                           | `offline-first-ticket08-full-nodes`, `57426e363d413d3f29b16665459605683e9ad52f`                                            |
+| Pair slice source                                             | `19db0df9e124c626bde56cde99d7133e3ab3e8b0`                                                                                 |
+| IdP stage instrumentation, independently source-reviewed      | `d2720cb7f759b825e613af5d8a4f1dde4be4e852`                                                                                 |
+| Diagnostic consumer lockfile                                  | `437c9bf` adds three edges to the existing `log` crate                                                                     |
+| Generic native instrumentation, independently source-reviewed | `ofdb`, branch `diagnostics/native-idp-stage-timing`, source `b1d957d8afb33b0cb9e6981d6a09793d97659e35`                    |
+| Generic diagnostic receipt tip                                | `b21c5839ee7f0578be891e9c8aae6d1b687e108f`                                                                                 |
+| Consumer full receipt and raw logs                            | [preserved worktree evidence](../../.worktrees/ticket08-full-nodes/.scratch/offline-first-nodes/evidence/08-full-nodes.md) |
+| Generic diagnostic receipt                                    | `.scratch/storage-sync/evidence/16-native-idp-stage-timing.md` on the preserved ofdb diagnostics branch; retrieval below   |
+
+Retrieve the diagnostic receipt without changing owner checkout state, from `ofdb`:
+
+```sh
+git --no-pager show b21c5839ee7f0578be891e9c8aae6d1b687e108f:.scratch/storage-sync/evidence/16-native-idp-stage-timing.md
+```
 
 `ofdb` root is now on **main**, without diagnostic instrumentation. The consumer dependency resolves to that original root through existing sibling links. For another profiling attempt, explicitly reactivate the owner diagnostic branch, or deliberately deliver its source into a suitable checkout; verify actual dependency paths and both source revisions. A clean consumer checkout alone does not establish the external owner source used. Its diagnostic lockfile is not the finished-main dependency graph.
 
