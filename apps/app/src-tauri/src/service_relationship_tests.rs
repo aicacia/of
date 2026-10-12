@@ -242,7 +242,11 @@ async fn check_relationships() {
         &management,
         administrator,
         Id::now_v7(),
-        &[(Id::now_v7(), IdentityAction::InfrastructureClientsRead)],
+        &[
+            (Id::now_v7(), IdentityAction::DevicePairingRead),
+            (Id::now_v7(), IdentityAction::DevicePairingUpdate),
+            (Id::now_v7(), IdentityAction::InfrastructureClientsRead),
+        ],
     )
     .await
     .expect("real explicit local grant");
@@ -315,7 +319,9 @@ async fn check_relationships() {
             subject: PermissionSubject::User { id: subject_id },
             action: IdentityAction::InfrastructureClientsRead,
             target: PermissionTarget::Installation {
-                resource: IdentityResource::Client { client_id: None },
+                resource: IdentityResource::Client {
+                    client_id: registrations[3].client_id.clone(),
+                },
             },
         };
         let response = http
