@@ -2,7 +2,13 @@
 
 ## Notes
 
-### Current checkpoint — 2026-10-12, finished-work consolidation; 08 remains UNQUALIFIED
+### Current checkpoint — 2026-10-12, scoped local completion
+
+- [08 Answer](issues/08-offline-node-integration-and-final-validation.md#answer) resolves all11 criteria using inherited03–07/ofdb05/offs03 evidence plus [clean final receipt4492dcc](evidence/08-final-clean-validation.md): consumer `d9e40eb`, owner `5b08d0d` / clean implementation `72aae34`, all three pairs + one restrictions repeat + two probes + rotation passed; format/boundary passed. [Assertion-only fix6341cf1 / receipt707e68b](evidence/08-secret-safe-assertions.md) records affected45–48 passes without secret operand dumps. Ordinary composed teardown completed. Historical failures remain tied to their revisions, not converted to passes.
+  -01–08 and [spec](spec.md#local-qualification-summary--2026-10-12) are resolved only within the Ubuntu machine-local policy. Strict Clippy41/42 remains failed on documented unchanged baseline diagnostics; no arbitrary unrelated fix, suppression or all-green claim. Learned retained-socket qualification is fail-closed/no-overwrite with pre-learning success; exact policy causality/apply gates are inherited03. Fixture policy seed is not automatic join-policy creation. Provider/GUI/deployment and owner-task limits remain explicit.
+- Coordinator reports independent code QA/design/architecture/security/owner approvals and no remaining identified production blocker. Security LOW assertion disclosure fixed6341cf1; independent follow-up on that fix remains pending, not claimed approved. [Completion/follow-ups/recovery](remaining-work.md) replaces stale diagnostic frontier guidance. This docs-only closure commits on the existing ticket branch, no code/build/main merge/push/archive; raw logs stay in the consumer worktree for coordinator preservation.
+
+### Historical checkpoint — 2026-10-12, finished-work consolidation; 08 remained UNQUALIFIED
 
 - [Remaining work and exact diagnostic source/receipts](remaining-work.md) collect the08 frontier without accepting failed tests. Consumer branch `offline-first-ticket08-full-nodes` at `57426e3` remains in its live worktree; generic owner diagnostic branch `diagnostics/native-idp-stage-timing` at `b21c583` remains unmerged. Native profiling attempt was compile-OOM; no native-stage result exists. Free machine memory before another bounded attempt.
   -01–07 remain resolved within recorded scopes. Ofdb06 is now resolved from accepted of02/of03 evidence, not another runtime sweep; finished owner mains include the handoff/branch-retirement receipts. Of08 still owns full-host partition/offline-reopen/reconnect/learned-operation composition and focused final validation. No spec completion is claimed.
@@ -185,7 +191,13 @@ Numbers identify tickets from the retired unified-server effort. Destinations be
 
 ## Decisions-so-far
 
-### Current accepted decisions — 2026-10-11
+### Current accepted decisions — 2026-10-12
+
+- **[08 resolved](issues/08-offline-node-integration-and-final-validation.md#answer):** accept machine-local completed-pair evidence and scoped inherited guarantees, not a repeated resource-kind/fault matrix. Source/commands/results/review provenance and each of11 criteria are mapped in the Answer. [Spec resolved locally](spec.md#local-qualification-summary--2026-10-12); no broader certification.
+- **Final validation policy:** record strict Clippy's unchanged baseline collapsible_if and eight diagnostic test errors; focused passing runtime/format/boundary plus inherited owner/client gates support this scoped completion. Neither failed lint command is a pass, and unrelated lint repair is not required by the spec. Secret-safe assertion fix6341cf1 has affected runtime passes; independent security follow-up is still pending.
+- **Qualification precision:** pair learned fail-closed/no-overwrite is not exact typed rejection-cause proof;03 supplies exact current-policy/application gates. Explicit approved-Device fixture policy seed is not production automatic join-policy creation. GUI/provider/deployment/crash/WAN and universal detached-task joins remain unqualified follow-ups. Preserve worktree raws for later coordinator archive/integration.
+
+### Historical accepted decisions — 2026-10-11
 
 - **[04 resolved](issues/04-equal-node-setup-join-and-desktop.md#answer):** revised representative durable/capture/completion boundaries and fail-closed recovery are accepted with real production join/offline reopen, native session-provider observations, observed marker publication and focused DOM3/client-SSR12 evidence. Reviewed durable `a2c8c25` is merged at `a6b517c`; its350.97s pass is near the unchanged360s bound (9.03s nominal margin). GUI approval/B completion remains deferred, not observed; historical larger-fixture failures are preserved.
 - **[07 resolved](issues/07-node-operations-and-runtime-lifecycle.md#answer):** all nine scoped criteria accepted under coordinator-supplied auditor `a371`, linking qualified audience/TLS checks plus existing lifecycle, rotation, ordinary-error cleanup and actual stopped same-Node retained-provider restore. No universal task joining, concurrent rollout, unattended/image/foreign-platform or provider-loss recovery claim.
@@ -260,7 +272,11 @@ Earlier unresolved/blocker/not-integrated statements below describe their named 
 
 ## Fog
 
-### Current gaps — 2026-10-11
+### Current follow-ups and limits — 2026-10-12
+
+No identified production blocker remains in the scoped acceptance recorded by [08](issues/08-offline-node-integration-and-final-validation.md#answer). Pending independent security follow-up on assertion-only6341cf1 is not claimed complete. Baseline strict Clippy still fails; documented diagnostics are not waived into a pass. Coordinator branch integration/review and raw-log archive/retirement remain deliberate later actions, not performed here. [Current follow-ups and recovery pointers](remaining-work.md) and [deferred policy table](spec.md#deferred-qualification-follow-ups-not-ticket-closure-gates) retain GUI/provider/platform/deployment/crash/WAN, same-issued-token expiry, remote stream/per-path Residency and detached-task limitations. No all-load performance or exact pair denial-causality claim.
+
+### Historical gaps — 2026-10-11
 
 Current closure scope is the [machine-local policy](spec.md#machine-local-qualification-policy).04/07 are resolved within their revised Answers; historical missing/incomplete statements below retain their original scope. **08 remains claimed and UNQUALIFIED**, all11 criteria unchecked. [Preserved branch-only evidence](../../.worktrees/ticket08-full-nodes/.scratch/offline-first-nodes/evidence/08-full-nodes.md) records genuine authenticated pair join/both-host readiness, not a passing pair slice. Offline reopen/independent mutation and issuance, grant/revocation reconciliation, retained-socket learned denial and final focused validation remain unqualified; external owner records are inherited evidence, not new full-Node observations.
 

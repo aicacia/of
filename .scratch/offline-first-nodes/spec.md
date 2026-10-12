@@ -1,6 +1,12 @@
 # Offline-first equal Nodes
 
-Status: ready-for-agent
+Status: resolved
+
+## Local qualification summary — 2026-10-12
+
+All eight `of` tickets are resolved within their recorded Ubuntu Linux x86_64 machine-local scopes. [08 Answer](issues/08-offline-node-integration-and-final-validation.md#answer) combines the inherited owner/domain acceptance with actual completed full-Node partition/offline-reopen/reconciliation/learned-operation and managed teardown evidence. Clean consumer `d9e40eb` with owner `5b08d0d` / implementation `72aae34` passed all three pair slices, one restrictions repeat, both probes and rotation ([receipt `4492dcc`](evidence/08-final-clean-validation.md)); assertion-only confidentiality fix `6341cf1` passed affected runs45–48 ([receipt `707e68b`](evidence/08-secret-safe-assertions.md)). Format/boundary passed. Strict Clippy remains failed on documented unchanged baseline diagnostics, not an all-green lint result or a requirement to fix arbitrary unrelated code.
+
+This resolves the spec under the policy below, **not broader platform, provider, GUI, deployment, crash-recovery or WAN certification**. Learned retained-socket evidence proves fail-closed/no-overwrite with a pre-learning success control; exact policy/apply/queued/in-flight semantics are separately inherited from03. The fixture seeds an approved joined Device's empty policy; it does not prove automatic join-policy creation. Provider/mock/deferred caveats remain. Coordinator-reported code QA/design/architecture/security/owner approvals and pending independent security follow-up on6341cf1 are recorded in08; no review/test execution is invented by this documentation audit. [Current completion, baseline lints, follow-ups and recovery](remaining-work.md). No main merge, push or raw-log retirement accompanies closure.
 
 ## Goal and confirmed decisions
 
