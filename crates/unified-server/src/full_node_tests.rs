@@ -9,7 +9,7 @@ use idp_service::{oauth2::NodeSignerBinding, repo::PrivateKeyKeyringRepo};
 use iroh_chain::DATA_ALPN;
 use management_service::{
     ManagementService,
-    replica::{DbPermissionRepo, DbRoleRepo},
+    replica::{DbPermissionRepo, DbRoleRepo, DbSelectionPolicyRepo, SelectionPolicy},
 };
 use model::contract::TokenResponse;
 use storage_model::{StorageRequest, StorageResponse};
@@ -367,7 +367,6 @@ async fn create_written_resource(
 
 async fn join_host(
     source: &Host,
-    a: &Fixture,
     b: &mut Fixture,
     owner: Id,
     journal: &serde_json::Value,
@@ -465,9 +464,29 @@ async fn join_host(
             .expect("pinned authenticated approval"),
         approval
     );
-    management_server::provision_initial_device(&a.config.management, binding.member_id, owner)
+    assert_eq!(approval.owner_subject, owner);
+    assert_eq!(approval.request.member_id, binding.member_id);
+    assert_eq!(approval.request.endpoint_id, binding.endpoint_id);
+    let policies = DbSelectionPolicyRepo::new(source.runtime().full_node_test_management());
+    assert!(
+        policies
+            .get(binding.member_id, &owner.to_string(), Id::nil())
+            .await
+            .expect("public existing Device policy lookup")
+            .is_none()
+    );
+    policies
+        .set_prevalidated(SelectionPolicy {
+            device_id: binding.member_id,
+            owner_subject: owner.to_string(),
+            application_id: None,
+            selected_kind: None,
+            selected_id: None,
+            admin_allowed: true,
+        })
         .await
-        .expect("source owner initializes the approved joined Device's empty policy");
+        .expect("existing owner initializes the actually approved Device's empty policy");
+    drop(policies);
     joining_owner
         .record_node_join_approval(&approval)
         .expect("durable receipt");
@@ -741,7 +760,7 @@ impl Pair {
             "08 {slice:?}: entering authenticated join at {:?}",
             started.elapsed()
         );
-        let joined = join_host(&source, &a, &mut b, owner, &journal, &approving).await;
+        let joined = join_host(&source, &mut b, owner, &journal, &approving).await;
         source
             .runtime()
             .node_join_accepting(&approving, Some(false))

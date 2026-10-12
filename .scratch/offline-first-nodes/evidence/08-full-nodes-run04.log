@@ -1,0 +1,31 @@
+Source: 1ff0b6b
+Command: systemd-run --user --wait --pipe --collect --unit=of-ticket08-full-nodes-04 --property=MemoryMax=4G --property=MemorySwapMax=0 --property=RuntimeMaxSec=900 --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --locked --jobs=1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --lib local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial -- --exact --nocapture --test-threads=1
+Running as unit: of-ticket08-full-nodes-04.service; invocation ID: ad151202d11c4b23a356d99a2f6f8bf2
+   Compiling unified-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/unified-server)
+    Finished `test` profile [optimized + debuginfo] target(s) in 4m 26s
+     Running unittests src/lib.rs (/home/nathan/code/rust/aicacia/of/target/debug/deps/unified_server-a4bf33735b2f05a3)
+
+running 1 test
+test local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial ... 08 Offline: source fixture ready at 25.818430048s
+08 Offline: entering authenticated join at 52.986823934s
+
+thread 'local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial' (1457509) panicked at crates/unified-server/src/full_node_tests.rs:470:10:
+source owner initializes the approved joined Device's empty policy: Custom { kind: Other, error: QueryError { kind: Storage, message: "Database already open. Cannot acquire lock." } }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 75 filtered out; finished in 62.83s
+
+error: test failed, to rerun pass `-p unified-server --lib`
+Finished with result: exit-code
+Main processes terminated with: code=exited/status=101
+Service runtime: 5min 29.395s
+CPU time consumed: 5min 36.706s
+Memory peak: 292.0K
+Memory swap peak: 0B
+Exit status: 101
