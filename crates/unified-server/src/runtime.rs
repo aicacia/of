@@ -1954,3 +1954,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "full_node_runtime_fixture.rs"]
+mod full_node_fixture;

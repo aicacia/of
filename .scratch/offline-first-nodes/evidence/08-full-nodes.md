@@ -1,0 +1,74 @@
+# 08 — bounded two-completed-full-host slice (source pending runtime validation)
+
+2026-10-11. **Pending: no Rust build, test execution, Clippy, runtime pass, RED/GREEN result, or ticket acceptance is claimed.** The coordinator has not authorized a build slot. TDD and ponytail skills loaded; the user explicitly selected the production seams below. No root claim/status/map/spec/closure edit was made.
+
+## Source provenance and boundaries
+
+- Worktree: `of/.worktrees/ticket08-full-nodes`.
+- Branch: `offline-first-ticket08-full-nodes`.
+- Created directly from `offline-first-nodes-integration`, exact base `db50c751a9d994eaac4d83de78306d71eb1d4210`.
+- `git merge-base --is-ancestor db50c751a9d994eaac4d83de78306d71eb1d4210 HEAD` returned 0 before implementation and before publication. Both branch tips equalled the base at creation. No integration/root merge.
+- Read the current [spec/policy](../spec.md), [ticket08](../issues/08-offline-node-integration-and-final-validation.md), [map](../map.md), shared glossary/map, existing production provisioning/bootstrap/runtime seams, and the concrete inherited evidence below. 04/07 resolution at this base is recorded in the map; it is not new08 runtime evidence.
+- Complexity: high integration-fixture complexity; risk: high authorization/false-positive/lifetime risk; priority: the outstanding same-Installation full-host seam. No production defect is proven; **no production behavior was changed**. `runtime.rs` gains only a Unix/test child declaration; that dedicated child exposes the existing shared Server for authenticated test connections, not another endpoint/router.
+- Only Unified Server test/helper files, necessary declarations, and this evidence file are committed. Existing rotation test passes its original grants/audience explicitly to its reused login helper; its behavior is intended unchanged, not revalidated.
+- Existing owner-repository paths use the already present `.worktrees/{ofdb,offs,ofnet}` links to original owner repositories. No manifest overrides, new dependency, networking implementation, owner writes, provider/system/profile/CA operation, root dirty-file edit, broad sweep, or cleanup.
+
+## Agreed seams and test design
+
+Exact test: `local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial`.
+
+One Installation creation, one production authenticated join, one stop/offline-reopen cycle, one authenticated reconnect. No repeated setup journeys or owner matrix. The only concurrency probe is two refresh requests against one local store. Internal test bound **360s**; no existing timeout is increased. Runtime/performance headroom is unknown until the authorized run. On timeout, inspect phase progress and narrow the slice; do not widen the bound to hide a failure.
+
+1. Reuse `local_provisioning_tests::Fixture` and restricted `LocalProvisioner::{create,provision,build_runtime}` for A only. No second unrelated Installation, private-store/database copying, unchecked public-row seeding, or fake completion journal for B.
+2. Distinct IdP/Management/Storage/endpoint roots, endpoint identities, key namespaces, local relationship Client IDs and secrets. Two separate fixture credential stores. Because production keyring injection is process-global, a test-only dispatcher routes exact namespace-prefixed credential requests to those separate stores and rejects unknown namespaces. Source and joiner private inventories must be nonempty, disjoint, and unchanged by offline reopen. This is fixture-provider evidence **only**, not real OS-provider availability/security qualification.
+3. Source grants use real public provisioning/owner APIs. The login Client is public (no copied confidential secret); three real refresh grants are issued before bootstrap. Two separate public User rows are identity-mutation targets, avoiding concurrent edits to the active join approver/actor row. Exact Installation Device restriction grants are explicitly provisioned, not a permissive authorization callback.
+4. B uses `UnifiedEndpoint::open_fresh`, `SecurityProtocol::open_node_bootstrap`, independent `OwnerProvisioner` secret preparation and `prepare_node_join`. Send the actual request over authenticated pairing to A's actual shared endpoint address. Observe the real pairing delivery, deny forged-bearer approval, approve through UnifiedRuntime's production pending-offer API, verify the pinned reply, and persist its receipt. Receipt alone must not publish readiness or admit ordinary DATA. Import both public contexts through `receive_node_bootstrap`; then `complete_node_join_public_bootstrap` and current signer checks. Public registration templates alone are reused for B's independently provisioned local service relationships.
+5. B starts actual IdP/Management/Storage through `UnifiedRuntime::build`, with durable joined public readiness and explicit local Device policy. Both `Host` instances use the production composed router/listener and `start_background_tasks` shared protocol wiring. Check current public readiness and each context's actual HTTP health before declaring a full host. Bootstrap-public completion alone is **not** treated as Storage/full-host completion.
+6. Learn B's ready policy through authenticated DATA/Management synchronization, explicitly close that connection, then qualify a controlled **domain-protocol partition**: there are no security sync sessions until the explicit reconnect. This is not OS network isolation or air-gapping; endpoints remain same-host and background generic mesh work is not proof of transparent DB/FS sync.
+7. Both hosts independently race two requests against the same previously learned refresh grant: exactly one local HTTP200 with a replacement, the loser and local replay must be client-error `invalid_grant` (not503/server failure). Both partitions succeeding is the accepted absence of global single use. A separately consumes another learned grant and revokes a third through real OAuth. Stop both hosts normally and await managed runtime/listener shutdown.
+8. Reopen both through `LocalProvisioner::open_runtime` without peer lookups: A retains its completed journal; B takes the existing-only joined path, verifies retained Storage roots and its exact signer, and must not synthesize a fresh Installation journal. Require persisted endpoint/public readiness, unchanged private stores, both approved signer IDs in each locally served JWKS, and durable local shared-grant replay denial.
+9. Independently after offline reopen, issue real User tokens by token exchange and real local confidential Client tokens, mutate distinct identity targets through IdP HTTP, mutate distinct Device restriction rows through Management HTTP, and create/write/read distinct resources through Storage HTTP/WebSocket. Each own Device remains allowed under its prior local view although the other partition has restricted it. Each local catalog lacks the other independently created resource ID. No remote authority or mock policy server is involved.
+10. Authenticated DATA reconnect uses the persisted endpoints. IdP exchange must reconcile both identity edits and grant consumption/revocation. B's untouched consumed/revoked target grants must then deny. Management exchange must learn restrictions on both local Devices. **Retain the resource sockets across this exchange**; the next write must fail/close with no successful write result. Restore allowance through the real owner API, reopen resource access, and read the exact earlier bytes to prove the denied write did not replace them. Delete through the public Storage API and check404; normally shut down/await both hosts.
+
+### Sensitivity and scope limits
+
+The runtime assertions are not yet executed. Planned sensitivity checks after a slot: removing local consumption serialization should violate one-winner/replay assertions; suppressing the authenticated IdP reconnect should allow B's untouched consumed/revoked grant (violating expected denial); suppressing Management reconnect should preserve true local allowance and permit the retained-socket write. No such negative/control run is claimed now.
+
+This increment uses a previously learned **refresh grant**, not a new authorization-code matrix. It adds a representative retained **local resource WebSocket** learned-restriction/next-write check and public local deletion receipt, not new SQL/KV/FS Iroh apply/batch gates or physical managed-copy-removal receipts. Transfer/deselection cleanup propagation, authorized in-flight completion, first committed KV batch, staging/handle drains, cancellation and Tombstones reuse inherited03/05/owner evidence below. It does not claim new full-host selected-resource DATA/content synchronization, cross-user grants, globally immediate revocation, globally single-use OAuth, remote erasure, WAN/relay/physical-device, GUI approval, real-provider or crash/power-loss qualification.
+
+Owner API calls are actual loopback HTTP/WebSocket and authenticated Iroh. UnifiedRuntime's loopback listener is HTTP, not HTTPS. Existing07 TLS/explicit-CA evidence is inherited, **not relabeled as a new full-host HTTPS run**; no TLS/provider dependencies or system trust changes were added. Test-only credential routing is not mocked identity/permission evaluation. Ordinary successful stop awaits managed runtime and HTTP task; panic fallback cancels/aborts its listener, not proof of OS process exit or every detached owner-task guarantee.
+
+## Inherited evidence — read, not rerun
+
+- [ofdb05](../../../../ofdb/.scratch/storage-sync/issues/05-local-regression-qualification.md#final-broad-qualification--resolution): resolved owner-local integrity/atomicity/recovery/cancellation/writer-progress/feature qualification, exact final source `38696d981e88bcfe20a475f49eb514f498f29b75`; concrete01–04 results inherited through that ticket. Historical581-combination pass and CRAP coverage/warning limitations retain their original meaning; no owner harness or powerset/CRAP rerun by08.
+- [offs03](../../../../offs/.scratch/filesystem-sync/issues/03-iroh-extraction-offline-reconnect.md#answer): resolved extraction acceptance at verified original `of e7526fe`, `offs 516b692`, `ofdb 25b9251`; actual moved consumer filesystem transport6 and Storage50 passes, real authenticated same-connection reconnect plus metadata/byte reads and handle/stream/task cleanup. Controlled callbacks there do not become full-Node policy evidence. offs01–02 retain their generic admission/content integrity acceptance.
+- [of03 completion](03-completion/README.md): exact public SQL/KV/FS execution hooks, native real-owner/Iroh queued-send/apply checks, explicit prior KV commit, admitted completion and subsequent denial, reconnect/source preservation, namespace and task-lifetime fixes. [of03 ticket](../issues/03-execution-boundary-authorization.md) records resolved current criteria; historical pending notes in original evidence are not new blockers. The public API/bearer versus Device-policy distinction is retained.
+- [of05 ticket Answer](../issues/05-device-policy-catalog-and-cleanup.md#answer), [review](policy2000d0a-review/README.md), [completion audit](05-completion/criteria.md) and [Tombstone correction](05-completion/p1-completion.md): accepted real public owner retirement/drain/retry/reopen, generation fencing, policy/transfer/deselection/Full-peer boundaries; implemented `2000d0a` plus `4936146`, integrated before this base. The original implementer audit's pending-review language is historical. Whole-resource cleanup is inherited from these actual APIs/results, not inferred from staging cleanup or this test's404 response.
+- [04 local transitions](04-local-transitions.md), [07 audiences](07-desktop-audiences.md), [07 TLS paths](07-tls-paths.md), [07 lifecycle](07-lifecycle.md), [07 recovery](07-recovery.md): resolved bounded production join/readiness/reopen, listener/audience/TLS/runtime/recovery slices at this integration base. Deferred GUI/platform/provider/deployment limitations remain explicit.
+
+Some inherited evidence directories are ignored and exist in the coordinator's original checkout, not this new worktree. Links identify those original reviewed records; this commit does not copy or requalify them.
+
+## Actual static validation
+
+Run in `of/.worktrees/ticket08-full-nodes`:
+
+```sh
+rustfmt --edition 2024 --config skip_children=true --check crates/unified-server/src/full_node_tests.rs crates/unified-server/src/full_node_runtime_fixture.rs crates/unified-server/src/local_provisioning_tests.rs crates/unified-server/src/runtime.rs
+python3 scripts/check_server_dependencies.py
+git --no-pager diff --check
+git --no-pager diff --exit-code -- Cargo.lock Cargo.toml crates/unified-server/Cargo.toml
+```
+
+Formatting/whitespace checks passed. Existing boundary checker returned `No direct server-to-server dependency edges found.` Manifests/lock unchanged. Rustfmt parsed the new source; **that is not Rust type checking**. No runtime/build/Clippy diagnostic claim is possible before the slot. No full Cargo Hack, CRAP or all-workspace gate.
+
+## Exact bounded next command — NOT EXECUTED
+
+Only after coordinator authorizes the single Rust slot, run from `of/.worktrees/ticket08-full-nodes`:
+
+```sh
+CARGO_TARGET_DIR=target/ticket08-full-nodes CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=1 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_PROFILE_DEV_OPT_LEVEL=1 CARGO_PROFILE_TEST_OPT_LEVEL=1 RUST_MIN_STACK=67108864 timeout 600s cargo test -p unified-server --no-default-features --lib --offline --locked local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial -- --exact --nocapture --test-threads=1
+```
+
+Outer600s includes cold compilation; internal360s is the scenario bound, not an increased production deadline. Offline/locked forbids fetching/changing dependencies. The target is dedicated to this worktree; no build cache copying/cleanup is authorized. Capture exact exit status, phase timings and any compilation/runtime failures. Do not count a build-only completion, zero matched tests, timeout, or inherited pass as this test's success. If a production defect is reproduced, report/coordinate the exact owner fix rather than changing production under this test-only assignment.
+
+Coordinator retains root claim, integration, review, acceptance/status and final bounded-validation decisions. This is a source/evidence handoff, not ticket08 closure.

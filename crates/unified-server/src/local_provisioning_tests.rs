@@ -176,8 +176,12 @@ fn secret_files_absent(root: &Path) {
     );
 }
 
-async fn rotation_login_client(fixture: &Fixture) -> idp_model::contract::ClientRegistration {
-    use idp_model::contract::{ClientRegistration, ClientType, GrantType, TokenEndpointAuthMethod};
+async fn rotation_login_client(
+    fixture: &Fixture,
+    grants: Vec<idp_model::contract::GrantType>,
+    audiences: Vec<String>,
+) -> idp_model::contract::ClientRegistration {
+    use idp_model::contract::{ClientRegistration, ClientType, TokenEndpointAuthMethod};
     use idp_service::{
         oauth2::OAuth2Service,
         replica::{
@@ -210,9 +214,9 @@ async fn rotation_login_client(fixture: &Fixture) -> idp_model::contract::Client
     request.client_id = None;
     request.client_type = ClientType::Public;
     request.token_endpoint_auth_method = TokenEndpointAuthMethod::None;
-    request.allowed_grant_types = vec![GrantType::Password, GrantType::TokenExchange];
+    request.allowed_grant_types = grants;
     request.allowed_scopes = vec!["openid".into()];
-    request.allowed_audiences = vec![fixture.config.storage_idp_client.audience.clone()];
+    request.allowed_audiences = audiences;
     service
         .register_client(request)
         .await
@@ -253,7 +257,15 @@ async fn local_provisioning_authorized_rotation_reopens_completed_host() {
     host.provision(&fixture.password)
         .await
         .expect("provision real isolated host");
-    let login = rotation_login_client(&fixture).await;
+    let login = rotation_login_client(
+        &fixture,
+        vec![
+            idp_model::contract::GrantType::Password,
+            idp_model::contract::GrantType::TokenExchange,
+        ],
+        vec![fixture.config.storage_idp_client.audience.clone()],
+    )
+    .await;
     let delivery = keyring_core::api::CredentialStoreApi::build(
         &*fixture.store,
         "rotation-fixture",
@@ -1823,3 +1835,6 @@ fn local_provisioning_rejects_unprotected_input_and_missing_or_conflicting_inten
     );
     secret_files_absent(&fixture.root);
 }
+
+#[path = "full_node_tests.rs"]
+mod full_nodes;
