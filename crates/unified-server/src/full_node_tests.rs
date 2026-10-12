@@ -1077,6 +1077,9 @@ async fn offline_reopen() {
             "storage:filesystems",
         )
         .await;
+        if label == "offline-b" {
+            probe::install_stage_logger();
+        }
         let (resource, mut connection) = create_written_resource(&http, host, &storage).await;
         connection
             .close(None)
