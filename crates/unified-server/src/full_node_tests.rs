@@ -761,7 +761,7 @@ async fn full_hosts() {
         reqwest::StatusCode::OK,
     )
     .await;
-    let response = http
+    let revocation = http
         .post(format!("{}/idp/oauth2/revoke", source.base))
         .form(&[
             ("client_id", login_id),
@@ -771,7 +771,7 @@ async fn full_hosts() {
         .send()
         .await
         .expect("real local refresh revocation");
-    assert!(response.status().is_success());
+    assert!(revocation.status().is_success());
     denied_grant(refresh(&http, &source, login_id, revoked_grant).await).await;
     let secrets_a = a.secrets();
     let secrets_b = b.secrets();
