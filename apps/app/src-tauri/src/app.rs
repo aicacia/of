@@ -559,65 +559,37 @@ async fn provision_service_clients(
     storage_audience: &str,
 ) -> io::Result<()> {
     idp.ensure_desktop_client(ids.installation_id).await?;
-    provision_service_client(
-        data,
-        idp,
-        ids,
-        ServiceRelationship::ManagementToIdp,
-        ids.management_to_idp_client_id,
-        "Management",
-        &format!("{base_url}/management"),
-        "Management service to IdP",
-        idp_audience,
-        &[IDP_TOKEN_VALIDATE_SCOPE, IDP_DEVICE_LOOKUP_SCOPE],
-    )
-    .await?;
-    provision_service_client(
-        data,
-        idp,
-        ids,
-        ServiceRelationship::StorageToIdp,
-        ids.storage_to_idp_client_id,
-        "Storage",
-        &format!("{base_url}/storage"),
-        "Storage service to IdP",
-        idp_audience,
-        &[
-            IDP_TOKEN_VALIDATE_SCOPE,
-            IDP_DEVICE_LOOKUP_SCOPE,
-            IDP_DEVICE_LIST_SCOPE,
-        ],
-    )
-    .await?;
-    provision_service_client(
-        data,
-        idp,
-        ids,
-        ServiceRelationship::StorageToManagement,
-        ids.storage_to_management_client_id,
-        "Storage",
-        &format!("{base_url}/storage"),
-        "Storage service to Management",
-        storage_audience,
-        &[
-            MANAGEMENT_REPLICATION_READ_SCOPE,
-            MANAGEMENT_REPLICATION_ADMIT_SCOPE,
-        ],
-    )
-    .await?;
-    provision_service_client(
-        data,
-        idp,
-        ids,
-        ServiceRelationship::IdpToManagement,
-        ids.idp_to_management_client_id,
-        "IdP",
-        &format!("{base_url}/idp"),
-        "IdP service to Management",
-        MANAGEMENT_APPLICATION_URI,
-        &[MANAGEMENT_PERMISSION_EVALUATE_SCOPE],
-    )
-    .await
+    for (relationship, client_id) in [
+        (
+            ServiceRelationship::ManagementToIdp,
+            ids.management_to_idp_client_id,
+        ),
+        (
+            ServiceRelationship::StorageToIdp,
+            ids.storage_to_idp_client_id,
+        ),
+        (
+            ServiceRelationship::StorageToManagement,
+            ids.storage_to_management_client_id,
+        ),
+        (
+            ServiceRelationship::IdpToManagement,
+            ids.idp_to_management_client_id,
+        ),
+    ] {
+        provision_service_client(
+            data,
+            idp,
+            ids,
+            relationship,
+            client_id,
+            base_url,
+            idp_audience,
+            storage_audience,
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 async fn provision_service_client(
@@ -626,11 +598,9 @@ async fn provision_service_client(
     ids: &SetupIds,
     relationship: ServiceRelationship,
     client_id: Id,
-    application_name: &str,
-    application_uri: &str,
-    client_name: &str,
-    audience: &str,
-    scopes: &[&str],
+    base_url: &str,
+    idp_audience: &str,
+    storage_audience: &str,
 ) -> io::Result<()> {
     let never_produced =
         reset::start_relationship_provisioning(data, ids.installation_id, relationship, client_id)?;
@@ -642,17 +612,17 @@ async fn provision_service_client(
     )
     .map_err(|error| {
         io::Error::other(format!(
-            "could not persist {client_name} credential: {error}"
+            "could not persist {} credential: {error}",
+            relationship.key_name()
         ))
     })?;
     idp.ensure_setup_infrastructure_client(service_client_registration(
         client_id,
         client_secret,
-        application_name,
-        application_uri,
-        client_name,
-        audience,
-        scopes,
+        relationship,
+        base_url,
+        idp_audience,
+        storage_audience,
     ))
     .await?;
     Ok(())
@@ -771,16 +741,53 @@ fn load_service_credentials(
 fn service_client_registration(
     client_id: Id,
     client_secret: String,
-    application_name: &str,
-    application_uri: &str,
-    client_name: &str,
-    audience: &str,
-    scopes: &[&str],
+    relationship: ServiceRelationship,
+    base_url: &str,
+    idp_audience: &str,
+    storage_audience: &str,
 ) -> ClientRegistration {
+    let (application_name, path, client_name, audiences, scopes): (_, _, _, Vec<&str>, &[&str]) =
+        match relationship {
+            ServiceRelationship::ManagementToIdp => (
+                "Management",
+                "management",
+                "Management service to IdP",
+                vec![idp_audience, MANAGEMENT_APPLICATION_URI, storage_audience],
+                &[IDP_TOKEN_VALIDATE_SCOPE, IDP_DEVICE_LOOKUP_SCOPE],
+            ),
+            ServiceRelationship::StorageToIdp => (
+                "Storage",
+                "storage",
+                "Storage service to IdP",
+                vec![idp_audience, "storage:databases", "storage:filesystems"],
+                &[
+                    IDP_TOKEN_VALIDATE_SCOPE,
+                    IDP_DEVICE_LOOKUP_SCOPE,
+                    IDP_DEVICE_LIST_SCOPE,
+                ],
+            ),
+            ServiceRelationship::StorageToManagement => (
+                "Storage",
+                "storage",
+                "Storage service to Management",
+                vec![storage_audience],
+                &[
+                    MANAGEMENT_REPLICATION_READ_SCOPE,
+                    MANAGEMENT_REPLICATION_ADMIT_SCOPE,
+                ],
+            ),
+            ServiceRelationship::IdpToManagement => (
+                "IdP",
+                "idp",
+                "IdP service to Management",
+                vec![MANAGEMENT_APPLICATION_URI],
+                &[MANAGEMENT_PERMISSION_EVALUATE_SCOPE],
+            ),
+        };
     ClientRegistration {
         application: ApplicationRegistration {
             name: Some(application_name.to_owned()),
-            uri: application_uri.to_owned(),
+            uri: format!("{base_url}/{path}"),
             description: Some(format!("{application_name} service identity")),
         },
         client_id: Some(client_id.to_string()),
@@ -799,7 +806,7 @@ fn service_client_registration(
         allowed_grant_types: vec![GrantType::ClientCredentials],
         response_types: Vec::new(),
         allowed_scopes: scopes.iter().map(|scope| (*scope).to_owned()).collect(),
-        allowed_audiences: vec![audience.to_owned()],
+        allowed_audiences: audiences.into_iter().map(str::to_owned).collect(),
         token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretPost,
         software_statement: None,
         software_id: None,
@@ -1529,6 +1536,10 @@ pub async fn close(app_handle: &AppHandle<Wry>) -> io::Result<()> {
 #[cfg(test)]
 #[path = "setup_peer_revocation_tests.rs"]
 mod peer_revocation_tests;
+
+#[cfg(test)]
+#[path = "service_relationship_tests.rs"]
+mod service_relationship_tests;
 
 #[cfg(test)]
 mod tests {
