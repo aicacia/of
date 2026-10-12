@@ -1,4 +1,5 @@
 use std::{
+    cell::Cell,
     io,
     sync::{
         Arc,
@@ -9,7 +10,7 @@ use std::{
 
 use db::Database;
 use idp_model::{contract::IdentityAction, model::Id};
-use idp_server::{AppConfig, OwnerProvisioner};
+use idp_server::{AppConfig, NodeJoinStage, OwnerProvisioner};
 use idp_service::{oauth2::NodeSignerBinding, replica::DbReplicaSignerRepo};
 use iroh::{SecretKey, endpoint::presets::Minimal};
 use iroh_chain::{DATA_ALPN, EndpointIdStore, Server};
@@ -31,19 +32,58 @@ use storage_server::DatabaseTransport;
 
 #[tokio::test]
 async fn bootstrap_current_boundaries_preserve_admitted_import_and_native_retry() {
-    tokio::time::timeout(Duration::from_secs(360), interruption_boundary(false))
-        .await
-        .expect("dedicated bootstrap interruption completes");
+    tokio::time::timeout(
+        Duration::from_secs(360),
+        interruption_boundary(false, false),
+    )
+    .await
+    .expect("dedicated bootstrap interruption completes");
 }
 
 #[tokio::test]
 async fn desktop_bootstrap_orchestration_completes_both_public_contexts_and_retries_offline() {
-    tokio::time::timeout(Duration::from_secs(360), interruption_boundary(true))
+    tokio::time::timeout(Duration::from_secs(360), interruption_boundary(true, false))
         .await
         .expect("production orchestration, offline retry and learned-revocation denial complete");
 }
 
-async fn interruption_boundary(complete: bool) {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum Transition {
+    IdpImported,
+    ManagementImported,
+    ReadinessVerified,
+    PublicReadyPublished,
+}
+
+tokio::task_local! {
+    static INTERRUPT_AT: Cell<Option<Transition>>;
+}
+
+pub(super) fn interrupt(transition: Transition) -> io::Result<()> {
+    if INTERRUPT_AT
+        .try_with(|point| {
+            if point.get() == Some(transition) {
+                point.set(None);
+                true
+            } else {
+                false
+            }
+        })
+        .unwrap_or(false)
+    {
+        return Err(io::Error::other(format!("interrupted at {transition:?}")));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn production_durable_transitions_preserve_imports_and_verified_readiness_on_reopen() {
+    tokio::time::timeout(Duration::from_secs(360), interruption_boundary(true, true))
+        .await
+        .expect("representative durable transitions and offline retry complete");
+}
+
+async fn interruption_boundary(complete: bool, durable_transitions: bool) {
     let root = std::env::temp_dir().join(format!("of-node-join-bootstrap-{}", Id::now_v7()));
     let issuer = format!("https://join-{}.example", Id::now_v7());
     let source_secret = SecretKey::generate();
@@ -228,7 +268,7 @@ async fn interruption_boundary(complete: bool) {
         key_id: Id::now_v7(),
         endpoint_id: joining.endpoint().id().to_string(),
     };
-    let provisioner = OwnerProvisioner::open(&config)
+    let mut provisioner = OwnerProvisioner::open(&config)
         .await
         .expect("fresh native joining owner with injected keyring");
     provisioner
@@ -242,14 +282,14 @@ async fn interruption_boundary(complete: bool) {
     let request = provisioner
         .prepare_node_join(&binding, "Joining Node", source.endpoint().id())
         .expect("durable independent private signer");
-    let joining_idp = provisioner.node_join_database();
-    let joining_policy = Arc::new(
+    let mut joining_idp = provisioner.node_join_database();
+    let mut joining_policy = Arc::new(
         Database::open(joining_root.join("management.redb")).expect("joining policy owner"),
     );
     management_service::replica::up(&joining_policy)
         .await
         .expect("empty fixed public policy schema");
-    let protocol = SecurityProtocol::new(
+    let mut protocol = SecurityProtocol::new(
         joining.clone(),
         joining_idp.clone(),
         joining_policy.clone(),
@@ -272,7 +312,7 @@ async fn interruption_boundary(complete: bool) {
     );
     let peer_id = source.endpoint().id().to_string();
     let sending = async {
-        if complete {
+        if complete && !durable_transitions {
             protocol
                 .join_from_trusted_peer(&provisioner, "Joining Node", &peer_id)
                 .await
@@ -317,7 +357,7 @@ async fn interruption_boundary(complete: bool) {
     provisioner
         .record_node_join_approval(&received)
         .expect("exact receipt retry");
-    if !complete {
+    if !complete || durable_transitions {
         assert!(
             provisioner.verify_node_signer(&binding).await.is_err(),
             "receipt is not local signer trust"
@@ -336,6 +376,130 @@ async fn interruption_boundary(complete: bool) {
         .connect(source.endpoint().addr(), idp_server::BOOTSTRAP_ALPN)
         .await
         .expect("authenticated purpose-specific bootstrap connection");
+
+    if durable_transitions {
+        for transition in [
+            Transition::IdpImported,
+            Transition::ManagementImported,
+            Transition::ReadinessVerified,
+            Transition::PublicReadyPublished,
+        ] {
+            let error = INTERRUPT_AT
+                .scope(Cell::new(Some(transition)), async {
+                    match transition {
+                        Transition::IdpImported => protocol
+                            .receive_node_bootstrap(&connection, &provisioner, SecurityContext::Idp)
+                            .await
+                            .map(|_| ()),
+                        Transition::ManagementImported => protocol
+                            .receive_node_bootstrap(
+                                &connection,
+                                &provisioner,
+                                SecurityContext::Management,
+                            )
+                            .await
+                            .map(|_| ()),
+                        _ => {
+                            protocol
+                                .complete_node_join_public_bootstrap(&provisioner)
+                                .await
+                        }
+                    }
+                })
+                .await
+                .expect_err("production transition reaches selected interruption");
+            assert_eq!(error.to_string(), format!("interrupted at {transition:?}"));
+            drop(protocol);
+            drop(provisioner);
+            drop(joining_idp);
+            drop(joining_policy);
+            provisioner = OwnerProvisioner::open(&config)
+                .await
+                .expect("reopen durable import and retained independent signer");
+            joining_idp = provisioner.node_join_database();
+            joining_policy = Arc::new(
+                Database::open(joining_root.join("management.redb"))
+                    .expect("reopen actual policy owner"),
+            );
+            protocol = SecurityProtocol::new(
+                joining.clone(),
+                joining_idp.clone(),
+                joining_policy.clone(),
+                issuer.clone(),
+                Some(binding.clone()),
+                joining_root.join("security-staging"),
+                CancellationToken::new(),
+            );
+            assert_eq!(
+                provisioner.node_join_request().expect("stable request"),
+                Some(request.clone())
+            );
+            assert_eq!(
+                provisioner
+                    .node_join_anchor()
+                    .expect("stable receipt and key reference"),
+                received
+            );
+            protocol
+                .check_exact_join_trust(&received)
+                .await
+                .expect("actual imported trust survives without its journal");
+            assert_eq!(
+                provisioner
+                    .verify_node_signer(&binding)
+                    .await
+                    .expect("retained private signer"),
+                request.public_signer
+            );
+            assert_eq!(
+                protocol
+                    .node_join_public_ready(&provisioner)
+                    .await
+                    .expect("current readiness after reopen"),
+                transition == Transition::PublicReadyPublished,
+            );
+            match transition {
+                Transition::IdpImported | Transition::ManagementImported => {
+                    let (context, stage) = if transition == Transition::IdpImported {
+                        (SecurityContext::Idp, NodeJoinStage::Idp)
+                    } else {
+                        protocol
+                            .check_join_context_grants(&received)
+                            .await
+                            .expect("actual imported policy survives without its journal");
+                        (SecurityContext::Management, NodeJoinStage::Management)
+                    };
+                    assert!(
+                        !provisioner
+                            .node_join_stage_recorded(stage)
+                            .expect("import journal absent")
+                    );
+                    protocol
+                        .receive_node_bootstrap(&connection, &provisioner, context)
+                        .await
+                        .expect("exact production import retry");
+                    assert!(
+                        provisioner
+                            .node_join_stage_recorded(stage)
+                            .expect("retry journal published")
+                    );
+                }
+                Transition::ReadinessVerified => {
+                    assert!(
+                        !provisioner
+                            .node_join_stage_recorded(NodeJoinStage::PublicReady)
+                            .expect("verified but unpublished")
+                    );
+                }
+                Transition::PublicReadyPublished => {
+                    protocol
+                        .complete_node_join_public_bootstrap(&provisioner)
+                        .await
+                        .expect("exact completion retry");
+                }
+            }
+        }
+    }
 
     if complete {
         let approved = protocol

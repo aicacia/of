@@ -176,6 +176,11 @@ impl SecurityProtocol {
             .await?;
         self.check_bootstrap_receiver(connection, owner, &approval)
             .await?;
+        #[cfg(test)]
+        interruption_tests::interrupt(match context {
+            SecurityContext::Idp => interruption_tests::Transition::IdpImported,
+            SecurityContext::Management => interruption_tests::Transition::ManagementImported,
+        })?;
         owner.record_node_join_stage(stage(context))?;
         Ok(result)
     }
@@ -509,7 +514,12 @@ impl SecurityProtocol {
         owner: &OwnerProvisioner<P>,
     ) -> io::Result<()> {
         self.verify_node_join_public_readiness(owner).await?;
-        owner.record_node_join_stage(NodeJoinStage::PublicReady)
+        #[cfg(test)]
+        interruption_tests::interrupt(interruption_tests::Transition::ReadinessVerified)?;
+        owner.record_node_join_stage(NodeJoinStage::PublicReady)?;
+        #[cfg(test)]
+        interruption_tests::interrupt(interruption_tests::Transition::PublicReadyPublished)?;
+        Ok(())
     }
 
     pub async fn local_node_public_ready<P: PrivateKeyRepo + Send + Sync>(
