@@ -1,13 +1,20 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use futures_util::{SinkExt, StreamExt};
-use idp_model::{contract::GrantType, model::Id};
+use idp_model::{
+    contract::{GrantType, INSTALLATION_POLICY_ID, IdentityAction},
+    model::Id,
+};
 use idp_service::{
     oauth2::NodeSignerBinding,
     replica::DbUserRepo,
     repo::{PrivateKeyKeyringRepo, UserRepo},
 };
 use iroh_chain::DATA_ALPN;
+use management_service::{
+    ManagementService,
+    replica::{DbPermissionRepo, DbRoleRepo},
+};
 use model::contract::TokenResponse;
 use storage_model::{StorageRequest, StorageResponse};
 use tokio::{net::TcpStream, task::JoinHandle};
@@ -376,6 +383,7 @@ async fn join_host(
     journal: &serde_json::Value,
     approving: &str,
 ) -> Host {
+    let joining_started = std::time::Instant::now();
     let endpoint_a = source.runtime().endpoint_id();
     let endpoint = UnifiedEndpoint::open_fresh(&b.config.endpoint_data_dir, &b.config.idp)
         .await
@@ -498,10 +506,18 @@ async fn join_host(
         .await
         .expect("authenticated purpose-bound bootstrap");
     for context in [SecurityContext::Idp, SecurityContext::Management] {
+        eprintln!(
+            "08 join: importing {context:?} at {:?}",
+            joining_started.elapsed()
+        );
         protocol
             .receive_node_bootstrap(&bootstrap, &joining_owner, context)
             .await
             .expect("real public owner import");
+        eprintln!(
+            "08 join: imported {context:?} at {:?}",
+            joining_started.elapsed()
+        );
     }
     protocol
         .complete_node_join_public_bootstrap(&joining_owner)
@@ -657,23 +673,39 @@ async fn full_hosts() {
         .expect("independent identity target B")
         .id;
     drop(users);
-    management_server::provision_initial_administrator(
-        &a.config.management,
-        owner,
-        Id::now_v7(),
-        &[
-            (
-                Id::now_v7(),
-                idp_model::contract::IdentityAction::DeviceRestrictionsRead,
-            ),
-            (
-                Id::now_v7(),
-                idp_model::contract::IdentityAction::DeviceRestrictionsUpdate,
-            ),
-        ],
-    )
-    .await
-    .expect("explicit real Installation restriction grants");
+    let management = Arc::new(
+        db::Database::open(a.root.join("management/management.redb"))
+            .expect("public Management fixture owner"),
+    );
+    let policy = ManagementService::new(
+        DbPermissionRepo::new(management.clone()),
+        DbRoleRepo::new(management),
+    );
+    let role = journal["role"]
+        .as_str()
+        .expect("retained administrator role")
+        .parse()
+        .expect("role ID");
+    for action in [
+        IdentityAction::DeviceRestrictionsRead,
+        IdentityAction::DeviceRestrictionsUpdate,
+    ] {
+        let permission = policy
+            .create_permission(INSTALLATION_POLICY_ID, action.permission(), None)
+            .await
+            .expect("explicit Installation restriction permission");
+        policy
+            .add_permission_to_role(INSTALLATION_POLICY_ID, role, permission.id)
+            .await
+            .expect(
+                "attach only the exact requested permission to the existing administrator role",
+            );
+    }
+    drop(policy);
+    eprintln!(
+        "08: source provisioned and explicit fixture grants ready at {:?}",
+        started.elapsed()
+    );
     let source = Host::start(local.build_runtime().await.expect("completed source host")).await;
     drop(local);
     let endpoint_a = source.runtime().endpoint_id();
@@ -684,6 +716,10 @@ async fn full_hosts() {
         ("password", "fixture-initial-password"),
         ("scope", "openid"),
     ];
+    eprintln!(
+        "08: source full-host listener ready at {:?}",
+        started.elapsed()
+    );
     let shared = token(&http, &source, &password_form).await;
     let consumed = token(&http, &source, &password_form).await;
     let revoked = token(&http, &source, &password_form).await;
@@ -721,7 +757,9 @@ async fn full_hosts() {
         .await
         .expect("authorized purpose-specific join acceptance");
 
+    eprintln!("08: entering authenticated join at {:?}", started.elapsed());
     let joined = join_host(&source, &mut b, owner, &journal, &approving).await;
+    eprintln!("08: joined full host ready at {:?}", started.elapsed());
     let binding = b
         .config
         .idp

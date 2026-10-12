@@ -1,0 +1,43 @@
+Command: systemd-run --user --wait --pipe --collect --unit=of-ticket08-full-nodes-01 --property=MemoryMax=4G --property=MemorySwapMax=0 --property=RuntimeMaxSec=900 --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --locked --jobs=1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --lib local_provisioning_tests::full_nodes::two_completed_full_hosts_join_partition_reopen_and_learn_denial -- --exact --nocapture --test-threads=1
+Running as unit: of-ticket08-full-nodes-01.service; invocation ID: ff8054e442554bd48fbb24637fe1d302
+   Compiling key v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/key)
+   Compiling model v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/model)
+   Compiling idp-db v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/db)
+   Compiling idp-model v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/idp-model)
+   Compiling storage-model v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/storage-model)
+   Compiling idp-service v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/idp-service)
+   Compiling api v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/api)
+   Compiling management-service v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/management-service)
+   Compiling storage-service v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/storage-service)
+   Compiling storage-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/storage-server)
+   Compiling idp-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/idp-server)
+   Compiling management-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/management-server)
+   Compiling unified-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/unified-server)
+error[E0618]: expected function, found `reqwest::Response`
+    --> crates/unified-server/src/full_node_tests.rs:1031:13
+     |
+ 308 | async fn response(socket: &mut Socket) -> StorageResponse {
+     | --------------------------------------------------------- this function of the same name is available here, but it's shadowed by the local binding
+...
+ 764 |     let response = http
+     |         -------- `response` has type `reqwest::Response`
+...
+1031 |             response(&mut retained).await,
+     |             ^^^^^^^^---------------
+     |             |
+     |             call expression requires function
+     |
+    ::: crates/unified-server/src/native_api_tests.rs:583:1
+     |
+ 583 | async fn response(socket: &mut Socket) -> StorageResponse {
+     | --------------------------------------------------------- this function of the same name is available here, but it's shadowed by the local binding
+
+For more information about this error, try `rustc --explain E0618`.
+error: could not compile `unified-server` (lib test) due to 1 previous error
+Finished with result: exit-code
+Main processes terminated with: code=exited/status=101
+Service runtime: 6min 17.685s
+CPU time consumed: 6min 19.294s
+Memory peak: 256.0K
+Memory swap peak: 0B
+Exit status: 101
