@@ -62,3 +62,40 @@ The output does not identify which transition (if any) was reached before timeou
 Representative durable-transition evidence remains NOT QUALIFIED; existing source tests and prior observations retain their own boundaries. Further investigation/rerun needs renewed coordinator authorization and should first isolate the phase without claiming timeout diagnosis. Exact new filter is `security_sync::bootstrap::interruption_tests::production_durable_transitions_preserve_imports_and_verified_readiness_on_reopen`. Exact control filter, if later authorized, is `security_sync::bootstrap::interruption_tests::desktop_bootstrap_orchestration_completes_both_public_contexts_and_retries_offline`.
 
 Both owned units are failed/inactive after termination; no cargo/rustc process remained in the final process check. Shared target retained, no cleanup or fresh target creation. Temporary isolated fixtures from interrupted tests may remain under the system temporary directory; no deletion or profile/provider/CA operation was performed. Device marker tests remain source-audited only in this slice; no Device/Tauri composed success, physical/process crash, OS-provider, full matrix, Clippy/hack/CRAP or root integration acceptance claimed.
+
+## Read-only timeout diagnosis and pending stage diagnostics
+
+User requested diagnosis without another Rust slot. Synced integration `8a70deeaf967dad1c9887a8d498dbeaa77a995ee` into this branch as merge `a1f8f36`; no root merge. App/listener changes entered only through that integration merge, not local edits.
+
+Reviewed actual tool stdout from both runs, user-journal service results, current test stages, original `04b84d0` fixture, receiver/publication code and journal writer. `--pipe` test stdout is not retained in the user journal; journal adds termination timestamps/results, not missing phase output. No Rust command or executable rerun in this diagnostic pass.
+
+### What concretely timed out
+
+Warm panic is raised by the OUTER `tokio::time::timeout(Duration::from_secs(360), interruption_boundary(...))`, not by the15s reqwest timeout or an inner pairing deadline.380.94s is reported total test elapsed, not a380s imposed timeout; why elapsed reporting exceeded360s is not isolated. The observed HTTP200 is the API token-exchange response in `user_token`, whose client is configured with15s timeout. It does not locate subsequent pairing/import work by itself.
+
+Read only filesystem metadata (names, sizes, mtimes; no file contents/database/provider access) for the two retained fixture directories matching those service intervals:
+
+| Run | Joining request | Approval | IdP journal | Management journal | PublicReady |
+| --- | --- | --- | --- | --- | --- |
+| Cold fixture `01a12d98-a084-7123-a536-176310dff531` |20:52:54.534749|20:52:59.191830|20:55:26.023344|absent|absent|
+| Warm fixture `01a12d9c-21c9-7089-a8f0-7db3238d91cf` |20:56:46.072702|20:56:50.998785|20:59:21.009310|21:01:25.059383|21:01:37.823596|
+
+Times are local filesystem timestamps, 2026-10-11. Warm service ran20:56:08.164144–21:02:30.371356. Thus the warm failure is after durable PublicReady publication, not an outstanding pairing-approval or HTTP-token request. `persist_exact` publishes once via hard-link and exact retry only syncs the parent; retained marker mtimes are not rewritten by exact retry. The interrupted fixture writes PublicReady only in the fourth transition call after actual readiness verification (the preceding verified-readiness call is deliberately interrupted before publication). This narrows progress, but does not certify the fourth reopen/readiness assertion, exact completion retry, or original offline/revocation tail as passing. Cold observation reached the IdP journal before service termination; it is not upgraded to a successful test.
+
+### Minimal difference from original fixture
+
+Original complete path performs two owner imports in `join_from_trusted_peer`, publishes completion, then its existing retry/disconnect/reopen/revocation/teardown tail. New path first uses the same real signed approval exchange without auto-import, then performs IdP import interrupted before journal + full exact IdP retry, Management import interrupted before journal + full exact Management retry, and two completion publication calls with four separate native reopens. It then executes the original complete tail. Four full receive sessions replace two; reopens/current trust/signing verification and completion retries are additional. This is a concrete fixture-work difference, not a measured performance root cause. Stdout lacks phase markers, so the precise operation active at the whole-test deadline is still unknown. No HTTP/pairing failure, deadlock, CPU starvation, production defect or successful original control is inferred from that absence.
+
+### Focused test-only edit, not a timing fix
+
+Added a private optional current-phase Cell and fixed nonsecret stage messages to the existing test module. Original tests pass None; only the new fixture emits these phase logs. The injected checkpoint logs its enum only when reached. The unchanged360s timeout now reports the current phase explicitly. Logs distinguish initialization/token issuance, pairing offer/send/approval/admission, both interrupted imports and exact retries, publication, native reopens/current verification, production completion retry, router shutdown/endpoint close, disconnected retry, revocation and teardown. No bearer, password, issuer, endpoint, key or journal contents are logged. No new production/public hook, dependency, timeout/bound increase, weakened assertion or split fixture yet: first identify the precise suffix rather than assume four transitions must be split. These diagnostic edits are UNCOMPILED/UNEXECUTED until renewed authorization.
+
+Scoped rustfmt, whitespace check and dependency-boundary check pass. No provider/profile/CA operation, root merge, Rust build, original control, marker test, Clippy or broad sweep.
+
+Exact next focused diagnostic command ONLY after renewed coordinator slot, from this worktree; terminal bound910000ms:
+
+```sh
+systemd-run --user --wait --pipe --unit=bounded04-durable-diagnostic --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/bounded04-durable-evidence -p MemoryMax=4G -p MemorySwapMax=0 -p RuntimeMaxSec=900 env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --jobs=1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --lib security_sync::bootstrap::interruption_tests::production_durable_transitions_preserve_imports_and_verified_readiness_on_reopen -- --exact --test-threads=1 --nocapture
+```
+
+Check available memory/no other Rust before running. Preserve the last phase and checkpoint messages on failure. If it reaches the original suffix within the unchanged deadline, use that actual stage evidence to choose the smallest independently bounded fixture; do not enlarge bounds or repeat blindly. Representative acceptance and Device composed success remain unqualified.
