@@ -62,3 +62,62 @@ Commit only this evidence and the named frontend test. Merge integration tip INT
 ## Finish
 
 Initial source/evidence commit: 3ba5254263840df6f3708717ee80f0e1efa87fb5. Hooks disabled to prevent cross-scope autofixes. Ran GIT_EDITOR=true git -c core.hooksPath=/dev/null merge offline-first-nodes-integration on the own branch: exit0, Already up to date. Integration still 04b84d0cc14f85d50cf5d0f81f0858807909b602; tracked worktree clean. This finish note is included by amending the qualification commit; the final commit ID is reported externally, not self-referenced here. No root merge.
+
+## Follow-up: genuine component events and reactive DOM (2026-10-11)
+
+This section supersedes the earlier infrastructure conclusion and the specific component-event deferral for the cases below. The earlier 12-test observations remain valid at their original seams; they were not themselves event tests.
+
+### Installed infrastructure audit
+
+Read revised criteria8/9 and machine-local policy again. Audited 421 installed workspace pnpm entries plus package manifests in the global pnpm tree (2082 scanned) and existing npm execution caches (3166 scanned). No workspace jsdom/happy-dom/linkedom, Vitest browser provider, Playwright/Puppeteer, or Testing Library is installed. Existing app Vitest configuration is Node/SSR; svelte-headless configuration explicitly has only a Node/server project. No standard Chromium/Chrome/Firefox executable was found on PATH or at the checked /usr/bin paths; normal Playwright/Puppeteer browser caches were absent.
+
+However, an already populated npm cache contains jsdom26.1.0 at /home/nathan/.npm/_npx/f2259fd4c4b894b7/node_modules/jsdom/lib/api.js. Cached Testing Library and Puppeteer packages were also found but are not used. This makes genuine component events possible without installing a package or adding a framework. The earlier assertion that a DOM environment was unavailable was too broad: it was accurate for workspace dependencies, not the wider installed cache.
+
+A discovered Go Playwright CLI at /home/nathan/code/go/bin/playwright was queried with --help. Unexpectedly, even that query attempted to download its missing1.47.2 driver and failed exit1 with HTTP404 at all three configured mirrors. No driver install succeeded; no browser/provider/profile was used. Abandoned that path. The DOM test path uses only existing local packages and performs no install/download.
+
+### Minimum genuine seam and implementation
+
+User-confirmed seam: rendered ResourceResidency and DevicePolicy controls and their actual component event handlers/reactive state. No source instrumentation, handler exports, controller extraction, custom fake DOM or new test framework.
+
+New source files, all under apps/app:
+
+- vitest.residency.config.ts: reuses existing owner-client aliases/SvelteKit plugin, selects only the interaction file, and resolves Svelte's browser/client runtime. It does not change the existing Node/SSR configuration.
+- src/lib/common/components/residency.environment.ts: a small existing-Vitest environment adapter using Vitest populateGlobal and the existing jsdom. RESIDENCY_JSDOM_MODULE selects the already installed module; otherwise normal jsdom resolution is used. No absolute machine path in source, package manifest or lockfile change. Closes the DOM/restores globals at teardown.
+- src/lib/common/components/residency.interaction.test.ts: uses Svelte mount/unmount/flushSync, actual DOM input/change events, button.click and native form-submit dispatch from clicking Submit. Native desktop/base URL, confirmation and owner responses are the mocked boundaries. Production components and their state/event code are unchanged.
+
+Three interaction cases:
+
+1. Full Apply: enter mode/token, click; withhold actual generated Storage-client fetch reply; observe fieldset disabled, no status, no duplicate request from a second click. Inject409; actual handler renders the no-success/setup-preservation alert, clears token, releases busy but disables Apply for empty token. Enter a fresh token/click again;204 renders only mode acknowledgement plus explicit no-content/cleanup-readiness caveat, clears the alert/token and does not publish owner-read current mode.
+2. Same genuine event/state sequence for Passthrough, with the displayed acknowledged mode asserted separately.
+3. Mount DevicePolicy with an approved Device; fill Device/Application/resource/kind through rendered controls; click Deselect and child Full Apply. Neither acknowledgement invokes selection. Click Select without independent resource token: actual handler rejects before owner call. Enter token/click Select: actual submit handler disables Select/Deselect and Device/resource edits while pending, clears earlier error and publishes no selection acknowledgement; disabled repeat click makes no second call. Inject cleanup-pending error: alert, no success, token cleared, no retry. Enter fresh token/click explicit retry: policy-only acknowledgement, no authorization/cleanup/Residency readiness claim, alert/token cleared and exact fresh selection request observed.
+
+The cleanup error is deliberately controlled at the owner boundary to qualify UI handling, not to prove Storage/Management fencing. Existing real owner HTTP evidence owns actual cleanup/transfer enforcement; no duplicate owner HTTP/Rust run. Re-enabling request controls after an error is retry availability, NOT enabling resource content. These components expose no ready-content control or readable selection directory.
+
+### Exact runnable commands/results
+
+From of/.worktrees/bounded04-residency-ui/apps/app, both final commands ran sequentially under a90-second outer bound:
+
+    RESIDENCY_JSDOM_MODULE=/home/nathan/.npm/_npx/f2259fd4c4b894b7/node_modules/jsdom/lib/api.js node ../../node_modules/.pnpm/vitest@4.1.10_@types+node@26.1.2_@vitest+coverage-v8@4.1.10_vite@8.2.0_@types+node@26.1.2_jiti@2.7.0_yaml@2.9.0_/node_modules/vitest/vitest.mjs run --config vitest.residency.config.ts
+
+Final POST-integration-merge: exit0, 3 passed, one file, duration2.43s/tests679ms/environment345ms. Prior final-shaped premerge pass3/3, duration2.49s/tests662ms; first Full/Passthrough-only run2/2, duration2.17s. No failed interaction assertions or production RED-to-GREEN bug claim. First run emitted config extension and deprecated vitest/environments warnings; switched to explicit .ts config import and current vitest/runtime. Final runs have neither warning.
+
+    node ../../node_modules/.pnpm/vitest@4.1.10_@types+node@26.1.2_@vitest+coverage-v8@4.1.10_vite@8.2.0_@types+node@26.1.2_jiti@2.7.0_yaml@2.9.0_/node_modules/vitest/vitest.mjs run --config vitest.auth.config.ts src/lib/common/state/ownerClients.test.ts
+
+Final POST-merge retained client/SSR suite: exit0,12 passed, one file, duration1.68s/tests1.443s. This and interaction3/3 are two suite observations, not a single combined15-test run.
+
+From worktree root:
+
+    ./node_modules/.bin/biome check apps/app/src/lib/common/components/residency.environment.ts apps/app/src/lib/common/components/residency.interaction.test.ts
+    git --no-pager diff --check
+
+Both exit0. Earlier formatting/import-order diagnostics corrected with scoped Biome check --write. The app Biome includes exclude vitest.* config files; checked/formatted that config via Biome --write --stdin-file-path=apps/app/vite.config.ts, using its output, and independently verified idempotent output/exit0. Initial non-write stdin checks exit1 because contents were not fixed; not a product/runtime failure.
+
+Repeated both existing Svelte autofixer commands from the earlier section: both exit0, issues[], suggestions[]. No component changed; no full svelte-check/build or inherited-error sweep claimed.
+
+### Revised-criteria assessment and remaining limits
+
+The old SSR/client seam reasonably contributed focused frontend evidence for current owner prefixes, initial scope/readiness messaging and response propagation under the revised policy. It did not establish actual handler/reactive behavior and was insufficient to claim the specifically requested component-interaction qualification. The three genuine DOM tests now qualify that focused Residency/selection UI slice. They can reasonably be combined with existing owner HTTP/native observations as criteria8/9 expressly allow; a whole native GUI matrix is not a newly invented closure gate. This slice alone does not decide the full ticket's create/join/setup/readiness obligations or alter its status/checkmarks.
+
+Remaining limits: jsdom is an emulated DOM, not native Tauri/browser rendering/layout/accessibility-tree or real user-provider acceptance. The module remains an external pre-existing cache dependency: repeat on this machine using the exact environment variable above; a machine without that installed module cannot run this suite unchanged without making it available. This is disclosed, not a newly declared project dependency. Real cleanup/transfer, peer/content availability and actual authorization are not inferred from controlled responses. Mode acknowledgement still never means content/cleanup readiness. No new package/lock/client output, Rust build/test, GUI approval/profile/keyring/system trust mutation or root merge. No specific production bug was exposed, so no speculative fix.
+
+Integration advanced during this follow-up. Merged tip8a70deeaf967dad1c9887a8d498dbeaa77a995ee INTO the own branch with hooks/gc disabled; conflict-free merge5b3be3ebfc1f973b640edbfacd7b2a4d1c117e39. Its five inherited07 paths include Rust/tests/evidence; none authored/edited or built in this frontend task. Both final frontend suites above run on that merged branch. Root integration was not merged into/advanced by this agent. Follow-up commit stages only the three new frontend test-support/test files and this evidence.
