@@ -1,0 +1,49 @@
+Source: d1e5319178cb83e20c974eeec5e65f720a416b4f
+Command: systemd-run --user --wait --pipe --collect --unit=of-ticket08-single-host-probe-01 --property=MemoryMax=4G --property=MemorySwapMax=0 --property=RuntimeMaxSec=900 --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --locked --jobs=1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --lib local_provisioning_tests::full_nodes::probe::single_full_host_refresh_replay_and_restriction_put -- --exact --nocapture --test-threads=1
+Running as unit: of-ticket08-single-host-probe-01.service; invocation ID: 1f5cb9387c554e2bb6a337ecbe14d3b9
+   Compiling unified-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/unified-server)
+    Finished `test` profile [optimized + debuginfo] target(s) in 3m 57s
+     Running unittests src/lib.rs (/home/nathan/code/rust/aicacia/of/target/debug/deps/unified_server-a4bf33735b2f05a3)
+
+running 1 test
+test local_provisioning_tests::full_nodes::probe::single_full_host_refresh_replay_and_restriction_put ... 08 HTTP begin: GET /idp/health
+08 HTTP end: GET /idp/health status=200 OK elapsed=87.145µs
+08 HTTP begin: GET /management/health
+08 HTTP end: GET /management/health status=200 OK elapsed=186.983µs
+08 HTTP begin: GET /storage/health
+08 HTTP end: GET /storage/health status=200 OK elapsed=50.024µs
+08 probe: completed local full host at 45.583339673s
+08 HTTP begin: POST /idp/oauth2/token
+08 HTTP end: POST /idp/oauth2/token status=200 OK elapsed=1.85075331s
+08 HTTP begin: POST /idp/oauth2/token
+08 HTTP end: POST /idp/oauth2/token status=200 OK elapsed=2.205154483s
+08 refresh: node=6b1499b8fcab1bebce59057ee06f7f989b6587167680b13b5081d36a79f016d1 status=200 OK elapsed=2.412345914s
+08 probe: redeem complete; entering replay at 50.047526897s
+08 HTTP begin: POST /idp/oauth2/token
+08 HTTP end: POST /idp/oauth2/token status=400 Bad Request elapsed=1.969033888s
+08 refresh: node=6b1499b8fcab1bebce59057ee06f7f989b6587167680b13b5081d36a79f016d1 status=400 Bad Request elapsed=1.970092257s
+08 probe: replay denied; entering Management token exchange at 52.017698674s
+08 HTTP begin: POST /idp/oauth2/token
+08 HTTP end: POST /idp/oauth2/token status=200 OK elapsed=2.141170973s
+08 HTTP begin: PUT /management/devices/01a12e1c-d4a2-7250-a051-e8bf34ce6bb4/restriction
+08 HTTP begin: POST /idp/oauth2/token
+08 HTTP end: POST /idp/oauth2/token status=200 OK elapsed=2.019587874s
+08 HTTP begin: POST /idp/oauth2/introspect
+08 HTTP end: POST /idp/oauth2/introspect status=200 OK elapsed=2.75919015s
+08 HTTP begin: GET /idp/devices/identities/01a12e1c-d4a2-7250-a051-e8bf34ce6bb4
+08 HTTP end: GET /idp/devices/identities/01a12e1c-d4a2-7250-a051-e8bf34ce6bb4 status=200 OK elapsed=1.747662276s
+08 HTTP end: PUT /management/devices/01a12e1c-d4a2-7250-a051-e8bf34ce6bb4/restriction status=204 No Content elapsed=8.703309692s
+08 probe: local Device restriction PUT status=204 No Content elapsed=8.708796899s
+08 probe: completed request assertions at 63.069179432s
+08 probe: managed shutdown complete at 63.08448597s
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 76 filtered out; finished in 63.09s
+
+Finished with result: success
+Main processes terminated with: code=exited/status=0
+Service runtime: 5min 392ms
+CPU time consumed: 4min 34.374s
+Memory peak: 256.0K
+Memory swap peak: 0B
+Exit status: 0

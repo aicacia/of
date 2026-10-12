@@ -1,0 +1,58 @@
+Source: fc282922b194949a56341339a7c46726edbfbe73
+Command: systemd-run --user --wait --pipe --collect --unit=of-ticket08-single-host-probe-02 --property=MemoryMax=4G --property=MemorySwapMax=0 --property=RuntimeMaxSec=900 --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --locked --jobs=1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --lib local_provisioning_tests::full_nodes::probe::single_full_host_refresh_replay_and_restriction_put_with_extra_service_clients -- --exact --nocapture --test-threads=1
+Running as unit: of-ticket08-single-host-probe-02.service; invocation ID: 794e80914a774127a2aa6fa70cb444f3
+   Compiling unified-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/unified-server)
+    Finished `test` profile [optimized + debuginfo] target(s) in 2m 44s
+     Running unittests src/lib.rs (/home/nathan/code/rust/aicacia/of/target/debug/deps/unified_server-a4bf33735b2f05a3)
+
+running 1 test
+test local_provisioning_tests::full_nodes::probe::single_full_host_refresh_replay_and_restriction_put_with_extra_service_clients ... 08 probe: added exactly four independent service Clients at 32.748080971s
+08 HTTP begin: GET /idp/health
+08 HTTP end: GET /idp/health status=200 OK elapsed=87.976µs
+08 HTTP begin: GET /management/health
+08 HTTP end: GET /management/health status=200 OK elapsed=63.971µs
+08 HTTP begin: GET /storage/health
+08 HTTP end: GET /storage/health status=200 OK elapsed=33.984µs
+08 probe: completed local full host at 58.721467434s
+08 HTTP begin: POST /idp/oauth2/token
+08 HTTP end: POST /idp/oauth2/token status=200 OK elapsed=2.710258657s
+08 HTTP begin: POST /idp/oauth2/token
+08 HTTP end: POST /idp/oauth2/token status=200 OK elapsed=3.040981339s
+08 refresh: node=2559826c85f7bd762e451fe1736c2e0a33d002dd3e88032a35c9d4487595c4ec status=200 OK elapsed=3.265054094s
+08 probe: redeem complete; entering replay at 64.925934684s
+08 HTTP begin: POST /idp/oauth2/token
+08 HTTP end: POST /idp/oauth2/token status=400 Bad Request elapsed=2.70675364s
+08 probe: replay status=400 Bad Request elapsed=3.987239212s
+08 probe: entering Management token exchange at 68.913218399s
+08 HTTP begin: POST /idp/oauth2/token
+08 HTTP end: POST /idp/oauth2/token status=200 OK elapsed=3.190137929s
+08 HTTP begin: PUT /management/devices/01a12e22-9dd6-7060-8a40-e38cab1efb0c/restriction
+08 HTTP begin: POST /idp/oauth2/token
+08 HTTP end: POST /idp/oauth2/token status=200 OK elapsed=3.15794414s
+08 HTTP begin: POST /idp/oauth2/introspect
+08 HTTP end: POST /idp/oauth2/introspect status=200 OK elapsed=4.265412533s
+08 HTTP begin: GET /idp/devices/identities/01a12e22-9dd6-7060-8a40-e38cab1efb0c
+08 HTTP end: GET /idp/devices/identities/01a12e22-9dd6-7060-8a40-e38cab1efb0c status=200 OK elapsed=2.447452419s
+08 probe: local Device restriction PUT transport failure timeout=true elapsed=12.042371729s
+08 HTTP end: PUT /management/devices/01a12e22-9dd6-7060-8a40-e38cab1efb0c/restriction status=204 No Content elapsed=12.15456179s
+
+thread 'local_provisioning_tests::full_nodes::probe::single_full_host_refresh_replay_and_restriction_put_with_extra_service_clients' (1479136) panicked at crates/unified-server/src/full_node_probe.rs:240:27:
+real composed Management restriction PUT: reqwest::Error { kind: Request, url: "http://127.0.0.1:46621/management/devices/01a12e22-9dd6-7060-8a40-e38cab1efb0c/restriction", source: TimedOut }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    local_provisioning_tests::full_nodes::probe::single_full_host_refresh_replay_and_restriction_put_with_extra_service_clients
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 77 filtered out; finished in 85.51s
+
+error: test failed, to rerun pass `-p unified-server --lib`
+Finished with result: exit-code
+Main processes terminated with: code=exited/status=101
+Service runtime: 4min 10.114s
+CPU time consumed: 4min 15.571s
+Memory peak: 512.0K
+Memory swap peak: 0B
+Exit status: 101

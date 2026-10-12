@@ -1,6 +1,6 @@
 # 08 — bounded two-completed-full-host slices (compiled; runtime qualification blocked)
 
-2026-10-11. **Source compiles; zero full-host tests passed.** The authorized shared-target runs reached authenticated same-Installation join and both completed full hosts, but unchanged fixture HTTP deadlines blocked refresh replay and Management policy mutation before offline reopen or authenticated reconciliation. No learned-denial, completed offline-mutation/issuance, retained-socket denial/cleanup, GREEN result, Clippy pass, or ticket acceptance is claimed. Latest tested source: `19db0df9e124c626bde56cde99d7133e3ab3e8b0`; run06–08 below are the current results. TDD and ponytail skills loaded; the user explicitly selected these production seams. No root claim/status/map/spec/closure edit or root merge was made.
+2026-10-11. **Source compiles; none of the three two-Node qualification slices passed. One narrow single-full-host diagnostic passed; its four-extra-service-Client control reproduced the Management HTTP timeout.** The authorized shared-target runs reached authenticated same-Installation join and both completed full hosts, but unchanged fixture HTTP deadlines blocked refresh replay and Management policy mutation before offline reopen or authenticated reconciliation. No learned-denial, completed offline-mutation/issuance, retained-socket denial/cleanup, GREEN result, Clippy pass, or ticket acceptance is claimed. Latest tested two-Node source: `19db0df9e124c626bde56cde99d7133e3ab3e8b0`; run06–08 retain their failed qualification results. Narrow diagnostic sources/results `d1e5319` and `fc28292` are recorded at the end. TDD and ponytail skills loaded; the user explicitly selected these production seams. No root claim/status/map/spec/closure edit or root merge was made.
 
 ## Source provenance and boundaries
 
@@ -123,7 +123,7 @@ The next useful step is a coordinated focused diagnosis of joined-B refresh repl
 
 Source reviewer can use stable `19db0df9e124c626bde56cde99d7133e3ab3e8b0` for the tested implementation, together with this evidence commit. Coordinator retains claim, review, integration and acceptance/closure; ticket08 remains blocked, not resolved.
 
-## Read-only request-path diagnosis (no subsequent Rust build)
+## Read-only request-path diagnosis (historical; followed by authorized narrow probes below)
 
 ### Exact request identities and wiring
 
@@ -173,3 +173,66 @@ systemd-run --user --wait --pipe --collect --unit=of-ticket08-refresh-native-dia
 ```
 
 Outer910000ms. This existing test exercises native refresh issuance/replay without composed-host background polling or Management HTTP (`refresh_tests.rs:755–870`). Its fixture persists/copies its own test key material; it is only a diagnostic baseline, **not** same-Installation join/private-store-independence evidence. It has no per-phase timing today and cannot by itself settle the joined-B timeout. Prefer the narrow timed public-boundary probe above for a causal measurement; no further giant qualification rerun is recommended.
+
+## Authorized single-full-host diagnostic — two focused runs
+
+The coordinator authorized at most two focused runs, with the existing shared target/standard profiles/4GiB/zero-swap/900s systemd limits and910000ms outer tool bound. Memory checked before both: approximately3.3GiB available, host swap effectively full. Neither scenario exceeded its unchanged **120s whole-test bound**. HTTP clients retain **10s**; no deadline inflation or production/persistence edit.
+
+Owned source: `crates/unified-server/src/full_node_probe.rs`, wired as the dedicated `full_nodes::probe` child. Both probes use one native `Fixture` and `LocalProvisioner`, public login Client registration, explicit restriction grants attached via existing owner APIs, and production composed `UnifiedRuntime` plus background tasks. All three owner health endpoints return200. No second Installation, join/bootstrap/reopen, resource journey, matrix or owner baseline rerun. Method/path/begin/end/status/elapsed middleware exists only in the full-host **test helper**; it intentionally retains useful request diagnostics without queries, bodies, credentials, token values or secret hashes. No temporary production instrumentation was introduced.
+
+### Run01 — minimal completed full host passes
+
+Stable source `d1e5319178cb83e20c974eeec5e65f720a416b4f`. Exact test:
+
+`local_provisioning_tests::full_nodes::probe::single_full_host_refresh_replay_and_restriction_put`
+
+Compilation237s; **1 passed**,0 failed,76 filtered; test63.09s, systemd service300.392s, exit0. Complete exact command/output: [08-single-host-probe-run01.log](08-single-host-probe-run01.log).
+
+- Local completed full host ready45.583s.
+- Password issuance HTTP200, server1.851s.
+- Refresh redemption HTTP200, server2.205s/client2.412s; replacement grant differs.
+- Replay HTTP400, server1.969s/client1.970s; parsed `invalid_grant`, not outage.
+- Management-targeted token exchange HTTP200, server2.141s.
+- Real local Device restriction PUT HTTP204, server8.703s/client8.709s.
+- Nested IdP service-token issuance2002.020s, introspection2002.759s, trusted Device lookup2001.748s.
+- Normal managed runtime/listener shutdown completed63.084s.
+
+This establishes that the baseline actual composed authorization chain works, with only approximately1.30s server-side margin under the fixture HTTP deadline. It does not qualify joined-B replay or a two-Node journey.
+
+### Run02 — four additional independent service Clients reproduce the PUT timeout
+
+Stable source `fc282922b194949a56341339a7c46726edbfbe73`. Exact test:
+
+`local_provisioning_tests::full_nodes::probe::single_full_host_refresh_replay_and_restriction_put_with_extra_service_clients`
+
+Compilation164s; **0 passed**,1 failed,77 filtered; test85.51s, systemd service250.114s, exit101. Complete exact command/output: [08-single-host-probe-run02.log](08-single-host-probe-run02.log).
+
+The sole workload control adds exactly four service Client registrations from the existing public provisioning templates through ordinary `DbClientRepo::create_client` on the stopped native owner, with fresh distinct IDs/secrets/keys. It leaves live runtime service configuration unchanged. This mirrors B's extra service Client/key cardinality, **not** its authenticated import/history/second signer, OS provider, or completed join state. No private-store/database copying or synthetic public sync data. Both test variants share one implementation and the120s bound.
+
+- Extra four Clients created32.748s; full host ready58.721s.
+- Password issuance2002.710s server; refresh redemption2003.041s server/3.265s client.
+- Replay **400 `invalid_grant`**,2.707s server/3.987s client. The exact joined-B replay timeout **did not reproduce** in this workload control.
+- Management-targeted token exchange2003.190s server.
+- Nested PUT calls all succeeded: service-token2003.158s, introspection2004.265s, Device identity2002.447s.
+- PUT client reported `timeout=true` after12.042s with the configured10s bound. This is observed delayed timeout delivery, not a changed deadline or proof of a particular scheduler stall.
+- **The same PUT then completed HTTP204 server-side at12.155s.** Its duration exceeded the client deadline; this was successful authorization/owner mutation after the client stopped waiting, not a denial, missing Device, resource grant mismatch or permanent HTTP broker deadlock.
+- Probe awaited normal `host.stop()` before checking the stored PUT transport result; that result caused the assertion failure. The server204 trace was preserved before panic. Waiting for ordinary managed shutdown did not extend any HTTP request or whole-test deadline.
+
+### Measured finding and explicit owner handoff
+
+| Server timing                                         | Minimal inventory | Four extra service Clients |
+| ----------------------------------------------------- | ----------------: | -------------------------: |
+| Management→IdP token issuance                         |         2.019588s |                  3.157944s |
+| IdP introspection                                     |         2.759190s |                  4.265413s |
+| IdP trusted Device lookup                             |         1.747662s |                  2.447452s |
+| Sum of nested IdP request intervals                   |     **6.526440s** |              **9.870809s** |
+| Total restriction PUT                                 |     **8.703310s** |             **12.154562s** |
+| Remaining PUT time (local work, HTTP gaps/scheduling) |         2.176869s |                  2.283753s |
+
+Across these two runs the PUT grew3.451252s; nested IdP intervals account for3.344369s of that difference. The remaining time is not a measured exclusive RBAC/policy CPU bucket. This directly reproduces a bounded Management timeout without any second host, join transport or resource connection: cumulative successful authorization/API work exceeds10s. Hardware/scheduling variation is not controlled by these two runs; no precise per-function complexity, lock-wait or Automerge cost claim is made from HTTP aggregate timing.
+
+**Owner handoff, not speculative patch:** the of IdP/Management composed authorization owner should profile the now-small failing extra-service-Client test, specifically repeated principal/Client/key/trust loading in token issuance, introspection and Device lookup. The native read/conflict admission/catalog/history mechanisms traced above are concrete suspects; generic ofdb persistence changes are not authorized by this evidence. Do not weaken validation, remove grants/assertions, prewarm away the cold-token requirement, widen the deadline, or treat a lost response as authorization denial. A caller timeout can coexist with a committed policy mutation; it cannot safely be treated as proof that no effect occurred.
+
+**Remaining joined-B refresh handoff:** baseline and inventory-control replay return real denial. Four extra Clients alone are therefore insufficient to reproduce run07. Remaining distinguishing inputs include two current trusted signer/membership/Device records, authenticated imported public history, and concurrent second-host/background scheduling; none was measured separately here. A focused IdP public-bootstrap/trust-state probe with nonsecret principal/trust/transaction phase timing is the next measurement, not another completed-full-pair journey. No claim that replay waits for a missing credential, that rollback deadlocks, or that the restriction timeout and replay timeout have the same root cause.
+
+No third Rust run or service-only baseline was performed. Final source/evidence remain pending full08 qualification. Test-only request traces are intentionally retained; production files and generic persistence owners are unchanged. Coordinator retains root claim, review, merge and ticket acceptance/closure.
