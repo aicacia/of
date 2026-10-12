@@ -1,0 +1,226 @@
+{
+  "08-consumer-management-run13": {
+    "client_credentials.authenticate_secret_verify": {
+      "records": 1,
+      "sum_us": 180828,
+      "max_us": 180828
+    },
+    "client_credentials.client_lookup": {
+      "records": 1,
+      "sum_us": 708493,
+      "max_us": 708493
+    },
+    "client_credentials.jwt_sign": {
+      "records": 1,
+      "sum_us": 273,
+      "max_us": 273
+    },
+    "client_credentials.live_validate_client_principal_load": {
+      "records": 1,
+      "sum_us": 664006,
+      "max_us": 664006
+    },
+    "client_credentials.principal_key_client_load": {
+      "records": 1,
+      "sum_us": 464806,
+      "max_us": 464806
+    },
+    "client_credentials.principal_root_key_load": {
+      "records": 1,
+      "sum_us": 111398,
+      "max_us": 111398
+    },
+    "client_credentials.signer_trust_private_key_load": {
+      "records": 1,
+      "sum_us": 518753,
+      "max_us": 518753
+    },
+    "device_lookup.approved_device_load": {
+      "records": 1,
+      "sum_us": 330595,
+      "max_us": 330595
+    },
+    "device_lookup.caller_authorization_key_trust_principal_load": {
+      "records": 1,
+      "sum_us": 3930221,
+      "max_us": 3930221
+    },
+    "device_lookup.owner_user_info_load": {
+      "records": 1,
+      "sum_us": 189436,
+      "max_us": 189436
+    },
+    "device_lookup.signer_trust_load": {
+      "records": 1,
+      "sum_us": 550350,
+      "max_us": 550350
+    },
+    "introspect.actor_authorization_key_trust_principal_load": {
+      "records": 1,
+      "sum_us": 1168853,
+      "max_us": 1168853
+    },
+    "introspect.application_client_load": {
+      "records": 1,
+      "sum_us": 210146,
+      "max_us": 210146
+    },
+    "introspect.caller_authorization_key_trust_principal_load": {
+      "records": 1,
+      "sum_us": 1734910,
+      "max_us": 1734910
+    },
+    "introspect.client_allowlist_load": {
+      "records": 1,
+      "sum_us": 229298,
+      "max_us": 229298
+    },
+    "ofdb.automerge.catalog_reconstruction": {
+      "records": 2233,
+      "sum_us": 9396726,
+      "max_us": 19881
+    },
+    "ofdb.automerge.conflict_document_columns": {
+      "records": 224,
+      "sum_us": 4036619,
+      "max_us": 30350
+    },
+    "ofdb.automerge.conflict_document_reconstruction": {
+      "records": 232,
+      "sum_us": 35867,
+      "max_us": 382
+    },
+    "ofdb.native.admission": {
+      "records": 350,
+      "sum_us": 9084997,
+      "max_us": 3161481
+    },
+    "ofdb.native.begin_write": {
+      "records": 350,
+      "sum_us": 3938,
+      "max_us": 42
+    },
+    "ofdb.native.body_commit": {
+      "records": 106,
+      "sum_us": 5828450,
+      "max_us": 200801
+    },
+    "ofdb.native.body_rollback": {
+      "records": 244,
+      "sum_us": 9226770,
+      "max_us": 66242
+    },
+    "ofdb.native.commit": {
+      "records": 106,
+      "sum_us": 132034,
+      "max_us": 3104
+    },
+    "ofdb.native.rollback": {
+      "records": 244,
+      "sum_us": 2292,
+      "max_us": 31
+    },
+    "ofdb.row_conflicts.codec": {
+      "records": 232,
+      "sum_us": 4087092,
+      "max_us": 30567
+    },
+    "ofdb.row_conflicts.lookup": {
+      "records": 232,
+      "sum_us": 344425,
+      "max_us": 2819
+    },
+    "ofdb.row_conflicts.schema": {
+      "records": 232,
+      "sum_us": 4622949,
+      "max_us": 33501
+    },
+    "ofdb.schema.columns_catalog": {
+      "records": 383,
+      "sum_us": 6778318,
+      "max_us": 31633
+    },
+    "ofdb.schema.lookup_table_catalog": {
+      "records": 1148,
+      "sum_us": 1579979,
+      "max_us": 2532
+    }
+  },
+  "08-consumer-security-run14": {
+    "ofdb.automerge.catalog_reconstruction": {
+      "records": 36395,
+      "sum_us": 135595752,
+      "max_us": 20415
+    },
+    "ofdb.automerge.conflict_document_columns": {
+      "records": 3266,
+      "sum_us": 43924841,
+      "max_us": 35162
+    },
+    "ofdb.automerge.conflict_document_reconstruction": {
+      "records": 3361,
+      "sum_us": 433991,
+      "max_us": 424
+    },
+    "ofdb.native.admission": {
+      "records": 7404,
+      "sum_us": 162393639,
+      "max_us": 29960290
+    },
+    "ofdb.native.begin_write": {
+      "records": 7404,
+      "sum_us": 81006,
+      "max_us": 203
+    },
+    "ofdb.native.body_commit": {
+      "records": 1102,
+      "sum_us": 83447663,
+      "max_us": 9807403
+    },
+    "ofdb.native.body_rollback": {
+      "records": 6302,
+      "sum_us": 140058900,
+      "max_us": 1566541
+    },
+    "ofdb.native.commit": {
+      "records": 1102,
+      "sum_us": 1165879,
+      "max_us": 3532
+    },
+    "ofdb.native.rollback": {
+      "records": 6302,
+      "sum_us": 37763,
+      "max_us": 44
+    },
+    "ofdb.row_conflicts.codec": {
+      "records": 3361,
+      "sum_us": 44543320,
+      "max_us": 35441
+    },
+    "ofdb.row_conflicts.lookup": {
+      "records": 3361,
+      "sum_us": 4046019,
+      "max_us": 3760
+    },
+    "ofdb.row_conflicts.schema": {
+      "records": 3361,
+      "sum_us": 50754967,
+      "max_us": 36540
+    },
+    "ofdb.schema.columns_catalog": {
+      "records": 5699,
+      "sum_us": 85492265,
+      "max_us": 31471
+    },
+    "ofdb.schema.lookup_table_catalog": {
+      "records": 16796,
+      "sum_us": 19952772,
+      "max_us": 4366
+    },
+    "security_sync.authorize": {
+      "records": 29,
+      "sum_us": 77293693,
+      "max_us": 9387604
+    }
+  }
+}
