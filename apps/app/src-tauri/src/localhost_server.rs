@@ -2,7 +2,7 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     net::Ipv4Addr,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     sync::Arc,
 };
 
@@ -44,6 +44,62 @@ fn localhost_server_cert_paths(data_dir: &Path) -> (PathBuf, PathBuf, PathBuf) {
     )
 }
 
+fn validate_localhost_paths(data_dir: &Path) -> io::Result<()> {
+    let absolute = std::env::current_dir()?.join(data_dir);
+    let mut prefix = PathBuf::new();
+    for component in absolute.components() {
+        if component == Component::ParentDir {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "localhost TLS path must not contain parent traversal",
+            ));
+        }
+        prefix.push(component);
+        match fs::symlink_metadata(&prefix) {
+            Ok(metadata) if !metadata.file_type().is_dir() => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "localhost TLS ancestry is not a nonsymlink directory: {}",
+                        prefix.display()
+                    ),
+                ));
+            }
+            Ok(_) => (),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => (),
+            Err(error) => return Err(error),
+        }
+    }
+    for name in [
+        "localhost-ca.key",
+        "localhost-ca.pem",
+        "localhost-ca.der",
+        "localhost-ca.trusted",
+        "localhost-server.key",
+        "localhost-server.pem",
+        "localhost-server.der",
+        "https-port",
+    ] {
+        regular_file_exists(&data_dir.join(name))?;
+    }
+    Ok(())
+}
+
+fn regular_file_exists(path: &Path) -> io::Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_file() => Ok(true),
+        Ok(_) => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "localhost state path is not a regular file: {}",
+                path.display()
+            ),
+        )),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
 fn generate_ca_certificate(ca_key: &KeyPair) -> io::Result<rcgen::Certificate> {
     let mut ca_params = CertificateParams::new(vec![]).map_err(io::Error::other)?;
     ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
@@ -58,7 +114,7 @@ fn generate_ca_certificate(ca_key: &KeyPair) -> io::Result<rcgen::Certificate> {
 async fn load_or_create_ca(data_dir: &Path) -> io::Result<(KeyPair, bool)> {
     let key_path = localhost_ca_key_path(data_dir);
 
-    if fs::symlink_metadata(&key_path).is_ok() {
+    if regular_file_exists(&key_path)? {
         protect_private_key_file(&key_path)?;
         let key = fs::read_to_string(&key_path)?;
         return Ok((KeyPair::from_pem(&key).map_err(io::Error::other)?, false));
@@ -77,7 +133,7 @@ async fn ensure_ca_certificate_pem(
     let ca_pem_path = localhost_ca_cert_path(data_dir);
     let ca_der_path = localhost_ca_der_path(data_dir);
 
-    if fs::exists(&ca_pem_path)? && fs::exists(&ca_der_path)? {
+    if regular_file_exists(&ca_pem_path)? && regular_file_exists(&ca_der_path)? {
         return Ok((fs::read_to_string(&ca_pem_path)?, false));
     }
 
@@ -92,9 +148,9 @@ async fn ensure_ca_certificate_pem(
 async fn load_or_create_server_cert(data_dir: &Path, ca_key: &KeyPair) -> io::Result<()> {
     let (cert_path, key_path, cert_pem_path) = localhost_server_cert_paths(data_dir);
 
-    if fs::exists(&cert_path)?
-        && fs::symlink_metadata(&key_path).is_ok()
-        && fs::exists(&cert_pem_path)?
+    if regular_file_exists(&cert_path)?
+        && regular_file_exists(&key_path)?
+        && regular_file_exists(&cert_pem_path)?
     {
         protect_private_key_file(&key_path)?;
         return Ok(());
@@ -167,6 +223,7 @@ fn protect_private_key_file(path: &Path) -> io::Result<()> {
 }
 
 pub async fn ensure_localhost_certificate(data_dir: &Path) -> io::Result<PathBuf> {
+    validate_localhost_paths(data_dir)?;
     fs::create_dir_all(data_dir)?;
 
     let cert_path = localhost_ca_cert_path(data_dir);
@@ -175,7 +232,7 @@ pub async fn ensure_localhost_certificate(data_dir: &Path) -> io::Result<PathBuf
     let (_, is_new_pem) = ensure_ca_certificate_pem(data_dir, &ca).await?;
     load_or_create_server_cert(data_dir, &ca).await?;
 
-    if is_new_ca || is_new_pem || !fs::exists(&trust_path)? {
+    if is_new_ca || is_new_pem || !regular_file_exists(&trust_path)? {
         install_ca_to_user_trust_store(&cert_path)?;
         fs::write(trust_path, [])?;
     }
@@ -184,6 +241,7 @@ pub async fn ensure_localhost_certificate(data_dir: &Path) -> io::Result<PathBuf
 }
 
 pub fn invalidate_localhost_certificate_trust(data_dir: &Path) -> io::Result<()> {
+    validate_localhost_paths(data_dir)?;
     if let Err(err) = fs::remove_file(localhost_ca_trust_path(data_dir)) {
         if err.kind() != io::ErrorKind::NotFound {
             return Err(err);
@@ -246,6 +304,7 @@ pub async fn verify_unified_localhost_server(base_url: &str) -> io::Result<()> {
 }
 
 fn build_server_config(data_dir: &Path) -> Result<Arc<rustls::ServerConfig>, String> {
+    validate_localhost_paths(data_dir).map_err(|error| error.to_string())?;
     let (cert_path, key_path, _) = localhost_server_cert_paths(data_dir);
     let cert_der = fs::read(&cert_path).map_err(|err| err.to_string())?;
     let key_der = fs::read(&key_path).map_err(|err| err.to_string())?;
@@ -299,9 +358,10 @@ pub fn localhost_server_base_url(port: u16) -> String {
 }
 
 pub async fn reserve_localhost_listener(data_dir: &Path) -> Result<(TcpListener, u16), String> {
+    validate_localhost_paths(data_dir).map_err(|error| error.to_string())?;
     fs::create_dir_all(data_dir).map_err(|error| error.to_string())?;
     let port_path = data_dir.join("https-port");
-    if port_path.exists() {
+    if regular_file_exists(&port_path).map_err(|error| error.to_string())? {
         return bind_saved_localhost_port(&port_path).await;
     }
 
@@ -333,6 +393,7 @@ pub async fn reserve_localhost_listener(data_dir: &Path) -> Result<(TcpListener,
 }
 
 async fn bind_saved_localhost_port(port_path: &Path) -> Result<(TcpListener, u16), String> {
+    regular_file_exists(port_path).map_err(|error| error.to_string())?;
     let port_text = fs::read_to_string(port_path).map_err(|error| error.to_string())?;
     let port = port_text.trim().parse::<u16>().map_err(|error| {
         format!(
@@ -411,6 +472,7 @@ pub fn start_unified_localhost_server(
 
 #[cfg(test)]
 pub(crate) async fn prepare_test_tls(data_dir: &Path) -> reqwest::Certificate {
+    validate_localhost_paths(data_dir).expect("safe isolated TLS paths");
     fs::create_dir_all(data_dir).expect("isolated TLS directory");
     let (ca, _) = load_or_create_ca(data_dir).await.expect("fixture CA key");
     let (pem, _) = ensure_ca_certificate_pem(data_dir, &ca)
@@ -427,6 +489,266 @@ mod tests {
     use std::fs;
 
     use super::*;
+
+    #[cfg(unix)]
+    fn tls_path_snapshot(directory: &Path) -> Vec<(String, Vec<u8>, u32, u64)> {
+        use std::os::unix::fs::MetadataExt;
+
+        let mut entries: Vec<_> = fs::read_dir(directory)
+            .expect("read isolated TLS state")
+            .map(|entry| {
+                let entry = entry.expect("TLS fixture entry");
+                let metadata = fs::symlink_metadata(entry.path()).expect("TLS fixture metadata");
+                let bytes = if metadata.file_type().is_symlink() {
+                    fs::read_link(entry.path())
+                        .expect("fixture symlink target")
+                        .as_os_str()
+                        .as_encoded_bytes()
+                        .to_vec()
+                } else if metadata.is_file() {
+                    fs::read(entry.path()).expect("TLS fixture bytes")
+                } else {
+                    Vec::new()
+                };
+                (
+                    entry.file_name().to_string_lossy().into_owned(),
+                    bytes,
+                    metadata.mode(),
+                    metadata.ino(),
+                )
+            })
+            .collect();
+        entries.sort_by(|left, right| left.0.cmp(&right.0));
+        entries
+    }
+
+    #[cfg(unix)]
+    async fn tls_path_fixture() -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!("tls-path-{}", uuid::Uuid::new_v4()));
+        let directory = root.join("retained/tls");
+        let _certificate = prepare_test_tls(&directory).await;
+        fs::write(directory.join("localhost-ca.trusted"), []).expect("fixture trust marker");
+        for name in ["setup-ids.json", "endpoint.key", "node-signer.key"] {
+            fs::write(directory.join(name), format!("retained-{name}"))
+                .expect("retained identity sentinel");
+        }
+        let (listener, _) = reserve_localhost_listener(&directory)
+            .await
+            .expect("fixture persisted HTTPS port");
+        drop(listener);
+        for name in ["localhost-ca.key", "localhost-server.key"] {
+            fs::set_permissions(directory.join(name), fs::Permissions::from_mode(0o640))
+                .expect("fixture key modes expose premature chmod");
+        }
+        root
+    }
+
+    #[cfg(unix)]
+    async fn assert_tls_path_refused(directory: &Path) {
+        let error = ensure_localhost_certificate(directory)
+            .await
+            .expect_err("unsafe TLS state must stop certificate preparation");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(reserve_localhost_listener(directory).await.is_err());
+        assert!(invalidate_localhost_certificate_trust(directory).is_err());
+        if let Ok(port) = fs::read_to_string(directory.join("https-port")) {
+            let port = port
+                .trim()
+                .parse::<u16>()
+                .expect("fixture saved HTTPS port");
+            let rebound = TcpListener::bind((Ipv4Addr::LOCALHOST, port))
+                .await
+                .expect("refused reservation must not retain saved port");
+            drop(rebound);
+        }
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("isolated startup listener");
+        let address = listener.local_addr().expect("startup listener address");
+        assert!(start_unified_localhost_server(Router::new(), listener, directory).is_err());
+        let rebound = TcpListener::bind(address)
+            .await
+            .expect("refused TLS startup must release transferred listener");
+        drop(rebound);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn tls_paths_reject_symlink_directory_and_ancestor_without_mutation() {
+        use std::os::unix::fs::symlink;
+
+        for ancestor in [false, true] {
+            let root = tls_path_fixture().await;
+            let retained = root.join("retained/tls");
+            let before = tls_path_snapshot(&retained);
+            let link = root.join("redirected");
+            let target = if ancestor {
+                root.join("retained")
+            } else {
+                retained.clone()
+            };
+            symlink(&target, &link).expect("redirect TLS directory");
+            let redirected = if ancestor {
+                link.join("tls")
+            } else {
+                link.clone()
+            };
+            assert_tls_path_refused(&redirected).await;
+            assert_eq!(fs::read_link(&link).expect("unchanged redirect"), target);
+            assert!(
+                tls_path_snapshot(&retained) == before,
+                "retained TLS state changed"
+            );
+            fs::remove_dir_all(root).expect("remove isolated TLS path fixture");
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn tls_paths_reject_symlink_entries_without_mutation() {
+        use std::os::unix::fs::symlink;
+
+        for name in [
+            "localhost-ca.key",
+            "localhost-ca.pem",
+            "localhost-ca.der",
+            "localhost-ca.trusted",
+            "localhost-server.key",
+            "localhost-server.pem",
+            "localhost-server.der",
+            "https-port",
+        ] {
+            for dangling in [false, true] {
+                let root = tls_path_fixture().await;
+                let directory = root.join("retained/tls");
+                let targets = root.join("targets");
+                fs::create_dir(&targets).expect("isolated redirect targets");
+                let target = targets.join(name);
+                fs::rename(directory.join(name), &target).expect("retain redirect target");
+                let destination = if dangling {
+                    targets.join("absent")
+                } else {
+                    target.clone()
+                };
+                symlink(&destination, directory.join(name)).expect("redirect TLS entry");
+                let before = tls_path_snapshot(&directory);
+                let targets_before = tls_path_snapshot(&targets);
+                assert_tls_path_refused(&directory).await;
+                assert!(
+                    tls_path_snapshot(&directory) == before,
+                    "retained TLS state changed"
+                );
+                assert!(
+                    tls_path_snapshot(&targets) == targets_before,
+                    "redirect targets changed"
+                );
+                fs::remove_dir_all(root).expect("remove isolated TLS path fixture");
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn tls_paths_reject_nonregular_entries_without_mutation() {
+        use std::os::unix::net::UnixListener;
+
+        for name in [
+            "localhost-ca.key",
+            "localhost-ca.pem",
+            "localhost-ca.der",
+            "localhost-ca.trusted",
+            "localhost-server.key",
+            "localhost-server.pem",
+            "localhost-server.der",
+            "https-port",
+        ] {
+            for socket in [false, true] {
+                let root = tls_path_fixture().await;
+                let directory = root.join("retained/tls");
+                let targets = root.join("targets");
+                fs::create_dir(&targets).expect("isolated retained originals");
+                let path = directory.join(name);
+                fs::rename(&path, targets.join(name)).expect("retain original TLS entry");
+                let socket_owner = if socket {
+                    Some(UnixListener::bind(&path).expect("nonregular socket entry"))
+                } else {
+                    fs::create_dir(&path).expect("nonregular directory entry");
+                    None
+                };
+                let before = tls_path_snapshot(&directory);
+                let targets_before = tls_path_snapshot(&targets);
+                assert_tls_path_refused(&directory).await;
+                assert!(
+                    tls_path_snapshot(&directory) == before,
+                    "retained TLS state changed"
+                );
+                assert!(
+                    tls_path_snapshot(&targets) == targets_before,
+                    "retained originals changed"
+                );
+                drop(socket_owner);
+                fs::remove_dir_all(root).expect("remove isolated TLS path fixture");
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn tls_paths_reject_missing_descendants_and_parent_traversal() {
+        use std::os::unix::fs::symlink;
+
+        let root = tls_path_fixture().await;
+        let retained = root.join("retained/tls");
+        let before = tls_path_snapshot(&retained);
+        let link = root.join("redirected");
+        symlink(root.join("retained"), &link).expect("redirect ancestor of absent TLS root");
+        assert_tls_path_refused(&link.join("absent/tls")).await;
+        assert!(!root.join("retained/absent").exists());
+        assert_tls_path_refused(&root.join("retained/../retained/tls")).await;
+        let file = root.join("not-a-directory");
+        fs::write(&file, "retained-ancestor").expect("non-directory ancestor");
+        assert_tls_path_refused(&file.join("tls")).await;
+        assert_eq!(
+            fs::read(&file).expect("unchanged ancestor"),
+            b"retained-ancestor"
+        );
+        assert!(
+            tls_path_snapshot(&retained) == before,
+            "retained TLS state changed"
+        );
+        fs::remove_dir_all(root).expect("remove isolated TLS path fixture");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn tls_paths_regular_state_reopens_without_identity_replacement() {
+        let root = tls_path_fixture().await;
+        let directory = root.join("retained/tls");
+        ensure_localhost_certificate(&directory)
+            .await
+            .expect("reuse explicit fixture trust");
+        let before = tls_path_snapshot(&directory);
+        ensure_localhost_certificate(&directory)
+            .await
+            .expect("reopen retained TLS state");
+        let (listener, port) = reserve_localhost_listener(&directory)
+            .await
+            .expect("reuse safe persisted port");
+        let server = start_unified_localhost_server(Router::new(), listener, &directory)
+            .expect("start safe retained TLS server");
+        server.close().await.expect("close retained TLS server");
+        let rebound = TcpListener::bind((Ipv4Addr::LOCALHOST, port))
+            .await
+            .expect("closed safe listener releases saved port");
+        drop(rebound);
+        assert!(
+            tls_path_snapshot(&directory) == before,
+            "retained TLS state changed"
+        );
+        fs::remove_dir_all(root).expect("remove isolated TLS path fixture");
+    }
 
     #[tokio::test]
     async fn localhost_certificate_is_reusable() {
