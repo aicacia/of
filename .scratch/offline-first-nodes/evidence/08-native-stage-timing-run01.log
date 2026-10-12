@@ -1,0 +1,25 @@
+Running as unit: of-ticket08-native-stage-timing-01.service; invocation ID: 6cd19be7d3c740d8898539d885fc199c
+   Compiling ofdb-btree-redb v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ofdb/crates/btree-redb)
+   Compiling ofdb-sql-engine v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ofdb/crates/sql-engine)
+   Compiling ofdb-sql-sync v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ofdb/crates/sql-sync)
+   Compiling ofdb-sql-engine-automerge v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ofdb/crates/sql-engine-automerge)
+   Compiling ofdb-sql-engine-redb v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ofdb/crates/sql-engine-redb)
+   Compiling ofdb-sql v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ofdb/crates/sql)
+   Compiling idp-db v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/db)
+   Compiling idp-model v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/idp-model)
+   Compiling storage-model v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/storage-model)
+   Compiling idp-service v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/idp-service)
+   Compiling ofdb-kv v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ofdb/crates/kv)
+   Compiling file-system v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/offs/crates/file-system)
+   Compiling management-service v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/management-service)
+   Compiling storage-service v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/storage-service)
+   Compiling storage-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/storage-server)
+   Compiling idp-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/idp-server)
+   Compiling management-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/management-server)
+   Compiling unified-server v0.1.0 (/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes/crates/unified-server)
+Finished with result: oom-kill
+Main processes terminated with: code=killed/status=TERM
+Service runtime: 8min 25.181s
+CPU time consumed: 8min 18.201s
+Memory peak: 1.4G
+Memory swap peak: 0B

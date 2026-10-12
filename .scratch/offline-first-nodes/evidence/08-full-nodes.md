@@ -326,3 +326,30 @@ Service-token Client/principal/root-key/live-validation/signer-load buckets sum 
 Stage log messages remain fixed labels plus elapsed microseconds only. The preserved raw run log also contains pre-existing test-helper node/path IDs and the reqwest failure URL; these were not introduced by the stage logger and are retained as original evidence, not copied into new diagnostic messages. No token/secret/hash/SQL logging was added.
 
 Evidence-only handoff: reviewed the complete captured log and scoped evidence diff; whitespace check passed. No build/test/Clippy, production edit, generic-owner change or source retirement. Commit only this evidence file and the exact raw run log; retain `d2720cb` as the measured local source pending owner handoff.
+
+## Attempted native-owner stage timing run01 — compile OOM, NO TEST RESULT
+
+2026-10-12. Complete captured output: [08-native-stage-timing-run01.log](08-native-stage-timing-run01.log). Consumer source `437c9bf2105decab02b4a60cf46e817080663a5f` on `offline-first-ticket08-full-nodes`; generic-owner instrumentation `b1d957d8afb33b0cb9e6981d6a09793d97659e35` on ofdb `diagnostics/native-idp-stage-timing`. Consumer `437c9bf` adds only the three existing `log` dependency-list edges to Cargo.lock for the owner instrumentation, with no package/version change. The consumer's IdP stage source remains preserved; no generic performance fix or new native timing result is implied.
+
+### Exact attempted focused command
+
+Coordinator-reported execution command below uses **1500M memory / zero swap / 900s outer service bound**, not the earlier proposed owner 2G or consumer 2500M cap. The raw log begins with the unit announcement and does not echo command/properties; command provenance comes from the coordinated focused invocation and reported actual bounds.
+
+```sh
+systemd-run --user --wait --pipe --collect --unit=of-ticket08-native-stage-timing-01 --property=MemoryMax=1500M --property=MemorySwapMax=0 --property=RuntimeMaxSec=900 --working-directory=/home/nathan/code/rust/aicacia/of/.worktrees/ticket08-full-nodes env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS OF_IDP_STAGE_TIMING=1 RUST_MIN_STACK=67108864 CARGO_BUILD_JOBS=1 cargo test --offline --locked --jobs=1 --target-dir /home/nathan/code/rust/aicacia/of/target -p unified-server --features cli --lib local_provisioning_tests::full_nodes::probe::single_full_host_refresh_replay_and_restriction_put_with_extra_service_clients -- --exact --nocapture --test-threads=1
+```
+
+Same existing public probe, standard profiles, shared target and single build job; unchanged **10s HTTP / 120s internal diagnostic bounds**. No alternate test, native-owner suite, cache/prewarming, assertion weakening or deadline increase.
+
+### Actual outcome and limits
+
+- Compilation progressed through generic owners and consumer crates to `Compiling unified-server`; there is **no `Finished test profile`, test-binary launch, `running 1 test`, stage output or test summary** in the captured log.
+- Systemd **`Finished with result: oom-kill`**, main process **`code=killed/status=TERM`**. Service runtime **8min 25.181s**, CPU time **8min 18.201s**, reported memory peak **1.4G**, reported swap peak **0B**.
+- **The test NEVER ran. No native stage measurement or native result was obtained.** This is an incomplete compilation/resource failure, not a failed HTTP probe, pass, denial, mutation completion, causal persistence finding or test exit101. No wrapper exit status is supplied by this log.
+- Previous IdP-only timings retain their own run/source provenance; this attempt cannot confirm or refute admission, transaction, catalog/conflict or Automerge cost hypotheses. Preserve both instrumentation sources pending actual authorized native-owner measurements.
+
+### Next prerequisite — free memory before any retry
+
+Coordinator reports current available memory approximately **1.9GiB**, with **host swap full**. **No more builds now.** Free sufficient memory through separately coordinated activity, recheck headroom and obtain the exclusive Rust slot plus explicit coordinator authorization **before** rerunning this same focused probe with unchanged HTTP10s/diagnostic120s bounds. Resource-cap selection requires coordinator review; do not automatically raise caps, retry, increase deadlines, delete caches/targets/data or reset providers. No resource guarantee follows from the reported peak.
+
+Coordinator reports the original root Storage diff remains unchanged apart from the automatic Cargo.lock refresh of the same three `log` edges. Read-only root inspection confirms those exact three lock additions and existing Storage-client generated-file/tool-link changes; this evidence handoff does not edit, revert or stage any root Storage/lockfile work. Consumer worktree was clean at `437c9bf` before this evidence update. Commit only this evidence and the exact raw native log; no production, owner, lockfile, tracker/status/map or completion change. Whitespace and scoped-diff checks only; no build/test execution during this handoff. Ticket08 remains unqualified and its status is untouched.
